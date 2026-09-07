@@ -15,3 +15,6 @@ Thumbs.db
 .env
 *.local
 application-local.yml
+
+# Plan de session, non versionné
+PLAN.md

@@ -1,5 +1,7 @@
 # Nkap
 
+[![build](https://github.com/Deval123/nkap/actions/workflows/build.yml/badge.svg)](https://github.com/Deval123/nkap/actions/workflows/build.yml)
+
 **An open mobile money gateway with a real double-entry ledger.**
 
 Nkap sits between your application and the mobile money operators — MTN MoMo first,

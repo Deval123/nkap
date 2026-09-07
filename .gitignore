@@ -1,0 +1,17 @@
+target/
+*.class
+*.jar
+*.war
+
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+
+.DS_Store
+Thumbs.db
+
+.env
+*.local
+application-local.yml

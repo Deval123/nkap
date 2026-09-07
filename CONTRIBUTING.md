@@ -52,6 +52,26 @@ acceptable.
 - Comments explain *why*, never *what*. The code already says what.
 - Sign your commits off with `git commit -s` (Developer Certificate of Origin).
 
+## Versioning and releases
+
+Semantic versioning, and a tag is a promise rather than a bookmark.
+
+- Tags are annotated and named `vX.Y.Z` (`git tag -a v0.1.0 -m "..."`). A lightweight
+  tag carries no author, no date and no message, which is exactly the information you
+  want a year later.
+- **A tag means a GitHub release.** If there is nothing worth writing release notes
+  about, there is nothing worth tagging. Untagged `main` is the normal state of this
+  project.
+- The `pom.xml` version drops `-SNAPSHOT` in the release commit, the tag points at that
+  commit, and the next commit opens the following `-SNAPSHOT`.
+- Before 1.0.0, the minor number carries breaking changes. `provider-api` is the surface
+  that matters here: breaking it breaks every adapter, so it changes in a minor release
+  and never in a patch.
+- Releases are cut from `main` only, and only when the conformance kit passes.
+
+`v0.1.0` will be tagged when the simulator and the MTN adapter carry one payment end to
+end.
+
 ## Reporting a security issue
 
 Do not open a public issue. Write to security@nkap.dev with what you found and how to

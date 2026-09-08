@@ -101,3 +101,7 @@ In `core`, the test comes first.
 Annotated tags `vX.Y.Z`, a tag means a GitHub release, and untagged `main` is the normal
 state of this project. Do not create tags or releases as a side effect of another task.
 See the versioning section of `CONTRIBUTING.md`.
+
+The first release is `v1.0.0`, and what it must contain is fixed in
+`docs/roadmap/v1.0.0-mtn-end-to-end.md`. Work that is not on that list does not belong in
+it, however small — say so rather than adding it quietly.

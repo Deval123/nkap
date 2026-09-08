@@ -115,17 +115,20 @@ mvn test
 
 ## Roadmap
 
-**v0.1 — the core is correct.** Double-entry ledger with its invariants enforced in the
-database, state machine, idempotency on both fronts, MTN simulator, MTN collection
-adapter, conformance kit. One currency, one operator, no UI.
+**v1.0.0 — MTN, end to end.** One operator, done properly: collections and disbursements
+across MTN's countries, a ledger persisted in PostgreSQL with its invariants as database
+constraints, reconciliation, signed webhooks, the conformance kit, and a `docker compose up`
+that puts a payment through. The full definition of done is
+[`docs/roadmap/v1.0.0-mtn-end-to-end.md`](docs/roadmap/v1.0.0-mtn-end-to-end.md) — nothing
+off that list ships in 1.0.0.
 
-**v0.2 — the system stands on its own.** Disbursements, reconciliation by statement
-import with a discrepancy report, signed and replayable webhooks, Prometheus metrics
-(including the suspense account balance), refunds as reversing entries.
+**After 1.0.0 — the other operators.** Orange Money, Wave, M-Pesa, Airtel. This is the
+contribution the architecture was built to accept: a new adapter is a self-contained module
+that has to pass the conformance kit, which is what lets a maintainer merge an operator they
+have no account with. The goal is every mobile money operator worth integrating.
 
-**v0.3 — the project outgrows its author.** Second and third operators, ideally
-contributed by other people through the conformance kit. Multi-currency with position
-accounts, generated client SDKs, a read-only operations console.
+Nkap runs on one container and one database. Kafka is an optional connector, not a
+requirement — see [ADR 0003](docs/adr/0003-kafka-is-optional.md).
 
 ## Contributing
 

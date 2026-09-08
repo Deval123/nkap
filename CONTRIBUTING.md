@@ -64,13 +64,15 @@ Semantic versioning, and a tag is a promise rather than a bookmark.
   project.
 - The `pom.xml` version drops `-SNAPSHOT` in the release commit, the tag points at that
   commit, and the next commit opens the following `-SNAPSHOT`.
-- Before 1.0.0, the minor number carries breaking changes. `provider-api` is the surface
-  that matters here: breaking it breaks every adapter, so it changes in a minor release
-  and never in a patch.
+- Until 1.0.0, the minor number carries breaking changes. `provider-api` is the surface
+  that matters: breaking it breaks every adapter, so it changes in a minor release and
+  never in a patch. From 1.0.0 it takes a major release, which is the discipline that
+  makes third-party adapters possible.
 - Releases are cut from `main` only, and only when the conformance kit passes.
 
-`v0.1.0` will be tagged when the simulator and the MTN adapter carry one payment end to
-end.
+`v1.0.0` is the first release, and its scope is fixed in
+[`docs/roadmap/v1.0.0-mtn-end-to-end.md`](docs/roadmap/v1.0.0-mtn-end-to-end.md): MTN,
+end to end. Until then `main` carries no tags.
 
 ## Reporting a security issue
 

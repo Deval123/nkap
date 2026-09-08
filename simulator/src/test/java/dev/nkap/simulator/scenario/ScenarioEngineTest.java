@@ -2,20 +2,22 @@ package dev.nkap.simulator.scenario;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.time.Duration;
+import java.util.Arrays;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-/** The two ADR 0002 invariants the engine has to hold, exercised without a web layer. */
+/** The ADR 0002 invariants the engine has to hold, exercised without a web layer. */
 class ScenarioEngineTest {
 
     private final ScenarioEngine engine = new ScenarioEngine();
 
     private static Scenario onQuery(MomoStatus... statuses) {
-        List<QueryBehaviour> behaviours = java.util.Arrays.stream(statuses)
+        List<QueryBehaviour> behaviours = Arrays.stream(statuses)
             .map(s -> new QueryBehaviour(null, s, null))
             .toList();
-        return new Scenario("under-test", null, behaviours, null, null);
+        return new Scenario("under-test", null, behaviours, null);
     }
 
     private static ScenarioRule ruleFor(String msisdn, Scenario scenario) {
@@ -41,7 +43,8 @@ class ScenarioEngineTest {
     @Test
     @DisplayName("the last onQuery entry repeats for every further query")
     void last_on_query_entry_repeats() {
-        engine.replaceRules(List.of(ruleFor("237600000001", onQuery(MomoStatus.SUCCESSFUL, MomoStatus.FAILED))));
+        engine.replaceConfiguration(null,
+            List.of(ruleFor("237600000001", onQuery(MomoStatus.SUCCESSFUL, MomoStatus.FAILED))));
         engine.resolveForSubmission("ref-flap", "237600000001", "5000", "XAF");
 
         assertThat(engine.nextQueryBehaviour("ref-flap")).get()
@@ -55,10 +58,10 @@ class ScenarioEngineTest {
     @Test
     @DisplayName("resolution is frozen at submission: replacing the rules does not move an in-flight payment")
     void resolution_is_frozen_at_submission() {
-        engine.replaceRules(List.of(ruleFor("237600000002", onQuery(MomoStatus.FAILED))));
+        engine.replaceConfiguration(null, List.of(ruleFor("237600000002", onQuery(MomoStatus.FAILED))));
         engine.resolveForSubmission("ref-frozen", "237600000002", "5000", "XAF");
 
-        engine.replaceRules(List.of(ruleFor("237600000002", onQuery(MomoStatus.SUCCESSFUL))));
+        engine.replaceConfiguration(null, List.of(ruleFor("237600000002", onQuery(MomoStatus.SUCCESSFUL))));
 
         assertThat(engine.nextQueryBehaviour("ref-frozen")).get()
             .satisfies(q -> assertThat(q.status()).isEqualTo(MomoStatus.FAILED));
@@ -67,7 +70,7 @@ class ScenarioEngineTest {
     @Test
     @DisplayName("the first matching rule wins")
     void first_matching_rule_wins() {
-        engine.replaceRules(List.of(
+        engine.replaceConfiguration(null, List.of(
             ruleFor("237600000003", onQuery(MomoStatus.FAILED)),
             ruleFor("237600000003", onQuery(MomoStatus.SUCCESSFUL))));
         engine.resolveForSubmission("ref-order", "237600000003", "5000", "XAF");
@@ -89,14 +92,45 @@ class ScenarioEngineTest {
     }
 
     @Test
-    @DisplayName("the token lifetime comes from the most recent submission's scenario")
-    void token_ttl_follows_last_submission() {
-        assertThat(engine.tokenTtl()).isEqualTo(java.time.Duration.ofHours(1));
+    @DisplayName("the token lifetime is the one declared with the rule set")
+    void token_lifetime_is_declared_with_the_rules() {
+        assertThat(engine.tokenTtl()).isEqualTo(Duration.ofHours(1));
 
-        engine.replaceRules(List.of(ruleFor("237600000004",
-            new Scenario("short-token", null, null, null, new TokenBehaviour(java.time.Duration.ofSeconds(30))))));
-        engine.resolveForSubmission("ref-token", "237600000004", "5000", "XAF");
+        engine.replaceConfiguration(new TokenBehaviour(Duration.ofSeconds(2)), List.of());
 
-        assertThat(engine.tokenTtl()).isEqualTo(java.time.Duration.ofSeconds(30));
+        assertThat(engine.tokenTtl()).isEqualTo(Duration.ofSeconds(2));
+    }
+
+    @Test
+    @DisplayName("two submissions resolving different scenarios do not change the token lifetime")
+    void submissions_do_not_touch_the_token_lifetime() {
+        engine.replaceConfiguration(new TokenBehaviour(Duration.ofSeconds(2)), List.of(
+            ruleFor("237600000001", onQuery(MomoStatus.FAILED)),
+            ruleFor("237600000002", onQuery(MomoStatus.SUCCESSFUL))));
+
+        engine.resolveForSubmission("ref-a", "237600000001", "5000", "XAF");
+        engine.resolveForSubmission("ref-b", "237600000002", "9000", "XAF");
+
+        assertThat(engine.tokenTtl()).isEqualTo(Duration.ofSeconds(2));
+    }
+
+    @Test
+    @DisplayName("resetting the configuration returns the token lifetime to one hour")
+    void resetting_configuration_restores_the_default_token() {
+        engine.replaceConfiguration(new TokenBehaviour(Duration.ofSeconds(2)), List.of());
+
+        engine.resetConfiguration();
+
+        assertThat(engine.tokenTtl()).isEqualTo(Duration.ofHours(1));
+    }
+
+    @Test
+    @DisplayName("forgetting state leaves a declared token lifetime alone")
+    void forgetting_state_keeps_the_token() {
+        engine.replaceConfiguration(new TokenBehaviour(Duration.ofSeconds(2)), List.of());
+
+        engine.forgetAllState();
+
+        assertThat(engine.tokenTtl()).isEqualTo(Duration.ofSeconds(2));
     }
 }

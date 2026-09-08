@@ -11,19 +11,22 @@ import java.util.List;
  *
  * <ul>
  *   <li>no {@code onSubmit} means {@link SubmitOutcome#ACCEPT} with no delay;</li>
- *   <li>an empty {@code onQuery} means a single {@link MomoStatus#SUCCESSFUL};</li>
- *   <li>no {@code token} means a one-hour lifetime.</li>
+ *   <li>an empty {@code onQuery} means a single {@link MomoStatus#SUCCESSFUL}.</li>
  * </ul>
  *
  * <p>{@code onQuery} is never empty after construction and its last entry is the
  * one that repeats: query <em>n</em> uses index {@code min(n - 1, size - 1)}.
+ *
+ * <p>The token lifetime is <strong>not</strong> here: a bearer token is obtained
+ * before any payment exists, so it belongs to the operator session, not to a
+ * payment's timeline. It is declared alongside the rules — see
+ * {@link TokenBehaviour}.
  */
 public record Scenario(
         String name,
         SubmitBehaviour onSubmit,
         List<QueryBehaviour> onQuery,
-        List<CallbackSpec> callbacks,
-        TokenBehaviour token) {
+        List<CallbackSpec> callbacks) {
 
     /** The name a scenario carries when its file does not give it one. */
     public static final String DEFAULT_NAME = "happy-path";
@@ -35,15 +38,14 @@ public record Scenario(
                 ? List.of(new QueryBehaviour(null, null, null))
                 : List.copyOf(onQuery);
         callbacks = callbacks != null ? List.copyOf(callbacks) : List.of();
-        token = token != null ? token : new TokenBehaviour(null);
     }
 
     /**
      * The default every other scenario deviates from: accepted on submission,
-     * {@code SUCCESSFUL} on the next query, token good for an hour. Named rather
-     * than left implicit so a {@code null} scenario is always a bug.
+     * {@code SUCCESSFUL} on the next query. Named rather than left implicit so a
+     * {@code null} scenario is always a bug.
      */
     public static Scenario happyPath() {
-        return new Scenario(DEFAULT_NAME, null, null, null, null);
+        return new Scenario(DEFAULT_NAME, null, null, null);
     }
 }

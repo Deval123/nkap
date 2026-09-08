@@ -3,6 +3,7 @@ package dev.nkap.simulator;
 import com.fasterxml.jackson.databind.JsonMappingException;
 import dev.nkap.simulator.scenario.ScenarioEngine;
 import dev.nkap.simulator.scenario.ScenarioRule;
+import dev.nkap.simulator.scenario.TokenBehaviour;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -41,9 +42,15 @@ public class ControlPlaneController {
         this.store = store;
     }
 
-    /** The request and response body of {@code /_nkap/scenarios}. */
-    public record RuleList(List<ScenarioRule> rules) {
-        public RuleList {
+    /**
+     * The request and response body of {@code /_nkap/scenarios}: the whole
+     * declared configuration in one document — the token lifetime and the rule
+     * list. Both are optional; {@code token} defaults to one hour, {@code rules}
+     * to empty. Posting it replaces the lot atomically.
+     */
+    public record Declaration(TokenBehaviour token, List<ScenarioRule> rules) {
+        public Declaration {
+            token = token != null ? token : new TokenBehaviour(null);
             rules = rules != null ? List.copyOf(rules) : List.of();
         }
     }
@@ -53,19 +60,19 @@ public class ControlPlaneController {
 
     @PostMapping("/scenarios")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void replaceRules(@RequestBody RuleList body) {
-        engine.replaceRules(body.rules());
+    public void declare(@RequestBody Declaration body) {
+        engine.replaceConfiguration(body.token(), body.rules());
     }
 
     @GetMapping("/scenarios")
-    public RuleList currentRules() {
-        return new RuleList(engine.rules());
+    public Declaration current() {
+        return new Declaration(engine.token(), engine.rules());
     }
 
     @DeleteMapping("/scenarios")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void resetRules() {
-        engine.resetRules();
+    public void resetDeclaration() {
+        engine.resetConfiguration();
     }
 
     @GetMapping("/state/{referenceId}")
@@ -78,7 +85,9 @@ public class ControlPlaneController {
     /**
      * Forgets every reference, in the engine and in the idempotency gate. This
      * is what lets one test suite run its cases in sequence without each
-     * inheriting the previous one's references.
+     * inheriting the previous one's references. It leaves the declared
+     * configuration — rules and token — alone: that is
+     * {@code DELETE /_nkap/scenarios}.
      */
     @DeleteMapping("/state")
     @ResponseStatus(HttpStatus.NO_CONTENT)

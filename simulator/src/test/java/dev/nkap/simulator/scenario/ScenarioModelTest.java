@@ -33,7 +33,6 @@ class ScenarioModelTest {
         assertThat(scenario.onQuery()).singleElement()
             .satisfies(q -> assertThat(q.status()).isEqualTo(MomoStatus.SUCCESSFUL));
         assertThat(scenario.callbacks()).isEmpty();
-        assertThat(scenario.token().ttl()).isEqualTo(Duration.ofHours(1));
         assertThat(scenario).isEqualTo(Scenario.happyPath());
     }
 
@@ -50,8 +49,7 @@ class ScenarioModelTest {
               ],
               "callbacks": [
                 {"after": "PT5S", "times": 2, "target": "UNKNOWN_REFERENCE", "status": "SUCCESSFUL"}
-              ],
-              "token": {"ttl": "PT30S"}
+              ]
             }""";
 
         Scenario scenario = json.readValue(document, Scenario.class);
@@ -62,7 +60,16 @@ class ScenarioModelTest {
         assertThat(scenario.onQuery()).hasSize(2);
         assertThat(scenario.onQuery().get(1).reason()).isEqualTo("PAYER_NOT_FOUND");
         assertThat(scenario.callbacks().get(0).times()).isEqualTo(2);
-        assertThat(scenario.token().ttl()).isEqualTo(Duration.ofSeconds(30));
+    }
+
+    @Test
+    @DisplayName("a token lifetime is a session property, not part of a scenario")
+    void token_behaviour_stands_alone() throws Exception {
+        assertThat(new TokenBehaviour(null).ttl()).isEqualTo(Duration.ofHours(1));
+
+        TokenBehaviour parsed = json.readValue("{\"ttl\":\"PT2S\"}", TokenBehaviour.class);
+        assertThat(parsed.ttl()).isEqualTo(Duration.ofSeconds(2));
+        assertThat(json.readValue(json.writeValueAsString(parsed), TokenBehaviour.class)).isEqualTo(parsed);
     }
 
     @Test

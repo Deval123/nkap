@@ -11,9 +11,10 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 /**
- * Holds the ordered rule list and the per-reference state, and answers the two
- * questions a controller needs: which scenario a submission resolves to, and
- * what the next query on a reference should return.
+ * Holds the declared configuration — the ordered rule list and the token
+ * lifetime — and the per-reference state, and answers the questions a
+ * controller needs: which scenario a submission resolves to, what the next
+ * query on a reference should return, and how long a token lives.
  *
  * <p>Two invariants from ADR 0002 live here:
  *
@@ -25,6 +26,11 @@ import org.springframework.stereotype.Component;
  *       <em>n</em> uses index {@code min(n - 1, size - 1)}, so a client that
  *       polls past the end of the scenario keeps getting a defined answer.</li>
  * </ol>
+ *
+ * <p>The token lifetime is declared configuration, not per-reference state: it
+ * is set with the rules and consulted by nothing but {@link #tokenTtl()}. It
+ * was once derived from "the most recent submission's scenario"; that raced
+ * across references and is corrected in ADR 0002.
  */
 @Component
 public class ScenarioEngine {
@@ -35,14 +41,8 @@ public class ScenarioEngine {
     public record ReferenceState(Scenario scenario, Instant submittedAt, int queryCount) {}
 
     private volatile List<ScenarioRule> rules = List.of();
+    private volatile TokenBehaviour token = new TokenBehaviour(null);
     private final Map<String, ReferenceState> states = new ConcurrentHashMap<>();
-
-    /**
-     * The scenario resolved for the most recent submission, used by the token
-     * endpoint. Starts as the happy path so a token can be issued before any
-     * payment is submitted.
-     */
-    private volatile Scenario lastResolved = Scenario.happyPath();
 
     /**
      * Resolves the scenario for a new submission and freezes it against
@@ -52,7 +52,6 @@ public class ScenarioEngine {
     public Scenario resolveForSubmission(String referenceId, String msisdn, String amount, String currency) {
         Scenario scenario = match(referenceId, msisdn, amount, currency);
         states.put(referenceId, new ReferenceState(scenario, Instant.now(), 0));
-        lastResolved = scenario;
         log.info("reference {} resolved to scenario '{}'", referenceId, scenario.name());
         return scenario;
     }
@@ -83,36 +82,45 @@ public class ScenarioEngine {
         return Optional.of(onQuery.get(index));
     }
 
-    /** The token lifetime for the most recent submission's scenario. */
+    /** The declared token lifetime. Consults nothing else. */
     public Duration tokenTtl() {
-        TokenBehaviour token = lastResolved.token();
-        return token != null ? token.ttl() : Duration.ofHours(1);
+        return token.ttl();
     }
 
     // --- control plane ---------------------------------------------------------
 
-    /** Replaces the rule list. In-flight payments keep the scenario they resolved to. */
-    public void replaceRules(List<ScenarioRule> newRules) {
-        this.rules = List.copyOf(newRules);
+    /**
+     * Replaces the whole declared configuration in one call: the token lifetime
+     * and the rule list. In-flight payments keep the scenario they resolved to.
+     */
+    public void replaceConfiguration(TokenBehaviour token, List<ScenarioRule> rules) {
+        this.token = token != null ? token : new TokenBehaviour(null);
+        this.rules = List.copyOf(rules);
+    }
+
+    /** Back to the happy path only, with a one-hour token. */
+    public void resetConfiguration() {
+        this.token = new TokenBehaviour(null);
+        this.rules = List.of();
     }
 
     public List<ScenarioRule> rules() {
         return rules;
     }
 
-    /** Back to the happy path only. */
-    public void resetRules() {
-        this.rules = List.of();
-        this.lastResolved = Scenario.happyPath();
+    public TokenBehaviour token() {
+        return token;
     }
 
     public Optional<ReferenceState> state(String referenceId) {
         return Optional.ofNullable(states.get(referenceId));
     }
 
-    /** Forgets every reference, so a test suite's cases do not leak into one another. */
+    /**
+     * Forgets every reference, so a test suite's cases do not leak into one
+     * another. Leaves the declared configuration — rules and token — untouched.
+     */
     public void forgetAllState() {
         states.clear();
-        this.lastResolved = Scenario.happyPath();
     }
 }

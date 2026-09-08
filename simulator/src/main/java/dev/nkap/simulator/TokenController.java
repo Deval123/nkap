@@ -2,15 +2,16 @@ package dev.nkap.simulator;
 
 import dev.nkap.simulator.scenario.ScenarioEngine;
 import java.util.Map;
-import java.util.UUID;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
  * MTN hands out a short-lived bearer token before any Collections call. The
- * simulator issues one that is syntactically plausible; its lifetime is declared
- * configuration — set with the rule set, independent of any payment — and is one
- * hour by default. Enforcing expiry mid-flight is issue #9.
+ * simulator issues a {@link SessionToken} that carries its own expiry, with an
+ * {@code expires_in} taken from the declared lifetime (one hour by default).
+ *
+ * <p>This endpoint always issues a fresh token and is never itself protected —
+ * it is how a client that has just been told 401 gets back in.
  */
 @RestController
 public class TokenController {
@@ -24,7 +25,7 @@ public class TokenController {
     @PostMapping("/collection/token/")
     public Map<String, Object> token() {
         return Map.of(
-            "access_token", UUID.randomUUID().toString(),
+            "access_token", SessionToken.issue(engine.tokenTtl()),
             "token_type", "access_token",
             "expires_in", (int) engine.tokenTtl().toSeconds());
     }

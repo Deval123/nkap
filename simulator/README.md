@@ -27,11 +27,14 @@ State is held in memory only — every restart is a clean operator.
 
 | Method | Path | Behaviour |
 | --- | --- | --- |
-| `POST` | `/collection/token/` | Returns a bearer token: `access_token`, `token_type`, `expires_in`. The lifetime is the one declared with the rule set (`token.ttl`), and is 3600 seconds by default. |
+| `POST` | `/collection/token/` | Issues a fresh bearer token: `access_token`, `token_type`, `expires_in`. The lifetime is the one declared with the rule set (`token.ttl`), 3600 seconds by default. Never itself protected. |
 | `POST` | `/collection/v1_0/requesttopay` | Reads `X-Reference-Id` (a client-supplied UUID, the idempotency key), records the request, and applies the resolved scenario's `onSubmit`. Default is **202 with an empty body**. A reused `X-Reference-Id` is **409**; a missing or malformed one is **400** — those are protocol errors and keep priority over the scenario. |
 | `GET` | `/collection/v1_0/requesttopay/{referenceId}` | Applies the scenario's next `onQuery` entry and returns `{"status": "..."}` (plus `reason` when the scenario sets one). The default scenario moves a request to `SUCCESSFUL` on the first query. An unknown reference is **404**. |
 
-The `X-Reference-Id` is matched case-insensitively, as MTN's own API does.
+The `X-Reference-Id` is matched case-insensitively, as MTN's own API does. Both
+`requesttopay` endpoints require a live `Authorization: Bearer` token **only when the
+declared configuration turns enforcement on** — see [Token expiry](#token-expiry). By
+default they ignore it.
 
 ## The scenario mechanism
 
@@ -52,11 +55,11 @@ Every field is optional and defaults sensibly: an empty document is the happy pa
 (accepted on submission, `SUCCESSFUL` on the next query). A scenario file declares only
 what it changes.
 
-The **token lifetime and the fallback callback URL are not part of a scenario**. A bearer
+The **token settings and the fallback callback URL are not part of a scenario**. A bearer
 token is obtained before any payment exists, and a callback URL is about where the
 simulator reaches you, not about one payment's timeline. Both are declared in the same
-document as the rules (`"token": {"ttl": "..."}`, `"callbackUrl": "..."`), and one `POST`
-replaces the whole configuration at once.
+document as the rules (`"token": {"ttl": "...", "enforce": true}`, `"callbackUrl": "..."`),
+and one `POST` replaces the whole configuration at once. `enforce` defaults to `false`.
 
 Scenarios are chosen by **ordered rules**. Each rule pairs a matcher — on `referenceId`,
 `msisdn`, `amount` or `currency`, any subset, a field left out is not compared — with a
@@ -75,9 +78,9 @@ Java fixture, no recompilation.
 
 | Method | Path | Effect |
 | --- | --- | --- |
-| `POST` | `/_nkap/scenarios` | Replace the whole configuration. Body `{"token":{"ttl":"..."},"callbackUrl":"...","rules":[...]}` — all optional. **204**. A malformed scenario is a **400** whose body names the offending field. |
-| `GET` | `/_nkap/scenarios` | Return the current `{token, callbackUrl, rules}`. |
-| `DELETE` | `/_nkap/scenarios` | Back to the happy path, a one-hour token and no callback URL. **204**. |
+| `POST` | `/_nkap/scenarios` | Replace the whole configuration. Body `{"token":{"ttl":"...","enforce":false},"callbackUrl":"...","rules":[...]}` — all optional. **204**. A malformed scenario is a **400** whose body names the offending field. |
+| `GET` | `/_nkap/scenarios` | Return the current `{token, callbackUrl, rules}` — `token` includes `enforce`. |
+| `DELETE` | `/_nkap/scenarios` | Back to the happy path: a one-hour token, enforcement off, no callback URL. **204**. |
 | `GET` | `/_nkap/state/{referenceId}` | `{scenario, queryCount, submittedAt}`, or **404**. |
 | `GET` | `/_nkap/callbacks/{referenceId}` | The callback delivery attempts for that reference, oldest first — `[]` if none. |
 | `DELETE` | `/_nkap/state` | Forget every reference and its callback attempts, so a test suite's cases do not leak into one another. Leaves the declared configuration alone. **204**. |
@@ -190,6 +193,54 @@ sleep 3
 curl -s localhost:8081/_nkap/callbacks/$REF   # two attempts, ~2s apart
 ```
 
+## Token expiry
+
+`POST /collection/token/` issues a token whose `expires_in` is the declared `token.ttl`.
+By default the simulator then never looks at it again — no endpoint reads the
+`Authorization` header — so every call works without one and every `curl` above is a
+single step.
+
+Turn `token.enforce` on and that changes: `requesttopay` and the status query then need a
+live `Authorization: Bearer` token, and answer **401** without one, with one the simulator
+did not issue, or with an expired one. This is what lets a client's "renew and retry with
+the same reference" path be tested — and what the conformance kit needs to verify an
+adapter against.
+
+**Enforcement is opt-in on purpose.** Always requiring authentication would be faithful to
+MTN, and would also turn every existing test red and make every example here a two-step
+affair. The simulator trades that fidelity for approachability. If you think it *should*
+always enforce, that is the trade being made, deliberately, and it is written down here
+and in `TokenAuthenticator` so it is not re-argued from scratch.
+
+Order of rejection on `requesttopay`, decided on purpose: request shape first (a malformed
+`X-Reference-Id` is **400**, never 401), then authentication (**401**), then idempotency (a
+reused reference is **409**), then the scenario. The status query has no shape check, so
+its **401** comes before its **404**.
+
+The token carries its own expiry — it is shaped like a JWT and the middle segment holds
+the instant it dies. Validation reads that straight from the token, so the simulator keeps
+no table of issued tokens (a second unbounded map would be the callback-log leak of issue
+#16 written twice), and a restart forgets nothing that matters.
+
+```bash
+curl -s -X POST localhost:8081/_nkap/scenarios -H 'Content-Type: application/json' \
+  -d '{"token":{"ttl":"PT2S","enforce":true},"rules":[]}'
+
+TOKEN=$(curl -s -X POST localhost:8081/collection/token/ | jq -r .access_token)
+REF=$(uuidgen)
+
+curl -s -o /dev/null -w '%{http_code}\n' -X POST localhost:8081/collection/v1_0/requesttopay \
+  -H "Authorization: Bearer $TOKEN" -H "X-Reference-Id: $REF" \
+  -H 'Content-Type: application/json' \
+  -d '{"amount":"5000","currency":"XAF","payer":{"partyIdType":"MSISDN","partyId":"237600000000"}}'
+# 202
+
+sleep 3
+curl -s -o /dev/null -w '%{http_code}\n' localhost:8081/collection/v1_0/requesttopay/$REF \
+  -H "Authorization: Bearer $TOKEN"
+# 401 — the token died mid-flight; fetch a new one and retry the same reference
+```
+
 ## Two things to know before you write a scenario
 
 **Scenario delays block a request thread.** `onSubmit.delay` and `onQuery.delay` are
@@ -208,7 +259,5 @@ left to be discovered. To replay the same reference, `DELETE /_nkap/state` first
 
 ## What is not here yet
 
-The individual scenario files of issues #4–#9 are configuration written against this
-mechanism, one per pull request. Loading scenarios from YAML is issue #10. Enforcing token
-expiry mid-flight (rejecting an expired token) is issue #9 — the lifetime is declared and
-reported, but nothing checks it yet.
+The individual scenario files of issues #4–#8 are configuration written against this
+mechanism, one per pull request. Loading scenarios from YAML is issue #10.

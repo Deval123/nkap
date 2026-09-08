@@ -41,11 +41,14 @@ public class RequestToPayController {
     private final CollectionRequestStore store;
     private final ScenarioEngine engine;
     private final CallbackDispatcher callbacks;
+    private final TokenAuthenticator authenticator;
 
-    RequestToPayController(CollectionRequestStore store, ScenarioEngine engine, CallbackDispatcher callbacks) {
+    RequestToPayController(CollectionRequestStore store, ScenarioEngine engine,
+                           CallbackDispatcher callbacks, TokenAuthenticator authenticator) {
         this.store = store;
         this.engine = engine;
         this.callbacks = callbacks;
+        this.authenticator = authenticator;
     }
 
     /**
@@ -58,15 +61,20 @@ public class RequestToPayController {
     public Object requestToPay(
             @RequestHeader(value = "X-Reference-Id", required = false) String referenceId,
             @RequestHeader(value = "X-Callback-Url", required = false) String callbackUrl,
+            @RequestHeader(value = "Authorization", required = false) String authorization,
             @RequestBody(required = false) Map<String, Object> body) {
 
+        // Order of rejection, decided on purpose: the request must be
+        // well-formed (a malformed X-Reference-Id is a 400), then authenticated
+        // (401 when the scenario enforces token expiry), then idempotent (a
+        // reused reference is a 409) — all before the scenario is consulted.
         String reference = requireUuid(referenceId);
+        authenticator.require(authorization);
+
         String msisdn = payerId(body);
         String amount = field(body, "amount");
         String currency = field(body, "currency");
 
-        // Protocol errors keep priority over any simulated behaviour: a reused
-        // reference is a 409 before the scenario is even consulted.
         if (!store.record(reference)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "X-Reference-Id already used");
         }
@@ -99,7 +107,15 @@ public class RequestToPayController {
     }
 
     @GetMapping("/collection/v1_0/requesttopay/{referenceId}")
-    public Map<String, String> status(@PathVariable String referenceId) {
+    public Map<String, String> status(
+            @PathVariable String referenceId,
+            @RequestHeader(value = "Authorization", required = false) String authorization) {
+
+        // Authenticate before revealing whether the reference exists: a 401
+        // takes priority over the 404. There is no request-shape check here to
+        // come first, unlike the submit path.
+        authenticator.require(authorization);
+
         QueryBehaviour behaviour = engine.nextQueryBehaviour(References.canonical(referenceId))
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "unknown reference"));
 

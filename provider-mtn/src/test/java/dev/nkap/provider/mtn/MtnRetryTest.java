@@ -5,7 +5,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import dev.nkap.core.money.Currency;
 import dev.nkap.core.money.Money;
-import dev.nkap.core.payment.PaymentState;
 import dev.nkap.core.payment.ReferenceId;
 import dev.nkap.provider.Capability;
 import dev.nkap.provider.PaymentIntent;
@@ -57,7 +56,7 @@ class MtnRetryTest {
 
             SubmitResult result = adapter.submit(intent(), reference);
 
-            assertThat(result.state()).isEqualTo(PaymentState.SUBMITTED);
+            assertThat(result).isInstanceOf(SubmitResult.Acknowledged.class);
             assertThat(submits).hasValue(2);
             assertThat(tokensIssued).hasValue(2);
             assertThat(submitReferences).containsExactly(reference.toString(), reference.toString());

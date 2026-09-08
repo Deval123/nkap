@@ -67,7 +67,7 @@ class MtnSandboxIT {
                 "nkap manual sandbox test", "nkap manual sandbox test", Map.of());
 
         SubmitResult submitted = adapter.submit(intent, reference);
-        System.out.println("submit  " + reference + " -> " + submitted.state());
+        System.out.println("submit  " + reference + " -> " + submitted);
 
         ProviderStatus status = adapter.query(reference);
         System.out.println("query   " + reference + " -> " + status.state()

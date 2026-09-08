@@ -1,10 +1,8 @@
 package dev.nkap.conformance;
 
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.nkap.core.payment.PaymentState;
 import dev.nkap.core.payment.ReferenceId;
@@ -13,8 +11,6 @@ import dev.nkap.provider.ProviderStatus;
 import dev.nkap.provider.ProviderUnavailableException;
 import dev.nkap.provider.SubmitResult;
 import dev.nkap.provider.UntrustedCallbackException;
-import java.time.Duration;
-import java.time.Instant;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -69,7 +65,6 @@ public abstract class ProviderAdapterConformanceTest {
     @DisplayName("a call that does not answer yields UNKNOWN, never a failure — and a later query may resolve it")
     void a_call_that_does_not_answer_is_never_a_failure() throws Exception {
         ProviderAdapter adapter = harness.adapter();
-        harness.makeNextQuerySucceed();
         harness.makeSubmitNeverAnswer();
         ReferenceId reference = ReferenceId.newReference();
 
@@ -105,13 +100,12 @@ public abstract class ProviderAdapterConformanceTest {
         ProviderStatus firstAnswer = adapter.query(reference);
         ProviderStatus secondAnswer = adapter.query(reference);
 
-        // The adapter reports what it is told on each query and decides nothing.
+        // The rule this kit can check is the adapter's: it reports what it is told on each
+        // query, faithfully, and decides nothing. That the second answer cannot reopen the
+        // payment is the state machine's doing, not the adapter's, and is proven in
+        // PaymentStateTest — asserting it here would pass with any adapter at all.
         assertSame(PaymentState.SUCCEEDED, firstAnswer.state());
         assertSame(PaymentState.FAILED, secondAnswer.state());
-        // The first answer is terminal, and the state machine forbids moving off it —
-        // so the flap cannot reopen the payment, whatever the adapter is told next.
-        assertTrue(firstAnswer.state().isTerminal());
-        assertFalse(firstAnswer.state().canTransitionTo(secondAnswer.state()));
     }
 
     @Test
@@ -124,18 +118,15 @@ public abstract class ProviderAdapterConformanceTest {
         assertInstanceOf(SubmitResult.Acknowledged.class,
                 adapter.submit(harness.anIntent(), reference));
 
-        // Well past the credential's lifetime, a query on the SAME reference keeps
-        // resolving. An adapter that generated a new reference on renewal would query the
-        // wrong one; an adapter that failed to renew would throw.
-        Instant deadline = Instant.now().plus(Duration.ofSeconds(6));
-        int checks = 0;
-        while (Instant.now().isBefore(deadline)) {
+        // Wait past the lifetime the harness declared, so the credential is certainly stale,
+        // then query the SAME reference. An adapter that generated a new reference on renewal
+        // would query the wrong one; an adapter that failed to renew would throw. Three queries,
+        // not a timed loop: the wait is the harness's business, the count is the kit's.
+        Thread.sleep(harness.credentialLifetime().plusMillis(500).toMillis());
+        for (int query = 1; query <= 3; query++) {
             assertSame(PaymentState.SUCCEEDED, adapter.query(reference).state(),
-                    "a query must keep resolving after the credential lifetime");
-            checks++;
-            Thread.sleep(300);
+                    "query " + query + " after the credential expired");
         }
-        assertTrue(checks >= 5, "expected repeated checks across the window, got " + checks);
     }
 
     @Test

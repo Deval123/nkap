@@ -20,6 +20,9 @@ import java.util.Map;
  */
 final class MtnConformanceHarness implements ConformanceHarness {
 
+    /** Short, because the simulator lets it be. A real operator's floor would simply cost more wait. */
+    private static final Duration CREDENTIAL_LIFETIME = Duration.ofSeconds(2);
+
     private final SimulatorUnderTest simulator;
     private final MtnCollectionsAdapter adapter;
 
@@ -72,8 +75,13 @@ final class MtnConformanceHarness implements ConformanceHarness {
 
     @Override
     public void expireCredentialsMidFlight() {
-        token = "\"token\":{\"ttl\":\"PT2S\",\"enforce\":true}";
+        token = "\"token\":{\"ttl\":\"" + CREDENTIAL_LIFETIME + "\",\"enforce\":true}";
         redeclare();
+    }
+
+    @Override
+    public Duration credentialLifetime() {
+        return CREDENTIAL_LIFETIME;
     }
 
     @Override

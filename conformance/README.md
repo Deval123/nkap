@@ -69,3 +69,14 @@ In your `provider-<name>` module, in **test scope**:
    returns your harness from `newHarness()`.
 
 See `provider-mtn` (`MtnConformanceHarness`, `MtnConformanceTest`) for a worked example.
+
+One thing that example will show you, and that is worth expecting: the harness's condition
+methods are **incremental** — each changes one dimension and leaves the rest alone — while a
+control plane driving a fake operator usually **replaces its whole configuration** on every
+call. `MtnConformanceHarness` bridges the two by holding each dimension as a clause and
+re-declaring all of them whenever one changes. It is a few lines, not a design problem. If
+your harness hits the same shape, say so in your pull request: at three occurrences it stops
+being each contributor's small annoyance and earns a builder inside this module.
+
+If any other part of writing the harness is laborious, say that too. The kit is judged by
+how hard it is to plug an adapter into it, and only a second operator can measure that.

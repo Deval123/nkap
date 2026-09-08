@@ -318,4 +318,40 @@ class ScenarioMechanismTest {
             .isInstanceOf(IllegalStateException.class);
         assertThat(result.getResponse().isCommitted()).isFalse();
     }
+
+    @Test
+    @DisplayName("a declared submit delay is actually waited out before responding")
+    void submit_delay_is_honoured() throws Exception {
+        declare("""
+            {"rules":[{"scenario":{"name":"delayed-submit",
+                                   "onSubmit":{"delay":"PT0.3S","outcome":"ACCEPT"}}}]}""");
+
+        long start = System.nanoTime();
+        mvc.perform(post("/collection/v1_0/requesttopay")
+                .header("X-Reference-Id", UUID.randomUUID().toString())
+                .contentType(MediaType.APPLICATION_JSON).content(BODY))
+            .andExpect(status().isAccepted());
+        long elapsedMillis = (System.nanoTime() - start) / 1_000_000;
+
+        // Generous window: at least 250ms waited, avoiding strict upper bound for slow CI runners
+        assertThat(elapsedMillis).isGreaterThanOrEqualTo(250);
+    }
+
+    @Test
+    @DisplayName("a declared query delay is actually waited out before returning status")
+    void query_delay_is_honoured() throws Exception {
+        declare("""
+            {"rules":[{"scenario":{"name":"delayed-query",
+                                   "onQuery":[{"delay":"PT0.3S","status":"SUCCESSFUL"}]}}]}""");
+
+        String ref = submit();
+
+        long start = System.nanoTime();
+        mvc.perform(get("/collection/v1_0/requesttopay/" + ref))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.status").value("SUCCESSFUL"));
+        long elapsedMillis = (System.nanoTime() - start) / 1_000_000;
+
+        assertThat(elapsedMillis).isGreaterThanOrEqualTo(250);
+    }
 }

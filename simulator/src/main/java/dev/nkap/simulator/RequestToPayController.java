@@ -5,7 +5,6 @@ import dev.nkap.simulator.scenario.Scenario;
 import dev.nkap.simulator.scenario.ScenarioEngine;
 import dev.nkap.simulator.scenario.SubmitBehaviour;
 import dev.nkap.simulator.scenario.SubmitOutcome;
-import jakarta.servlet.http.HttpServletRequest;
 import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -19,7 +18,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.context.request.async.DeferredResult;
-import org.springframework.web.context.request.async.WebAsyncUtils;
 import org.springframework.web.server.ResponseStatusException;
 
 /**
@@ -48,11 +46,16 @@ public class RequestToPayController {
         this.engine = engine;
     }
 
+    /**
+     * The return type is {@code Object} because this handler answers two ways:
+     * a plain {@link ResponseEntity} for every terminal outcome, or a
+     * {@link DeferredResult} for {@code NO_RESPONSE}. Spring dispatches on the
+     * runtime type, so both work without any manual async plumbing.
+     */
     @PostMapping("/collection/v1_0/requesttopay")
-    public ResponseEntity<Void> requestToPay(
+    public Object requestToPay(
             @RequestHeader(value = "X-Reference-Id", required = false) String referenceId,
-            @RequestBody(required = false) Map<String, Object> body,
-            HttpServletRequest request) {
+            @RequestBody(required = false) Map<String, Object> body) {
 
         String reference = requireUuid(referenceId);
         String msisdn = payerId(body);
@@ -69,8 +72,7 @@ public class RequestToPayController {
         SubmitBehaviour onSubmit = scenario.onSubmit();
 
         if (onSubmit.outcome() == SubmitOutcome.NO_RESPONSE) {
-            neverAnswer(request);
-            return null;
+            return neverAnswer();
         }
 
         sleep(onSubmit.delay());
@@ -100,10 +102,8 @@ public class RequestToPayController {
 
     /**
      * The {@code NO_RESPONSE} outcome: the operator accepted the request and
-     * then went silent. Implemented as a {@link DeferredResult} that is never
-     * completed, timing out only after an hour — longer than any real client
-     * waits. The handler then returns {@code null}: the response is entirely in
-     * the hands of the (never-fired) deferred result.
+     * then went silent. A {@link DeferredResult} that is never completed, timing
+     * out only after an hour — longer than any real client waits.
      *
      * <p>This is deliberately <strong>not</strong> a {@code Thread.sleep} on the
      * request thread: one blocked servlet thread per call would drain the pool
@@ -111,13 +111,8 @@ public class RequestToPayController {
      * in parallel is exactly what a simulator exists to allow. Do not "simplify"
      * it into a sleep.
      */
-    private static void neverAnswer(HttpServletRequest request) {
-        DeferredResult<ResponseEntity<Void>> deferred = new DeferredResult<>(Duration.ofHours(1).toMillis());
-        try {
-            WebAsyncUtils.getAsyncManager(request).startDeferredResultProcessing(deferred);
-        } catch (Exception e) {
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "could not start async processing", e);
-        }
+    private static DeferredResult<ResponseEntity<Void>> neverAnswer() {
+        return new DeferredResult<>(Duration.ofHours(1).toMillis());
     }
 
     private static String requireUuid(String value) {

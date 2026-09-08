@@ -57,6 +57,7 @@ new one, a typo — maps to `UNKNOWN`.
 | `INVALID_CURRENCY`, `NOT_ALLOWED`, `INVALID_CALLBACK_URL_HOST` | `FAILED` | Our request was wrong. Answered. |
 | **`SERVICE_UNAVAILABLE`** | **`UNKNOWN`** | The operator's own system failed. It is not telling us the payment failed — it is telling us it does not know. |
 | **`INTERNAL_PROCESSING_ERROR`** | **`UNKNOWN`** | Same. |
+| **`RESOURCE_NOT_FOUND`** (on a query) | **`UNKNOWN`** | MTN has never seen the reference. Since Nkap persists it before calling, this is either "never arrived" or "not visible yet", and one response cannot separate them. |
 | anything else | `UNKNOWN` | A code we do not recognise is not a failure we can assert. |
 
 The last three rows are the reason this project exists. A naive adapter sees an error code
@@ -107,6 +108,35 @@ not a bug.
 - `provider-api` survives this design unchanged. `PaymentIntent.providerOptions` carries the
   country; if that proves too weak once written, the contract changes — and that discovery is
   the reason this adapter is being built before any other.
+
+## Correction, 2026-09-08 — from observed sandbox behaviour
+
+Written from documentation, then checked against the sandbox before merging. Two things
+were wrong and one was missing.
+
+**`RESOURCE_NOT_FOUND` was absent from the map.** Querying a reference MTN has never seen
+returns `404` with `{"code":"RESOURCE_NOT_FOUND"}`. It is tempting to read that as proof the
+payment never happened, and therefore as `FAILED`. It is not. Nkap persists its reference
+*before* calling, so a 404 on a reference we believe we submitted has two possible meanings:
+the submission never arrived, or it has not become visible yet. A single response cannot tell
+those apart — only time can. It therefore maps to `UNKNOWN`, and it is the reconciler, after
+its window and repeated 404s, that concludes the submission never landed. This is the same
+rule as everywhere else in this project, applied to the case that looks most like an
+exception.
+
+**Response fields are conditional.** A `PENDING` status carries `externalId`, `amount`,
+`currency`, `payer`, `payerMessage`, `payeeNote` and `status` — and **no**
+`financialTransactionId`, **no** `reason`. Those appear only once the payment settles. An
+adapter that requires them fails on every pending payment, which is most of them. They are
+optional in the model.
+
+**Errors come back as `{"message": …, "code": …}`.** The `code` is what the map keys on; the
+`message` is prose for a human and must never be parsed.
+
+Also observed, and recorded in `docs/providers/mtn.md` rather than here: the sandbox settles
+in EUR whatever the country, and the documented test MSISDN stays `PENDING` for longer than a
+few seconds — so a test that submits and immediately expects success will fail for reasons
+that have nothing to do with the code.
 
 ## Alternatives rejected
 

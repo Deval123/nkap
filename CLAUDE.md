@@ -77,7 +77,7 @@ not in the test.
 | --- | --- | --- |
 | `core` | ledger, payment state machine, idempotency | nothing |
 | `provider-api` | the `ProviderAdapter` contract | `core` |
-| `provider-mtn` | the MTN MoMo adapter | `provider-api` |
+| `provider-mtn` | the MTN MoMo adapter | `provider-api`; `simulator` at test scope only |
 | `conformance` | the kit every adapter must pass | `provider-api` |
 | `simulator` | scriptable fake operator (Spring Boot) | — |
 | `server` | REST, webhooks, outbox, schedulers (Spring Boot) | `provider-api` |

@@ -1,0 +1,28 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: nkap-server
+  jackson:
+    deserialization:
+      # An amount is an integer count of minor units. "5000.0" is not that.
+      accept-float-as-int: false
+  mvc:
+    problemdetails:
+      enabled: true
+
+nkap:
+  provider:
+    # The provider a POST /payments is routed to. Routing by country arrives with
+    # multi-country support; for now there is one.
+    default: mtn
+    mtn:
+      # Credentials come from the environment, never from a committed file.
+      base-url: ${NKAP_PROVIDER_MTN_BASE_URL:}
+      target-environment: ${NKAP_PROVIDER_MTN_TARGET_ENVIRONMENT:}
+      subscription-key: ${NKAP_PROVIDER_MTN_SUBSCRIPTION_KEY:}
+      api-user: ${NKAP_PROVIDER_MTN_API_USER:}
+      api-key: ${NKAP_PROVIDER_MTN_API_KEY:}
+      currency: ${NKAP_PROVIDER_MTN_CURRENCY:}
+      country: ${NKAP_PROVIDER_MTN_COUNTRY:}

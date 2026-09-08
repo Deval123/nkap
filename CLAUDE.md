@@ -17,9 +17,13 @@ still in English.
 
 ## Commits
 
-- **Never add assistant attribution.** No `Co-Authored-By` trailer naming a tool, no
-  session link, no "generated with" line. Commits carry the repository author's name and
-  nothing else.
+- **Never add assistant attribution, anywhere this repository publishes.** No
+  `Co-Authored-By` trailer naming a tool, no session link, no "Generated with …" line —
+  not in a commit message, and equally not in a pull request title or description, an
+  issue, a comment, a release note or the changelog. Everything this project puts its name
+  on carries the author's name and nothing else. A pull request description is as public
+  and as permanent as a commit, and it is the place this rule is most often missed because
+  it sits outside the commit.
 - Sign off: `git commit -s`.
 - Subject in the imperative, under 72 characters, then a blank line, then a body that
   explains **why** — the diff already says what.

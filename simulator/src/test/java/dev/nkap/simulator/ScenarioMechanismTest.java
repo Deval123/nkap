@@ -198,6 +198,30 @@ class ScenarioMechanismTest {
     }
 
     @Test
+    @DisplayName("the fallback callback URL is declared with the rules and read back")
+    void callback_url_round_trips_through_the_control_plane() throws Exception {
+        declare("""
+            {"callbackUrl":"http://localhost:9999/hook","rules":[]}""");
+
+        mvc.perform(get("/_nkap/scenarios"))
+            .andExpect(jsonPath("$.callbackUrl").value("http://localhost:9999/hook"));
+
+        mvc.perform(delete("/_nkap/scenarios")).andExpect(status().isNoContent());
+
+        mvc.perform(get("/_nkap/scenarios"))
+            .andExpect(jsonPath("$.callbackUrl").value(org.hamcrest.Matchers.nullValue()));
+    }
+
+    @Test
+    @DisplayName("GET /_nkap/callbacks is an empty list for a reference with no attempts")
+    void callbacks_endpoint_is_empty_when_nothing_was_sent() throws Exception {
+        mvc.perform(get("/_nkap/callbacks/" + UUID.randomUUID()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$").isArray())
+            .andExpect(jsonPath("$.length()").value(0));
+    }
+
+    @Test
     @DisplayName("the token lifetime is the one declared with the rule set")
     void token_lifetime_is_declared_with_the_rules() throws Exception {
         expectTokenLifetime(3600);
@@ -252,6 +276,30 @@ class ScenarioMechanismTest {
                     {"rules":[{"scenario":{"onSubmit":{"outcome":"NONSENSE"}}}]}"""))
             .andExpect(status().isBadRequest())
             .andExpect(content().string(org.hamcrest.Matchers.containsString("outcome")));
+    }
+
+    @Test
+    @DisplayName("issue #3: a submit that never answers, then a query on the same reference returns SUCCESSFUL")
+    void timeout_then_late_success() throws Exception {
+        declare("""
+            {"rules":[{"scenario":{"name":"timeout-then-late-success",
+                                   "onSubmit":{"outcome":"NO_RESPONSE"},
+                                   "onQuery":[{"status":"SUCCESSFUL"}]}}]}""");
+
+        String ref = UUID.randomUUID().toString();
+
+        // The client submits and gets nothing back within its timeout window.
+        MvcResult pending = mvc.perform(post("/collection/v1_0/requesttopay")
+                .header("X-Reference-Id", ref)
+                .contentType(MediaType.APPLICATION_JSON).content(BODY))
+            .andExpect(request().asyncStarted())
+            .andReturn();
+        assertThatThrownBy(() -> pending.getAsyncResult(250)).isInstanceOf(IllegalStateException.class);
+
+        // It abandons the submit call and queries the reference instead.
+        mvc.perform(get("/collection/v1_0/requesttopay/" + ref))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.status").value("SUCCESSFUL"));
     }
 
     @Test

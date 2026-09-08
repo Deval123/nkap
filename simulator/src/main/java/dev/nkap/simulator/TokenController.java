@@ -8,9 +8,9 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * MTN hands out a short-lived bearer token before any Collections call. The
- * simulator issues one that is syntactically plausible; its lifetime comes from
- * the scenario resolved for the most recent submission, and is one hour when no
- * scenario has narrowed it (token expiry mid-flight is issue #9).
+ * simulator issues one that is syntactically plausible; its lifetime is declared
+ * configuration — set with the rule set, independent of any payment — and is one
+ * hour by default. Enforcing expiry mid-flight is issue #9.
  */
 @RestController
 public class TokenController {

@@ -48,7 +48,7 @@ class ScenarioModelTest {
                 {"delay": "PT2S", "status": "FAILED", "reason": "PAYER_NOT_FOUND"}
               ],
               "callbacks": [
-                {"after": "PT5S", "times": 2, "target": "UNKNOWN_REFERENCE", "status": "SUCCESSFUL"}
+                {"after": "PT5S", "every": "PT3S", "times": 2, "target": "UNKNOWN_REFERENCE", "status": "SUCCESSFUL"}
               ]
             }""";
 
@@ -60,6 +60,8 @@ class ScenarioModelTest {
         assertThat(scenario.onQuery()).hasSize(2);
         assertThat(scenario.onQuery().get(1).reason()).isEqualTo("PAYER_NOT_FOUND");
         assertThat(scenario.callbacks().get(0).times()).isEqualTo(2);
+        assertThat(scenario.callbacks().get(0).after()).isEqualTo(Duration.ofSeconds(5));
+        assertThat(scenario.callbacks().get(0).every()).isEqualTo(Duration.ofSeconds(3));
     }
 
     @Test
@@ -81,10 +83,13 @@ class ScenarioModelTest {
     }
 
     @Test
-    @DisplayName("a callback with times below one is stored as one")
-    void callback_times_floor_is_one() {
-        assertThat(new CallbackSpec(null, 0, null, null).times()).isEqualTo(1);
-        assertThat(new CallbackSpec(null, -3, null, null).times()).isEqualTo(1);
+    @DisplayName("a callback with times below one is stored as one, and a missing interval is zero")
+    void callback_defaults() {
+        CallbackSpec spec = new CallbackSpec(null, null, 0, null, null);
+        assertThat(spec.times()).isEqualTo(1);
+        assertThat(spec.every()).isEqualTo(Duration.ZERO);
+        assertThat(spec.after()).isEqualTo(Duration.ZERO);
+        assertThat(new CallbackSpec(null, null, -3, null, null).times()).isEqualTo(1);
     }
 
     @Test

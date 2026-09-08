@@ -27,10 +27,12 @@ import org.springframework.stereotype.Component;
  *       polls past the end of the scenario keeps getting a defined answer.</li>
  * </ol>
  *
- * <p>The token lifetime is declared configuration, not per-reference state: it
- * is set with the rules and consulted by nothing but {@link #tokenTtl()}. It
- * was once derived from "the most recent submission's scenario"; that raced
- * across references and is corrected in ADR 0002.
+ * <p>The token lifetime and the fallback callback URL are declared configuration,
+ * not per-reference state: they are set with the rules, and the engine only
+ * stores them — {@link #tokenTtl()} and {@link #callbackUrl()} hand them back to
+ * whoever needs them. The token was once derived from "the most recent
+ * submission's scenario"; that raced across references and is corrected in
+ * ADR 0002.
  */
 @Component
 public class ScenarioEngine {
@@ -42,6 +44,7 @@ public class ScenarioEngine {
 
     private volatile List<ScenarioRule> rules = List.of();
     private volatile TokenBehaviour token = new TokenBehaviour(null);
+    private volatile String callbackUrl;
     private final Map<String, ReferenceState> states = new ConcurrentHashMap<>();
 
     /**
@@ -87,20 +90,31 @@ public class ScenarioEngine {
         return token.ttl();
     }
 
+    /**
+     * The fallback URL for callback delivery, used when a submit request carries
+     * no {@code X-Callback-Url} header. {@code null} when none was declared.
+     */
+    public String callbackUrl() {
+        return callbackUrl;
+    }
+
     // --- control plane ---------------------------------------------------------
 
     /**
-     * Replaces the whole declared configuration in one call: the token lifetime
-     * and the rule list. In-flight payments keep the scenario they resolved to.
+     * Replaces the whole declared configuration in one call: the token lifetime,
+     * the fallback callback URL and the rule list. In-flight payments keep the
+     * scenario they resolved to.
      */
-    public void replaceConfiguration(TokenBehaviour token, List<ScenarioRule> rules) {
+    public void replaceConfiguration(TokenBehaviour token, String callbackUrl, List<ScenarioRule> rules) {
         this.token = token != null ? token : new TokenBehaviour(null);
+        this.callbackUrl = (callbackUrl == null || callbackUrl.isBlank()) ? null : callbackUrl;
         this.rules = List.copyOf(rules);
     }
 
-    /** Back to the happy path only, with a one-hour token. */
+    /** Back to the happy path only, with a one-hour token and no callback URL. */
     public void resetConfiguration() {
         this.token = new TokenBehaviour(null);
+        this.callbackUrl = null;
         this.rules = List.of();
     }
 

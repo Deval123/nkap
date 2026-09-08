@@ -36,19 +36,22 @@ public class ControlPlaneController {
 
     private final ScenarioEngine engine;
     private final CollectionRequestStore store;
+    private final CallbackDispatcher callbacks;
 
-    ControlPlaneController(ScenarioEngine engine, CollectionRequestStore store) {
+    ControlPlaneController(ScenarioEngine engine, CollectionRequestStore store, CallbackDispatcher callbacks) {
         this.engine = engine;
         this.store = store;
+        this.callbacks = callbacks;
     }
 
     /**
      * The request and response body of {@code /_nkap/scenarios}: the whole
-     * declared configuration in one document — the token lifetime and the rule
-     * list. Both are optional; {@code token} defaults to one hour, {@code rules}
-     * to empty. Posting it replaces the lot atomically.
+     * declared configuration in one document — the token lifetime, the fallback
+     * callback URL and the rule list. All optional; {@code token} defaults to
+     * one hour, {@code rules} to empty, {@code callbackUrl} to none. Posting it
+     * replaces the lot atomically.
      */
-    public record Declaration(TokenBehaviour token, List<ScenarioRule> rules) {
+    public record Declaration(TokenBehaviour token, String callbackUrl, List<ScenarioRule> rules) {
         public Declaration {
             token = token != null ? token : new TokenBehaviour(null);
             rules = rules != null ? List.copyOf(rules) : List.of();
@@ -61,12 +64,12 @@ public class ControlPlaneController {
     @PostMapping("/scenarios")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void declare(@RequestBody Declaration body) {
-        engine.replaceConfiguration(body.token(), body.rules());
+        engine.replaceConfiguration(body.token(), body.callbackUrl(), body.rules());
     }
 
     @GetMapping("/scenarios")
     public Declaration current() {
-        return new Declaration(engine.token(), engine.rules());
+        return new Declaration(engine.token(), engine.callbackUrl(), engine.rules());
     }
 
     @DeleteMapping("/scenarios")
@@ -83,10 +86,22 @@ public class ControlPlaneController {
     }
 
     /**
-     * Forgets every reference, in the engine and in the idempotency gate. This
-     * is what lets one test suite run its cases in sequence without each
-     * inheriting the previous one's references. It leaves the declared
-     * configuration — rules and token — alone: that is
+     * The callback delivery attempts for a submission reference, oldest first.
+     * An empty list when none were attempted — polling for "have the callbacks
+     * gone out yet?" should not have to distinguish "not yet" from "never".
+     * This is what lets a test assert two callbacks were sent, at the right
+     * interval, without standing up a server to receive them.
+     */
+    @GetMapping("/callbacks/{referenceId}")
+    public List<CallbackDispatcher.Attempt> callbackAttempts(@PathVariable String referenceId) {
+        return callbacks.attemptsFor(References.canonical(referenceId));
+    }
+
+    /**
+     * Forgets every reference — in the engine, the idempotency gate and the
+     * callback log. This is what lets one test suite run its cases in sequence
+     * without each inheriting the previous one's references. It leaves the
+     * declared configuration — rules, token and callback URL — alone: that is
      * {@code DELETE /_nkap/scenarios}.
      */
     @DeleteMapping("/state")
@@ -94,6 +109,7 @@ public class ControlPlaneController {
     public void forgetState() {
         engine.forgetAllState();
         store.clear();
+        callbacks.clear();
     }
 
     /**

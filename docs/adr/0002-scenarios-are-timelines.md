@@ -30,8 +30,10 @@ interaction point:
 - `onQuery`: an ordered list of behaviours, one per successive query. **The last entry
   repeats indefinitely**, so a client that polls more times than the scenario declares
   keeps getting a defined answer instead of falling off the end.
-- `callbacks`: each with a delay relative to submission, a number of deliveries, and a
-  target reference that is either the request's own or an unknown one.
+- `callbacks`: each with a delay relative to submission, a number of deliveries and the
+  interval between them, and a target reference that is either the request's own or an
+  unknown one. They are delivered to the URL in the submit request's `X-Callback-Url`
+  header, or failing that one declared with the rules; with neither, nothing is sent.
 
 **Scenarios are selected by ordered rules, declared over HTTP.** A control plane under
 `/_nkap/` accepts a list of rules, each pairing a matcher (on reference, MSISDN, amount or
@@ -81,10 +83,14 @@ tests run in parallel — and tests running in parallel is exactly what a simula
   far. `DELETE /_nkap/state` resets it, so tests can be isolated from one another.
 - The control plane is namespaced under `/_nkap/` so it can never collide with an operator
   path, and it is the one part of the simulator that deliberately does not imitate MTN.
-- Callbacks are modelled here but not delivered yet: the dispatcher arrives with issues #5
-  to #7. Declaring the shape now keeps the YAML format stable, at the accepted risk of
-  discovering a missing field when delivery is implemented. That risk is smaller than
-  changing the file format after contributors have written files against it.
+- Callbacks are delivered by a scheduler. They are scheduled when the scenario resolves,
+  before the submit delay is applied, so a zero-delay callback can reach the client before
+  its submit call returns (issue #6). Delivery is a plain outbound `POST` with no retries:
+  the simulator sends what the scenario declares and no more. The accepted risk above did
+  materialise — `CallbackSpec` had a repeat count but no interval, without which "the same
+  callback twice, a configurable interval apart" (issue #5) could not be expressed. It was
+  one field, added when delivery was built, and no file anyone had written needed to
+  change. That is the outcome the risk was accepted for.
 - Scenarios must stay deterministic. No randomness, no dependence on wall-clock time beyond
   the declared delays: a scenario that behaves differently on two runs is worse than no
   scenario.

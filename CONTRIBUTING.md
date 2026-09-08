@@ -32,9 +32,14 @@ conversion outside a position account will be declined with a link to this parag
 ## Adding an operator
 
 1. Implement `ProviderAdapter` in a new `provider-<name>` module.
-2. Make the conformance kit pass. It is not optional and it is not adjustable: it
-   verifies reference replay, duplicate callbacks, out-of-order callbacks, callbacks for
-   unknown references, timeout-then-success, and status flapping.
+2. Make the conformance kit pass. In that module's **test scope**, depend on
+   `nkap-conformance`, implement `dev.nkap.conformance.ConformanceHarness` to drive your
+   operator into each condition, and add a test class that
+   `extends dev.nkap.conformance.ProviderAdapterConformanceTest` and returns your harness.
+   It is not optional and not adjustable: it checks reference replay, timeout-then-success,
+   outright refusal, status flapping, credential renewal, and untrusted callbacks. See
+   `provider-mtn` for a worked example. If writing the harness is laborious, say so in your
+   pull request — that is a signal about the contract, not about you.
 3. Document the operator's quirks in `docs/providers/<name>.md` — the undocumented status
    codes, the field that is sometimes absent, the sandbox that lies. This file is often
    more valuable than the code.

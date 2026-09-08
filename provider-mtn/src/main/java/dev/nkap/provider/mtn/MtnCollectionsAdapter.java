@@ -108,10 +108,15 @@ public final class MtnCollectionsAdapter implements ProviderAdapter {
             // The reference was already used, which — since Nkap persists it before
             // calling — means a previous attempt reached MTN. Idempotency worked and
             // nothing was duplicated. Not an error: acknowledge and let query() settle it.
+            //
+            // Kept deliberately lenient: any 409 on requesttopay is "already submitted".
+            // Narrowing it to the RESOURCE_ALREADY_EXIST code alone is only safe once the
+            // simulator returns MTN-shaped error bodies — issue #26. Doing it now would
+            // make these tests pass against a fiction.
             return SubmitResult.acknowledged("", response.body());
         }
         if (code == 400) {
-            throw rejected(response);
+            return rejected(response);
         }
         throw new ProviderUnavailableException(
                 "MTN requesttopay returned HTTP " + code + ": " + brief(response.body()));
@@ -173,9 +178,10 @@ public final class MtnCollectionsAdapter implements ProviderAdapter {
             throw new UntrustedCallbackException("callback carries no status");
         }
         String reason = node.path("reason").asText("");
+        String transactionId = node.path("financialTransactionId").asText("");
         PaymentState state = MtnStatusMap.stateFor(status, reason, "");
         ProviderStatus providerStatus = new ProviderStatus(
-                state, reason.isBlank() ? status : reason, null, reason, callback.body());
+                state, reason.isBlank() ? status : reason, transactionId, null, reason, callback.body());
         return new CallbackEvent(reference, providerStatus);
     }
 
@@ -250,26 +256,26 @@ public final class MtnCollectionsAdapter implements ProviderAdapter {
         }
         String status = node.path("status").asText("");
         String reason = node.path("reason").asText("");
-        // financialTransactionId appears only once the payment settles; it is optional and,
-        // for now, only carried in rawResponse — ProviderStatus has no field for it.
+        // financialTransactionId appears only once the payment settles — absent while pending.
+        String transactionId = node.path("financialTransactionId").asText("");
         PaymentState state = MtnStatusMap.stateFor(status, reason, "");
         String code = reason.isBlank() ? status : reason;
-        return new ProviderStatus(state, code, null, reason, body);
+        return new ProviderStatus(state, code, transactionId, null, reason, body);
     }
 
-    private MtnRequestRejected rejected(HttpResponse<String> response) {
+    private SubmitResult.Rejected rejected(HttpResponse<String> response) {
         String body = response.body();
         String code = codeIn(body);
         String message = "";
         try {
-            message = json.readTree(body == null ? "{}" : body).path("message").asText("");
+            message = json.readTree(body == null || body.isBlank() ? "{}" : body).path("message").asText("");
         } catch (IOException ignored) {
             // fall through to the brief body
         }
         if (message.isBlank()) {
             message = brief(body);
         }
-        return new MtnRequestRejected(400, code, "MTN rejected the requesttopay: " + message);
+        return new SubmitResult.Rejected(code, message, body == null ? "" : body);
     }
 
     private String codeIn(String body) {

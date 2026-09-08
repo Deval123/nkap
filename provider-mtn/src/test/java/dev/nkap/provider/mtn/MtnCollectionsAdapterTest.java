@@ -71,7 +71,8 @@ class MtnCollectionsAdapterTest {
         ReferenceId reference = ReferenceId.newReference();
 
         SubmitResult submitted = mtn.submit(collectIntent(), reference);
-        assertThat(submitted.state()).isEqualTo(PaymentState.SUBMITTED);
+        assertThat(submitted).isInstanceOfSatisfying(SubmitResult.Acknowledged.class,
+                acknowledged -> assertThat(acknowledged.state()).isEqualTo(PaymentState.SUBMITTED));
 
         ProviderStatus status = mtn.query(reference);
         assertThat(status.state()).isEqualTo(PaymentState.SUCCEEDED);
@@ -101,8 +102,8 @@ class MtnCollectionsAdapterTest {
         MtnCollectionsAdapter mtn = adapter();
         ReferenceId reference = ReferenceId.newReference();
 
-        assertThat(mtn.submit(collectIntent(), reference).state()).isEqualTo(PaymentState.SUBMITTED);
-        assertThat(mtn.submit(collectIntent(), reference).state()).isEqualTo(PaymentState.SUBMITTED);
+        assertThat(mtn.submit(collectIntent(), reference)).isInstanceOf(SubmitResult.Acknowledged.class);
+        assertThat(mtn.submit(collectIntent(), reference)).isInstanceOf(SubmitResult.Acknowledged.class);
     }
 
     @Test
@@ -125,7 +126,7 @@ class MtnCollectionsAdapterTest {
         simulator.declare("{\"token\":{\"ttl\":\"PT2S\",\"enforce\":true},\"rules\":[]}");
         MtnCollectionsAdapter mtn = adapter();
         ReferenceId reference = ReferenceId.newReference();
-        assertThat(mtn.submit(collectIntent(), reference).state()).isEqualTo(PaymentState.SUBMITTED);
+        assertThat(mtn.submit(collectIntent(), reference)).isInstanceOf(SubmitResult.Acknowledged.class);
 
         // For six continuous seconds — three token lifetimes — every query must succeed.
         // A failure to renew would surface as a 401, i.e. ProviderUnavailableException.
@@ -156,12 +157,13 @@ class MtnCollectionsAdapterTest {
     }
 
     @Test
-    @DisplayName("a 400 from MTN is a rejection, distinct from UNKNOWN and from unavailable")
+    @DisplayName("a 400 from MTN is a SubmitResult.Rejected — not thrown, not acknowledged, not UNKNOWN")
     void a_400_on_submit_is_a_rejection() throws Exception {
         simulator.declare("{\"rules\":[{\"scenario\":{\"onSubmit\":{\"outcome\":\"BAD_REQUEST\"}}}]}");
 
-        assertThatThrownBy(() -> adapter().submit(collectIntent(), ReferenceId.newReference()))
-                .isInstanceOf(MtnRequestRejected.class);
+        SubmitResult result = adapter().submit(collectIntent(), ReferenceId.newReference());
+
+        assertThat(result).isInstanceOf(SubmitResult.Rejected.class);
     }
 
     @Test

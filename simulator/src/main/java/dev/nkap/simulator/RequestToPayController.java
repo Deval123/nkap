@@ -40,10 +40,12 @@ public class RequestToPayController {
 
     private final CollectionRequestStore store;
     private final ScenarioEngine engine;
+    private final CallbackDispatcher callbacks;
 
-    RequestToPayController(CollectionRequestStore store, ScenarioEngine engine) {
+    RequestToPayController(CollectionRequestStore store, ScenarioEngine engine, CallbackDispatcher callbacks) {
         this.store = store;
         this.engine = engine;
+        this.callbacks = callbacks;
     }
 
     /**
@@ -55,6 +57,7 @@ public class RequestToPayController {
     @PostMapping("/collection/v1_0/requesttopay")
     public Object requestToPay(
             @RequestHeader(value = "X-Reference-Id", required = false) String referenceId,
+            @RequestHeader(value = "X-Callback-Url", required = false) String callbackUrl,
             @RequestBody(required = false) Map<String, Object> body) {
 
         String reference = requireUuid(referenceId);
@@ -69,6 +72,16 @@ public class RequestToPayController {
         }
 
         Scenario scenario = engine.resolveForSubmission(reference, msisdn, amount, currency);
+
+        // Schedule callbacks now — when the scenario resolves, and BEFORE the
+        // submit delay below. Schedule first, sleep second, respond third: that
+        // ordering is the only reason a callback declared with after:PT0S can
+        // reach the client while this call is still blocked on onSubmit.delay()
+        // — issue #6, the callback that arrives before the submit response. It
+        // looks arbitrary until you need it.
+        String url = (callbackUrl != null && !callbackUrl.isBlank()) ? callbackUrl : engine.callbackUrl();
+        callbacks.schedule(reference, amount, currency, scenario.callbacks(), url);
+
         SubmitBehaviour onSubmit = scenario.onSubmit();
 
         if (onSubmit.outcome() == SubmitOutcome.NO_RESPONSE) {

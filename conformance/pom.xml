@@ -10,10 +10,23 @@
   </parent>
   <artifactId>nkap-conformance</artifactId>
   <name>Nkap :: Conformance</name>
+
+  <!--
+    provider-api, and JUnit in compile scope: ProviderAdapterConformanceTest is an
+    abstract @Test class that a provider module extends from its own test code, so it must
+    be on the compile classpath of this module and the test classpath of that one.
+
+    No dependency on nkap-simulator. The simulator wears MTN's shape; a future adapter may
+    be driven by something else entirely. Coupling the kit to it would make the kit MTN's.
+  -->
   <dependencies>
     <dependency>
       <groupId>dev.nkap</groupId>
       <artifactId>nkap-provider-api</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
     </dependency>
   </dependencies>
 </project>

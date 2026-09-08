@@ -6,11 +6,15 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 /**
  * A fake MTN MoMo operator, in memory.
  *
- * <p>This is the skeleton only: it exposes the Collections API surface and plays
- * one hard-coded default (a request succeeds on its first query). Latency,
- * timeouts, duplicate and out-of-order callbacks, status flapping and token
- * expiry are separate issues, each introduced through the scenario mechanism
- * designed in issue #2.
+ * <p>It exposes the Collections API surface and plays a scenario — a timeline of
+ * what happens at each interaction point of a payment (ADR 0002). Scenarios are
+ * selected by ordered rules declared over HTTP under {@code /_nkap/}; with no
+ * rules, every payment gets the happy path (accepted, then {@code SUCCESSFUL} on
+ * the next query).
+ *
+ * <p>The individual failure modes — latency, timeout then late success,
+ * duplicate and out-of-order callbacks, status flapping, token expiry — are
+ * separate issues, and each is now configuration rather than code.
  */
 @SpringBootApplication
 public class SimulatorApplication {

@@ -32,11 +32,15 @@ interaction point:
   keeps getting a defined answer instead of falling off the end.
 - `callbacks`: each with a delay relative to submission, a number of deliveries, and a
   target reference that is either the request's own or an unknown one.
-- `token`: a time to live.
 
 **Scenarios are selected by ordered rules, declared over HTTP.** A control plane under
 `/_nkap/` accepts a list of rules, each pairing a matcher (on reference, MSISDN, amount or
 currency) with a scenario. First match wins; no match means the happy path.
+
+**The token lifetime is declared alongside the rules, not inside a scenario.** A bearer
+token is obtained before any payment exists, so it cannot belong to a payment's timeline.
+It is a property of the simulated operator session, and it is set in the same document as
+the rules so that one call replaces the whole declared configuration atomically.
 
 **The scenario is resolved once, at submission, and frozen against the reference.**
 
@@ -84,6 +88,27 @@ tests run in parallel — and tests running in parallel is exactly what a simula
 - Scenarios must stay deterministic. No randomness, no dependence on wall-clock time beyond
   the declared delays: a scenario that behaves differently on two runs is worse than no
   scenario.
+
+## Correction, 2026-09-08
+
+The first version of this ADR put the token lifetime inside `Scenario`, and said the token
+endpoint should use "the scenario resolved for the most recent submission". Implementing it
+showed the mistake immediately.
+
+A token is requested *before* any payment exists, so there is no reference to resolve it
+against. "Most recent submission" was not a design, it was the only shortcut available once
+the field had been put in the wrong place — and it introduced a single mutable field shared
+across every reference, in the one component whose entire purpose is to keep payments
+independent of one another. Two submissions resolving different scenarios would race, and
+the token endpoint would answer with whichever landed last. That defeats test isolation
+precisely where the rest of this design goes out of its way to allow parallelism, down to
+choosing a `DeferredResult` over a blocking sleep.
+
+The token belongs to the session, not to the payment. It is now declared with the rule set,
+and `Scenario` no longer carries it.
+
+Worth recording rather than quietly editing: the error was in the design document, not in
+the implementation, and it was the implementation that revealed it.
 
 ## Alternatives rejected
 

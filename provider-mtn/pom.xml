@@ -10,10 +10,41 @@
   </parent>
   <artifactId>nkap-provider-mtn</artifactId>
   <name>Nkap :: MTN MoMo</name>
+
+  <!--
+    The adapter itself depends only on provider-api and Jackson. Its HTTP client
+    is java.net.http, in the JDK. No Spring: an adapter must be embeddable in a
+    plain JVM process.
+
+    The tests run against nkap-simulator (test scope only), which is the whole
+    reason the simulator exists. Nothing here reaches the real MTN sandbox
+    except MtnSandboxIT, which is disabled unless NKAP_MTN_SANDBOX is set.
+  -->
   <dependencies>
     <dependency>
       <groupId>dev.nkap</groupId>
       <artifactId>nkap-provider-api</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.fasterxml.jackson.core</groupId>
+      <artifactId>jackson-databind</artifactId>
+    </dependency>
+
+    <dependency>
+      <groupId>dev.nkap</groupId>
+      <artifactId>nkap-simulator</artifactId>
+      <version>${project.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.assertj</groupId>
+      <artifactId>assertj-core</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.awaitility</groupId>
+      <artifactId>awaitility</artifactId>
+      <scope>test</scope>
     </dependency>
   </dependencies>
 </project>

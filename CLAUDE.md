@@ -32,7 +32,10 @@ even a one-line fix, and not even by the maintainer.
 
 - Branch name: `<type>/<issue>-<slug>`, where type is `feat`, `fix`, `docs` or `chore` —
   for example `feat/2-scenario-engine`, `fix/14-token-refresh`. The issue number in the
-  name means anyone reading `git branch` knows what the work is for.
+  name means anyone reading `git branch` knows what the work is for. When the work has no
+  issue — a typo, a stale comment, a documentation fix nobody would have filed — use
+  `<type>/<slug>` and say why in the pull request. Do not open an issue purely to satisfy
+  this rule.
 - The pull request description says what changed and why, and closes the issue with
   `Closes #N` so merging closes it automatically.
 - **The build must be green before merging.** That is the whole reason the workflow runs

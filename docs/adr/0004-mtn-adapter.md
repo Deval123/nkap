@@ -138,6 +138,13 @@ in EUR whatever the country, and the documented test MSISDN stays `PENDING` for 
 few seconds — so a test that submits and immediately expects success will fail for reasons
 that have nothing to do with the code.
 
+## Follow-up, 2026-09-08 — the contract did change
+
+This adapter was built to test `provider-api` before a second one exists. It found two gaps:
+`submit` could not report a refusal, and `ProviderStatus` had nowhere for the provider's
+transaction id. Both are closed in [ADR 0005](0005-submit-has-three-outcomes.md).
+`PaymentIntent.providerOptions` held.
+
 ## Alternatives rejected
 
 **One global credential set with the country as a parameter.** Contradicted by MTN's own

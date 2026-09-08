@@ -2,7 +2,6 @@ package dev.nkap.provider.mtn;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.awaitility.Awaitility.await;
 
 import dev.nkap.core.money.Currency;
 import dev.nkap.core.money.Money;
@@ -16,7 +15,6 @@ import dev.nkap.provider.ProviderStatus;
 import dev.nkap.provider.ProviderUnavailableException;
 import dev.nkap.provider.RawCallback;
 import dev.nkap.provider.SubmitResult;
-import dev.nkap.provider.UntrustedCallbackException;
 import java.time.Duration;
 import java.util.Map;
 import org.junit.jupiter.api.AfterAll;
@@ -26,8 +24,14 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 /**
- * The adapter, driven through the scenarios the simulator already knows. No test here
- * reaches the real MTN sandbox — that is {@link MtnSandboxIT}, which is manual.
+ * What is genuinely MTN's, driven through the simulator: the happy path and the query
+ * payload shape, the 404 → {@code UNKNOWN} handling, an unrecognised operator code, a 5xx,
+ * the profile currency check, the callback body shape, and the unsupported capability.
+ *
+ * <p>The rules that are <em>every</em> adapter's — a duplicate submission, a timeout, an
+ * outright refusal, a flapping status, credential renewal, an untrusted callback — moved to
+ * {@link MtnConformanceTest} when the conformance kit was extracted. They are not
+ * duplicated here: the kit is the source of truth for them.
  */
 class MtnCollectionsAdapterTest {
 
@@ -65,7 +69,7 @@ class MtnCollectionsAdapterTest {
     }
 
     @Test
-    @DisplayName("the happy path: a submission is acknowledged, then a query reports SUCCEEDED")
+    @DisplayName("the happy path: a submission is acknowledged, then a query reports SUCCEEDED with MTN's status code")
     void the_happy_path() throws Exception {
         MtnCollectionsAdapter mtn = adapter();
         ReferenceId reference = ReferenceId.newReference();
@@ -77,63 +81,6 @@ class MtnCollectionsAdapterTest {
         ProviderStatus status = mtn.query(reference);
         assertThat(status.state()).isEqualTo(PaymentState.SUCCEEDED);
         assertThat(status.providerStatusCode()).isEqualTo("SUCCESSFUL");
-    }
-
-    @Test
-    @DisplayName("a timeout on submit then a successful query is UNKNOWN then SUCCEEDED — the adapter never produces FAILED")
-    void a_timeout_on_submit_is_never_a_failure() throws Exception {
-        simulator.declare("""
-                {"rules":[{"scenario":{"onSubmit":{"outcome":"NO_RESPONSE"},"onQuery":[{"status":"SUCCESSFUL"}]}}]}""");
-        MtnCollectionsAdapter mtn = adapter();
-        ReferenceId reference = ReferenceId.newReference();
-
-        assertThatThrownBy(() -> mtn.submit(collectIntent(), reference))
-                .isInstanceOf(ProviderUnavailableException.class);
-
-        // The reference reached the simulator before it went silent; the query settles it.
-        ProviderStatus status = mtn.query(reference);
-        assertThat(status.state()).isEqualTo(PaymentState.SUCCEEDED);
-        assertThat(status.state()).isNotEqualTo(PaymentState.FAILED);
-    }
-
-    @Test
-    @DisplayName("the same reference submitted twice is treated as already submitted, not as an error")
-    void a_duplicate_submission_is_not_an_error() throws Exception {
-        MtnCollectionsAdapter mtn = adapter();
-        ReferenceId reference = ReferenceId.newReference();
-
-        assertThat(mtn.submit(collectIntent(), reference)).isInstanceOf(SubmitResult.Acknowledged.class);
-        assertThat(mtn.submit(collectIntent(), reference)).isInstanceOf(SubmitResult.Acknowledged.class);
-    }
-
-    @Test
-    @DisplayName("a flapping status is reported on each query, and the adapter decides nothing")
-    void a_flapping_status_is_reported_not_decided() throws Exception {
-        simulator.declare("""
-                {"rules":[{"scenario":{"onQuery":[{"status":"SUCCESSFUL"},{"status":"FAILED"}]}}]}""");
-        MtnCollectionsAdapter mtn = adapter();
-        ReferenceId reference = ReferenceId.newReference();
-        mtn.submit(collectIntent(), reference);
-
-        assertThat(mtn.query(reference).state()).isEqualTo(PaymentState.SUCCEEDED);
-        assertThat(mtn.query(reference).state()).isEqualTo(PaymentState.FAILED);
-        assertThat(mtn.query(reference).state()).isEqualTo(PaymentState.FAILED);
-    }
-
-    @Test
-    @DisplayName("with enforcement on and a short lifetime, the adapter renews the token so calls keep working past expiry")
-    void a_token_expiring_mid_flight_is_renewed() throws Exception {
-        simulator.declare("{\"token\":{\"ttl\":\"PT2S\",\"enforce\":true},\"rules\":[]}");
-        MtnCollectionsAdapter mtn = adapter();
-        ReferenceId reference = ReferenceId.newReference();
-        assertThat(mtn.submit(collectIntent(), reference)).isInstanceOf(SubmitResult.Acknowledged.class);
-
-        // For six continuous seconds — three token lifetimes — every query must succeed.
-        // A failure to renew would surface as a 401, i.e. ProviderUnavailableException.
-        await().atMost(Duration.ofSeconds(9))
-                .during(Duration.ofSeconds(6))
-                .pollInterval(Duration.ofMillis(400))
-                .untilAsserted(() -> assertThat(mtn.query(reference).state()).isEqualTo(PaymentState.SUCCEEDED));
     }
 
     @Test
@@ -154,16 +101,6 @@ class MtnCollectionsAdapterTest {
         ProviderStatus status = adapter().query(ReferenceId.newReference());
 
         assertThat(status.state()).isEqualTo(PaymentState.UNKNOWN);
-    }
-
-    @Test
-    @DisplayName("a 400 from MTN is a SubmitResult.Rejected — not thrown, not acknowledged, not UNKNOWN")
-    void a_400_on_submit_is_a_rejection() throws Exception {
-        simulator.declare("{\"rules\":[{\"scenario\":{\"onSubmit\":{\"outcome\":\"BAD_REQUEST\"}}}]}");
-
-        SubmitResult result = adapter().submit(collectIntent(), ReferenceId.newReference());
-
-        assertThat(result).isInstanceOf(SubmitResult.Rejected.class);
     }
 
     @Test
@@ -207,17 +144,6 @@ class MtnCollectionsAdapterTest {
 
         assertThat(event.reference()).isEqualTo(reference);
         assertThat(event.status().state()).isEqualTo(PaymentState.SUCCEEDED);
-    }
-
-    @Test
-    @DisplayName("a callback that is not JSON, or carries no reference, is rejected as untrusted")
-    void a_bad_callback_is_rejected() {
-        MtnCollectionsAdapter mtn = adapter();
-
-        assertThatThrownBy(() -> mtn.parseCallback(new RawCallback(Map.of(), "definitely not json")))
-                .isInstanceOf(UntrustedCallbackException.class);
-        assertThatThrownBy(() -> mtn.parseCallback(new RawCallback(Map.of(), "{\"status\":\"SUCCESSFUL\"}")))
-                .isInstanceOf(UntrustedCallbackException.class);
     }
 
     @Test

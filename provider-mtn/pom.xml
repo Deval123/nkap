@@ -32,6 +32,12 @@
 
     <dependency>
       <groupId>dev.nkap</groupId>
+      <artifactId>nkap-conformance</artifactId>
+      <version>${project.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>dev.nkap</groupId>
       <artifactId>nkap-simulator</artifactId>
       <version>${project.version}</version>
       <scope>test</scope>

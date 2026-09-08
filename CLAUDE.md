@@ -25,6 +25,28 @@ still in English.
   explains **why** — the diff already says what.
 - One concern per commit.
 
+## Branches and pull requests
+
+**One issue, one branch, one pull request.** Nothing is committed straight to `main`, not
+even a one-line fix, and not even by the maintainer.
+
+- Branch name: `<type>/<issue>-<slug>`, where type is `feat`, `fix`, `docs` or `chore` —
+  for example `feat/2-scenario-engine`, `fix/14-token-refresh`. The issue number in the
+  name means anyone reading `git branch` knows what the work is for.
+- The pull request description says what changed and why, and closes the issue with
+  `Closes #N` so merging closes it automatically.
+- **The build must be green before merging.** That is the whole reason the workflow runs
+  on pull requests; a red PR is not a discussion, it is unfinished work.
+- Merge with a rebase or a merge commit, not a squash. Commit messages here are written to
+  be read a year later, and squashing throws them away.
+- Delete the branch after merging.
+
+If `gh` is available and authenticated, open the pull request with it. Otherwise push the
+branch and report the compare URL rather than merging locally.
+
+`main` is always releasable and always green. It is the only branch anything is ever
+released from.
+
 ## The four rules that do not bend
 
 These are enforced by tests, and a change that breaks one of them is a bug in the change,

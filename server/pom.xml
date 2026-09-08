@@ -10,10 +10,55 @@
   </parent>
   <artifactId>nkap-server</artifactId>
   <name>Nkap :: Server</name>
+
   <dependencies>
+    <dependency>
+      <groupId>dev.nkap</groupId>
+      <artifactId>nkap-core</artifactId>
+    </dependency>
     <dependency>
       <groupId>dev.nkap</groupId>
       <artifactId>nkap-provider-api</artifactId>
     </dependency>
+    <dependency>
+      <groupId>dev.nkap</groupId>
+      <artifactId>nkap-provider-mtn</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-web</artifactId>
+    </dependency>
+
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-test</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <!-- The tests drive a real MTN adapter against a real simulator, over HTTP. -->
+    <dependency>
+      <groupId>dev.nkap</groupId>
+      <artifactId>nkap-simulator</artifactId>
+      <version>${project.version}</version>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <configuration>
+          <!-- Spring MVC binds @PathVariable / @RequestHeader by parameter name. -->
+          <parameters>true</parameters>
+        </configuration>
+      </plugin>
+      <plugin>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-maven-plugin</artifactId>
+        <version>${spring-boot.version}</version>
+      </plugin>
+    </plugins>
+  </build>
 </project>

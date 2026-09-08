@@ -16,6 +16,7 @@ import java.util.Optional;
 public record ProviderStatus(
         PaymentState state,
         String providerStatusCode,
+        String providerTransactionId,
         Money providerFee,
         String failureReason,
         String rawResponse) {
@@ -23,6 +24,7 @@ public record ProviderStatus(
     public ProviderStatus {
         Objects.requireNonNull(state, "state");
         providerStatusCode = providerStatusCode == null ? "" : providerStatusCode;
+        providerTransactionId = providerTransactionId == null ? "" : providerTransactionId;
         failureReason = failureReason == null ? "" : failureReason;
         rawResponse = rawResponse == null ? "" : rawResponse;
     }
@@ -31,7 +33,16 @@ public record ProviderStatus(
         return Optional.ofNullable(providerFee);
     }
 
+    /**
+     * The provider's own id for the settled movement — MTN's {@code financialTransactionId}.
+     * The reconciler matches it against an operator statement. Absent while the payment is
+     * still pending, so an {@link Optional}.
+     */
+    public Optional<String> transactionId() {
+        return providerTransactionId.isBlank() ? Optional.empty() : Optional.of(providerTransactionId);
+    }
+
     public static ProviderStatus unknown(String providerStatusCode, String rawResponse) {
-        return new ProviderStatus(PaymentState.UNKNOWN, providerStatusCode, null, "", rawResponse);
+        return new ProviderStatus(PaymentState.UNKNOWN, providerStatusCode, "", null, "", rawResponse);
     }
 }

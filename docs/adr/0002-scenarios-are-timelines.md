@@ -1,0 +1,96 @@
+# ADR 0002 — A simulator scenario is a timeline, selected by rules through a control plane
+
+- **Status:** accepted
+- **Date:** 2026-09-08
+
+## Context
+
+The simulator exists to reproduce the ways a mobile money operator misbehaves, so that a
+client can be tested against them. Eight behaviours are wanted (issues #3 to #10): latency,
+timeout then late success, duplicate callback, callback before the submit response,
+callback for an unknown reference, flapping status, token expiry mid-flight, and
+declarative scenario files.
+
+The obvious model — a scenario is the response to return — collapses immediately. A
+timeout followed by a late success is a submission that never answers *and then* a query
+that succeeds. A flapping status is `SUCCESSFUL` on one query *and then* `FAILED` on the
+next. Neither is a response; both are sequences.
+
+A second question is how a scenario reaches a given request. The real MTN sandbox encodes
+some failures in magic MSISDNs. Configuring one scenario per running instance is a third
+possibility.
+
+## Decision
+
+**A scenario is a timeline** — a plain data record describing what happens at each
+interaction point:
+
+- `onSubmit`: a delay, and an outcome among `ACCEPT`, `CONFLICT`, `BAD_REQUEST`,
+  `SERVER_ERROR`, `NO_RESPONSE`.
+- `onQuery`: an ordered list of behaviours, one per successive query. **The last entry
+  repeats indefinitely**, so a client that polls more times than the scenario declares
+  keeps getting a defined answer instead of falling off the end.
+- `callbacks`: each with a delay relative to submission, a number of deliveries, and a
+  target reference that is either the request's own or an unknown one.
+- `token`: a time to live.
+
+**Scenarios are selected by ordered rules, declared over HTTP.** A control plane under
+`/_nkap/` accepts a list of rules, each pairing a matcher (on reference, MSISDN, amount or
+currency) with a scenario. First match wins; no match means the happy path.
+
+**The scenario is resolved once, at submission, and frozen against the reference.**
+
+**Controllers decide nothing.** They ask the engine what to do and carry it out.
+
+## Rationale
+
+**The timeline shape is validated by the eight scenarios.** Every one of them is
+expressible in it without adding a field, which is the test that an abstraction sits at the
+right level. A model that needed a special case for the ninth would be the wrong model.
+
+**A flat data record makes issue #10 trivial.** Loading scenarios from YAML becomes a
+Jackson binding rather than a project, because the in-memory model and the file format are
+the same shape by construction.
+
+**HTTP control, not a Java fixture.** The simulator's strategic value is that it is useful
+on its own, to developers who will never run Nkap and who mostly do not write Java. A
+control plane driven over HTTP is usable from a Python, PHP or JavaScript test suite. A
+Java test fixture would quietly make the simulator a Java-only tool.
+
+**Rules beat magic values.** Magic MSISDNs need no state, but the mapping is frozen in
+code: a contributor cannot add a case without recompiling, and a test cannot express "this
+particular payment fails". Rules keep the magic-value behaviour available — a rule matching
+an MSISDN is exactly that — while letting a test declare its own.
+
+**Freezing at submission** is what makes a failing test diagnosable. If rules were consulted
+again at each query, changing them mid-test would silently switch a payment from one
+scenario to another, and the resulting behaviour would belong to no scenario anyone
+declared.
+
+**`NO_RESPONSE` must not block a thread.** It is implemented with a `DeferredResult` that
+never completes. A `Thread.sleep` would exhaust the servlet pool as soon as a handful of
+tests run in parallel — and tests running in parallel is exactly what a simulator is for.
+
+## Consequences
+
+- The simulator keeps per-reference state: the resolved scenario and a count of queries so
+  far. `DELETE /_nkap/state` resets it, so tests can be isolated from one another.
+- The control plane is namespaced under `/_nkap/` so it can never collide with an operator
+  path, and it is the one part of the simulator that deliberately does not imitate MTN.
+- Callbacks are modelled here but not delivered yet: the dispatcher arrives with issues #5
+  to #7. Declaring the shape now keeps the YAML format stable, at the accepted risk of
+  discovering a missing field when delivery is implemented. That risk is smaller than
+  changing the file format after contributors have written files against it.
+- Scenarios must stay deterministic. No randomness, no dependence on wall-clock time beyond
+  the declared delays: a scenario that behaves differently on two runs is worse than no
+  scenario.
+
+## Alternatives rejected
+
+**A scenario as a response mapping.** Cannot express any sequence, which is most of them.
+
+**Magic values only.** Frozen in code, not extensible by a contributor, and unable to
+express a per-test behaviour.
+
+**One scenario per instance, set at startup.** Requires a container per test case, which is
+slow in CI and cannot test two behaviours concurrently.

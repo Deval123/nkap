@@ -3,7 +3,9 @@ package dev.nkap.simulator;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
+import dev.nkap.simulator.scenario.MomoStatus;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -41,6 +43,9 @@ class CallbackDeliveryTest {
 
     @Autowired
     Hook hook;
+
+    @Autowired
+    CallbackDispatcher dispatcher;
 
     private RestClient client;
 
@@ -217,6 +222,35 @@ class CallbackDeliveryTest {
 
         client.delete().uri(base() + "/_nkap/state").retrieve().toBodilessEntity();
         assertThat(attempts(ref)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("the attempt log for a single reference is capped at MAX_ATTEMPTS_PER_REFERENCE")
+    void attempts_for_single_reference_are_capped() {
+        String ref = UUID.randomUUID().toString();
+        for (int i = 0; i < CallbackDispatcher.MAX_ATTEMPTS_PER_REFERENCE + 15; i++) {
+            dispatcher.recordAttempt(ref, new CallbackDispatcher.Attempt(
+                    Instant.now(), hookUrl(), ref, MomoStatus.SUCCESSFUL, true, 200, null));
+        }
+
+        assertThat(dispatcher.attemptsFor(ref)).hasSize(CallbackDispatcher.MAX_ATTEMPTS_PER_REFERENCE);
+    }
+
+    @Test
+    @DisplayName("retained references are bounded at MAX_REFERENCES, oldest evicted first")
+    void retained_references_are_bounded_with_oldest_evicted() {
+        String oldestRef = "ref-oldest-" + UUID.randomUUID();
+        dispatcher.recordAttempt(oldestRef, new CallbackDispatcher.Attempt(
+                Instant.now(), hookUrl(), oldestRef, MomoStatus.SUCCESSFUL, true, 200, null));
+
+        for (int i = 0; i < CallbackDispatcher.MAX_REFERENCES; i++) {
+            String ref = "ref-" + i + "-" + UUID.randomUUID();
+            dispatcher.recordAttempt(ref, new CallbackDispatcher.Attempt(
+                    Instant.now(), hookUrl(), ref, MomoStatus.SUCCESSFUL, true, 200, null));
+        }
+
+        // Oldest reference should have been evicted
+        assertThat(dispatcher.attemptsFor(oldestRef)).isEmpty();
     }
 
     @TestConfiguration

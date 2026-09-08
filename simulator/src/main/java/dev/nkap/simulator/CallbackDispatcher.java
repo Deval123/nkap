@@ -6,11 +6,11 @@ import dev.nkap.simulator.scenario.MomoStatus;
 import jakarta.annotation.PreDestroy;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -56,8 +56,27 @@ public class CallbackDispatcher {
     private final ScheduledExecutorService scheduler;
     private final RestClient http;
 
-    /** Attempts keyed by the reference the client submitted with. */
-    private final Map<String, List<Attempt>> attempts = new ConcurrentHashMap<>();
+    /**
+     * Maximum number of attempts retained per submission reference to prevent
+     * unbounded memory growth in long-running simulator instances (#16).
+     */
+    static final int MAX_ATTEMPTS_PER_REFERENCE = 100;
+
+    /**
+     * Maximum number of submission references retained in memory.
+     * Oldest references are evicted first once this bound is exceeded.
+     */
+    static final int MAX_REFERENCES = 1000;
+
+    /** Attempts keyed by the reference the client submitted with, bounded by MAX_REFERENCES. */
+    private final Map<String, List<Attempt>> attempts = Collections.synchronizedMap(
+            new LinkedHashMap<>(16, 0.75f, true) {
+                @Override
+                protected boolean removeEldestEntry(Map.Entry<String, List<Attempt>> eldest) {
+                    return size() > MAX_REFERENCES;
+                }
+            }
+    );
 
     CallbackDispatcher() {
         ThreadFactory threads = runnable -> {
@@ -171,8 +190,19 @@ public class CallbackDispatcher {
         }
     }
 
+    void recordAttempt(String submissionReferenceId, Attempt attempt) {
+        attempts.compute(submissionReferenceId, (k, list) -> {
+            List<Attempt> current = (list != null) ? list : new CopyOnWriteArrayList<>();
+            current.add(attempt);
+            while (current.size() > MAX_ATTEMPTS_PER_REFERENCE) {
+                current.remove(0);
+            }
+            return current;
+        });
+    }
+
     private void record(String submissionReferenceId, Attempt attempt) {
-        attempts.computeIfAbsent(submissionReferenceId, k -> new CopyOnWriteArrayList<>()).add(attempt);
+        recordAttempt(submissionReferenceId, attempt);
     }
 
     /**

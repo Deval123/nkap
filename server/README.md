@@ -3,14 +3,18 @@
 The Nkap gateway: the HTTP surface that assembles `core`, an adapter, and the payment
 lifecycle into something that runs.
 
-Two slices so far. The **first** (issue #30) creates a payment over HTTP, hands it to MTN
+Three slices so far. The **first** (issue #30) creates a payment over HTTP, hands it to MTN
 and reads its state back. The **second** (issue #36) closes the loop: a callback confirmed
 by `query()` can carry a payment to `SUCCEEDED`, and settlement writes the first entries
-this project has ever put in the ledger.
+this project has ever put in the ledger. The **third** (issue #40) puts the ledger, the
+payments and their history, and the idempotency store in **PostgreSQL**, with the
+invariants as schema constraints — so a hostile SQL session cannot write an unbalanced
+entry, an `UPDATE`, or a `DELETE`.
 
-Stores are in memory. That is a step towards PostgreSQL, which implements the same
-interfaces (`IdempotencyStore`, `PaymentRepository`, `Ledger`), not a feature: there is no
-flag that selects it and no documented mode.
+There is no in-memory mode. `StoresConfiguration` builds the PostgreSQL implementations of
+`Ledger`, `PaymentRepository` and `IdempotencyStore`; the in-memory ones stay in `core` as
+the reference the rules were written against, and in the test tree as fast doubles for the
+service unit tests.
 
 ## Endpoints
 
@@ -80,8 +84,11 @@ answer, cause `CALLBACK`:
   request — then the confirmed state. Two transitions, both true; the state machine is not
   widened.
 
-Read-decide-write is serialised per reference (an in-process lock; PostgreSQL will use
-`SELECT … FOR UPDATE` on the payment row).
+Read-decide-write is one transaction that takes the payment's row with
+`SELECT … FOR UPDATE`, so two callbacks for the same reference — or a callback and the
+submit that created the payment — serialise on the row. The `query` call is made
+**before** the transaction opens: an operator that does not answer must not hold one open
+for the whole timeout.
 
 **The gateway does not tell MTN where to send callbacks.** The callback URL is configured
 on the MTN product; `POST /callbacks/mtn` is that URL. Sending `X-Callback-Url` per request
@@ -103,8 +110,32 @@ CR  merchant:<merchantId>:payable:<CCY>   amount
 
 No fee posting — operator fees arrive later through statement reconciliation, and
 `ProviderStatus.providerFee` is recorded on the payment but never reaches the ledger.
-Exactly-once is structural: the entry id is derived from the reference, so a second
-settlement is refused by `Ledger.append`, not written twice.
+The entry and the payment's new state are written in **one transaction**: either both land
+or neither does. Exactly-once is the row lock plus the entry id derived from the reference,
+so a repeat is refused by the primary key — as `DuplicateLedgerEntryException`, which the
+settlement path swallows while every other integrity error aborts the transaction.
+
+## The database
+
+The schema is `server/src/main/resources/db/migration`, plain SQL, run by Flyway at
+startup. The invariants are the schema's, provable from a SQL client:
+
+| Invariant | How |
+| --- | --- |
+| One currency per entry | The currency is on `ledger_entry`; `posting` has no currency column and inherits it. A mixed-currency entry cannot be expressed. |
+| An entry sums to zero, with ≥ 2 postings | `CONSTRAINT TRIGGER … DEFERRABLE INITIALLY DEFERRED` on `posting`, checked at commit. |
+| The ledger and the payment history are append-only | `BEFORE UPDATE OR DELETE` trigger that raises — against the application's own connection. |
+| No duplicate entry | Primary key on `ledger_entry.id`. |
+| Amounts are integer minor units | `BIGINT`, never `NUMERIC` or a floating type. |
+
+**Reversible migrations** are hand-written, not Flyway's paid undo: every
+`db/migration/V<n>__*.sql` has a matching `db/rollback/V<n>__*.sql`, and
+`MigrationRollbackIT` proves each one returns the schema to its previous state. See
+`db/rollback/README.md`.
+
+The integration tests (`*IT`) run against a real PostgreSQL in a container. They are
+skipped where Docker is unavailable, so `mvn verify` stays green on a machine without it;
+CI has Docker and runs them.
 
 ## Errors
 
@@ -114,10 +145,14 @@ without parsing prose.
 
 ## Configuration
 
-Credentials come from the **environment**, never a committed file:
+Credentials and the database connection come from the **environment**, never a committed
+file:
 
 | Variable | Example |
 | --- | --- |
+| `NKAP_DB_URL` | `jdbc:postgresql://db:5432/nkap` |
+| `NKAP_DB_USER` | `nkap` |
+| `NKAP_DB_PASSWORD` | *(secret)* |
 | `NKAP_PROVIDER_MTN_BASE_URL` | `https://sandbox.momodeveloper.mtn.com` |
 | `NKAP_PROVIDER_MTN_TARGET_ENVIRONMENT` | `sandbox` |
 | `NKAP_PROVIDER_MTN_SUBSCRIPTION_KEY` | *(secret)* |
@@ -132,7 +167,9 @@ is `nkap.provider.default` (`mtn`); routing by country arrives with multi-countr
 
 ## Not in these slices
 
-Outgoing webhooks, the reconciler, statement reconciliation and operator fees, refunds,
-disbursements, balance, holder validation, PostgreSQL, authenticating the callback endpoint
-(its own issue — source-IP allow-listing, deployment configuration). No payment reaches
-`SUCCEEDED` without a callback and a confirming `query()`.
+The transactional outbox (it belongs with the outgoing webhooks, §4), the reconciler,
+statement reconciliation and operator fees, refunds, disbursements, balance, holder
+validation, connection-pool tuning, the compose file that will pin the server and its
+database together (§6), authenticating the callback endpoint (its own issue — source-IP
+allow-listing, deployment configuration). No payment reaches `SUCCEEDED` without a callback
+and a confirming `query()`.

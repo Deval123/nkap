@@ -32,7 +32,8 @@ class MigrationRollbackIT {
 
     /** The migrations that have a hand-written inverse, oldest first. */
     private static final List<String> MIGRATIONS = List.of(
-            "V1__initial_schema", "V2__reconciler_schedule", "V3__reconciler_window_is_a_duration");
+            "V1__initial_schema", "V2__reconciler_schedule", "V3__reconciler_window_is_a_duration",
+            "V4__reconciler_chases_unresolved");
 
     @Test
     @DisplayName("running every inverse newest-first returns the schema to empty, and the database is migratable again")
@@ -73,10 +74,11 @@ class MigrationRollbackIT {
 
             migrate(postgres);
             // Peel back to V2 first, so this test is about the V2 inverse alone.
+            jdbc.execute(inverseOf("V4__reconciler_chases_unresolved"));
             jdbc.execute(inverseOf("V3__reconciler_window_is_a_duration"));
             assertThat(columnsOf(jdbc, "payment"))
                     .contains("reconcile_attempts", "reconcile_due_at", "escalated_at")
-                    .doesNotContain("unknown_since");
+                    .doesNotContain("unknown_since", "unresolved_since");
             assertThat(indexesOf(jdbc, "payment")).contains("payment_reconcile_due_idx");
 
             jdbc.execute(inverseOf("V2__reconciler_schedule"));
@@ -104,16 +106,44 @@ class MigrationRollbackIT {
             assertThat(paymentColumnsAfterV2).doesNotContain("unknown_since");
 
             migrate(postgres);
-            assertThat(columnsOf(jdbc, "payment")).contains("unknown_since");
+            // Peel back to V3 first, so this test is about the V3 inverse alone.
+            jdbc.execute(inverseOf("V4__reconciler_chases_unresolved"));
+            assertThat(columnsOf(jdbc, "payment")).contains("unknown_since").doesNotContain("unresolved_since");
 
             jdbc.execute(inverseOf("V3__reconciler_window_is_a_duration"));
 
             assertThat(schemaObjects(jdbc)).isEqualTo(afterV2);
             assertThat(columnsOf(jdbc, "payment")).isEqualTo(paymentColumnsAfterV2);
 
-            // V3 forward again — the inverse removed its history row.
+            // V3 (and V4) forward again — each inverse removed its history row.
             migrate(postgres);
-            assertThat(columnsOf(jdbc, "payment")).contains("unknown_since");
+            assertThat(columnsOf(jdbc, "payment")).contains("unresolved_since");
+        }
+    }
+
+    @Test
+    @DisplayName("the inverse of V4 renames the column back and narrows the index, leaving the V3 schema intact")
+    void the_inverse_of_v4_returns_the_schema_to_v3() throws IOException {
+        try (PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>(PostgresDatabase.IMAGE)) {
+            postgres.start();
+            JdbcTemplate jdbc = jdbcFor(postgres);
+
+            migrateTo(postgres, "3");
+            Set<String> afterV3 = schemaObjects(jdbc);
+            Set<String> paymentColumnsAfterV3 = columnsOf(jdbc, "payment");
+            assertThat(paymentColumnsAfterV3).contains("unknown_since").doesNotContain("unresolved_since");
+
+            migrate(postgres);
+            assertThat(columnsOf(jdbc, "payment")).contains("unresolved_since").doesNotContain("unknown_since");
+
+            jdbc.execute(inverseOf("V4__reconciler_chases_unresolved"));
+
+            assertThat(schemaObjects(jdbc)).isEqualTo(afterV3);
+            assertThat(columnsOf(jdbc, "payment")).isEqualTo(paymentColumnsAfterV3);
+
+            // V4 forward again — the inverse removed its history row.
+            migrate(postgres);
+            assertThat(columnsOf(jdbc, "payment")).contains("unresolved_since");
         }
     }
 

@@ -105,14 +105,19 @@ CREATED → SUBMITTED → PENDING → SUCCEEDED   (terminal)
               every timeout lands here
 ```
 
-A payment in `UNKNOWN` is re-queried by the reconciler on an exponential backoff
-(`nkap.reconciler.*`). When the window is spent it is **escalated** — flagged for a human,
-still `UNKNOWN`, never `FAILED` — and logged once at WARN. Escalated payments awaiting a
+Every payment that has left `CREATED` and not reached a terminal state — `SUBMITTED`,
+`PENDING`, `UNKNOWN` — is re-queried by the reconciler on an exponential backoff
+(`nkap.reconciler.*`): an acknowledged submission that goes silent, or a `PENDING` the
+payer never approves, is just as unresolved as a timeout. When the window (wall-clock time
+since the payment became unresolved) is spent it is **escalated** — flagged for a human,
+still non-terminal, never `FAILED` — and logged once at WARN. Escalated payments awaiting a
 human are `PaymentRepository.findEscalated()`, or:
 
 ```sql
 SELECT reference, merchant_id, amount_minor, currency, reconcile_attempts, escalated_at
-FROM payment WHERE escalated_at IS NOT NULL AND state = 'UNKNOWN' ORDER BY escalated_at;
+FROM payment
+WHERE escalated_at IS NOT NULL AND state IN ('SUBMITTED', 'PENDING', 'UNKNOWN')
+ORDER BY escalated_at;
 ```
 
 ## Modules
@@ -149,9 +154,10 @@ asserts every step:
    nothing answered and the gateway does not guess;
 3. `GET /payments/{reference}` confirms `UNKNOWN`, and the ledger has **no entry**;
 4. the reconciler re-queries the operator on a demo-fast cadence — the first re-query still
-   fails, the next succeeds — or the late callback gets there first;
-5. the payment resolves to `SUCCEEDED`: **one** ledger entry, **two** postings, summing to
-   **zero**.
+   fails, the next succeeds — with no callback in the scenario, so only the reconciler can
+   resolve it;
+5. the payment resolves to `SUCCEEDED`, its transition attributed to `RECONCILER`: **one**
+   ledger entry, **two** postings, summing to **zero**.
 
 The network dropped at the worst possible moment and the accounting truth was not lost.
 Nothing in the run is staged: it is the real gateway, the real reconciler, and a real

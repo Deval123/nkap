@@ -64,7 +64,27 @@ public enum PaymentState {
         return ALLOWED.get(this).isEmpty();
     }
 
-    /** Whether this state still needs the reconciler to look at it. */
+    /**
+     * Whether the reconciler chases a payment in this state: it has left {@link #CREATED},
+     * so the operator has it or may have it, and it has not reached a terminal verdict.
+     *
+     * <p>{@link #SUBMITTED} and {@link #PENDING} are here, not only {@link #UNKNOWN}: an
+     * acknowledged submission that goes silent, and a {@code PENDING} the payer never
+     * approves, are just as unresolved as a timeout and just as able to sit forever with
+     * no ledger entry and nobody paged. {@code CREATED} is out — the submission is
+     * {@code PaymentService}'s to own, and querying a reference the operator may never have
+     * seen would be asking about something that does not exist.
+     */
+    public boolean isUnresolved() {
+        return this != CREATED && !isTerminal();
+    }
+
+    /**
+     * Whether a caller of {@code GET /payments} must poll: the outcome is genuinely not
+     * known. Narrower than {@link #isUnresolved()} — a {@code SUBMITTED} or {@code PENDING}
+     * payment has a real answer, "in progress", that the reconciler still carries to a
+     * verdict.
+     */
     public boolean needsResolution() {
         return this == UNKNOWN;
     }

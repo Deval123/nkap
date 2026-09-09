@@ -31,8 +31,8 @@ public interface PaymentRepository {
 
     /**
      * The payments the reconciler has given up retrying and flagged for a human: still
-     * {@link dev.nkap.core.payment.PaymentState#UNKNOWN}, {@code escalated_at} set, oldest
-     * escalation first. This is how an escalation is found without reading logs.
+     * unresolved ({@code SUBMITTED}, {@code PENDING} or {@code UNKNOWN}), {@code escalated_at}
+     * set, oldest escalation first. This is how an escalation is found without reading logs.
      */
     List<Payment> findEscalated();
 }

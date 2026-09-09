@@ -11,6 +11,7 @@ import dev.nkap.core.payment.ReferenceId;
 import dev.nkap.provider.Capability;
 import dev.nkap.provider.PaymentIntent;
 import dev.nkap.provider.ProviderId;
+import java.time.Instant;
 import java.util.Map;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -92,16 +93,46 @@ class PaymentTest {
     }
 
     @Test
-    @DisplayName("entering UNKNOWN arms the reconciler: due now, no attempts yet, not escalated, window starts now")
-    void entering_unknown_arms_the_reconciler_schedule() {
+    @DisplayName("entering an unresolved state arms the reconciler: due now, no attempts yet, not escalated, window starts now")
+    void entering_an_unresolved_state_arms_the_reconciler_schedule() {
         Payment payment = newPayment();
 
-        payment.applyTransition(PaymentState.UNKNOWN, PaymentTransition.Cause.SUBMIT_RESPONSE, "", "timed out", "");
+        payment.applyTransition(PaymentState.SUBMITTED, PaymentTransition.Cause.SUBMIT_RESPONSE, "", "", "");
 
         assertThat(payment.reconcileAttempts()).isZero();
         assertThat(payment.reconcileDueAt()).isEqualTo(payment.updatedAt());
         assertThat(payment.escalatedAt()).isNull();
-        assertThat(payment.unknownSince()).isEqualTo(payment.updatedAt());
+        assertThat(payment.unresolvedSince()).isEqualTo(payment.updatedAt());
+    }
+
+    @Test
+    @DisplayName("hopping between SUBMITTED, PENDING and UNKNOWN re-arms the schedule but does not restart the window")
+    void hopping_between_non_terminal_states_does_not_restart_the_window() {
+        Payment payment = newPayment();
+        payment.applyTransition(PaymentState.SUBMITTED, PaymentTransition.Cause.SUBMIT_RESPONSE, "", "", "");
+        Instant becameUnresolved = payment.unresolvedSince();
+        assertThat(becameUnresolved).isNotNull();
+
+        payment.applyTransition(PaymentState.UNKNOWN, PaymentTransition.Cause.RECONCILER, "", "went quiet", "");
+        payment.applyTransition(PaymentState.PENDING, PaymentTransition.Cause.RECONCILER, "PENDING", "", "");
+        payment.applyTransition(PaymentState.UNKNOWN, PaymentTransition.Cause.RECONCILER, "", "quiet again", "");
+
+        assertThat(payment.unresolvedSince())
+                .as("the window is measured from the first unresolved moment, not each hop")
+                .isEqualTo(becameUnresolved);
+        assertThat(payment.reconcileAttempts()).as("each hop still re-arms the schedule").isZero();
+        assertThat(payment.escalatedAt()).isNull();
+    }
+
+    @Test
+    @DisplayName("a payment that goes straight from CREATED to a terminal state never arms the reconciler")
+    void a_terminal_first_transition_does_not_arm_the_reconciler() {
+        Payment payment = newPayment();
+
+        payment.applyTransition(PaymentState.FAILED, PaymentTransition.Cause.SUBMIT_RESPONSE, "NOT_ALLOWED", "", "");
+
+        assertThat(payment.unresolvedSince()).isNull();
+        assertThat(payment.reconcileDueAt()).isNull();
     }
 
     @Test

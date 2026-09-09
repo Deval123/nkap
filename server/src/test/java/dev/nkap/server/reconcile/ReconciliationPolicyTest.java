@@ -11,7 +11,7 @@ import org.junit.jupiter.api.Test;
 /**
  * The policy on its own, without a database: the interval doubles from the base and holds
  * at the ceiling, and the window is spent once that much wall-clock time has passed since
- * the payment entered {@code UNKNOWN} — not once the attempts add up to it.
+ * the payment became unresolved — not once the attempts add up to it.
  */
 class ReconciliationPolicyTest {
 
@@ -32,20 +32,20 @@ class ReconciliationPolicyTest {
     }
 
     @Test
-    @DisplayName("the window is spent once that much wall-clock time has passed since the payment became UNKNOWN")
+    @DisplayName("the window is spent once that much wall-clock time has passed since the payment became unresolved")
     void window_is_spent_when_that_much_time_has_elapsed() {
-        Instant unknownSince = Instant.parse("2026-01-01T00:00:00Z");
+        Instant unresolvedSince = Instant.parse("2026-01-01T00:00:00Z");
 
-        assertThat(policy.windowExhausted(unknownSince, unknownSince.plus(Duration.ofMinutes(119)))).isFalse();
-        assertThat(policy.windowExhausted(unknownSince, unknownSince.plus(Duration.ofHours(2)))).isTrue();
-        assertThat(policy.windowExhausted(unknownSince, unknownSince.plus(Duration.ofDays(1)))).isTrue();
+        assertThat(policy.windowExhausted(unresolvedSince, unresolvedSince.plus(Duration.ofMinutes(119)))).isFalse();
+        assertThat(policy.windowExhausted(unresolvedSince, unresolvedSince.plus(Duration.ofHours(2)))).isTrue();
+        assertThat(policy.windowExhausted(unresolvedSince, unresolvedSince.plus(Duration.ofDays(1)))).isTrue();
         // Time, not passes: a hundred attempts inside the window is still inside the window.
-        assertThat(policy.windowExhausted(unknownSince, unknownSince.plus(Duration.ofMinutes(1)))).isFalse();
+        assertThat(policy.windowExhausted(unresolvedSince, unresolvedSince.plus(Duration.ofMinutes(1)))).isFalse();
     }
 
     @Test
-    @DisplayName("a payment with no unknown-since — one that predates the column — is treated as due for escalation")
-    void a_missing_unknown_since_is_treated_as_exhausted() {
+    @DisplayName("a payment with no unresolved-since — one that predates the column — is treated as due for escalation")
+    void a_missing_unresolved_since_is_treated_as_exhausted() {
         assertThat(policy.windowExhausted(null, Instant.now())).isTrue();
     }
 

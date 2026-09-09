@@ -12,21 +12,24 @@ import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 
 /**
- * Nothing stays {@code UNKNOWN} forever.
+ * Nothing stays unresolved forever.
  *
- * <p>On each pass the reconciler claims a bounded batch of due {@code UNKNOWN} payments,
- * and for each one asks the operator again through {@link SettlementService#confirm} — the
- * same write path a callback uses, so a payment the reconciler resolves settles exactly
- * once and its transition is attributed to {@code RECONCILER}. A payment the operator
- * confirms leaves {@code UNKNOWN} and drops out of the queue on its own; the claim already
- * recorded this attempt and scheduled the next, further out.
+ * <p>On each pass the reconciler claims a bounded batch of due <strong>unresolved</strong>
+ * payments — {@code SUBMITTED}, {@code PENDING} or {@code UNKNOWN}, every state that has
+ * left {@code CREATED} and not reached a verdict — and asks the operator again through
+ * {@link SettlementService#confirm}, the same write path a callback uses, so a payment the
+ * reconciler resolves settles exactly once and its transition is attributed to
+ * {@code RECONCILER}. A payment the operator drives to a terminal state drops out of the
+ * queue on its own; one it merely moves between non-terminal states stays in it, still
+ * chased. The claim has already recorded this attempt and scheduled the next, further out.
  *
- * <p>When a payment's retry window is spent — {@link ReconciliationPolicy#windowExhausted}
- * — the reconciler <strong>escalates</strong> it: {@code escalated_at} is stamped, a human
- * is paged through one WARN line, and the automatic retries stop. It does <strong>not</strong>
- * move to {@code FAILED}. Giving up waiting is not the operator saying the payment failed,
- * and this system never makes that inference. An escalated payment is still {@code UNKNOWN}
- * and a later callback or a later manual query can still resolve it.
+ * <p>When a payment's retry window is spent — {@link ReconciliationPolicy#windowExhausted},
+ * wall-clock time since it became unresolved — the reconciler <strong>escalates</strong>
+ * it: {@code escalated_at} is stamped, a human is paged through one WARN line, and the
+ * automatic retries stop. It does <strong>not</strong> move to {@code FAILED}. Giving up
+ * waiting is not the operator saying the payment failed, and this system never makes that
+ * inference. An escalated payment is still non-terminal and a later callback or a later
+ * manual query can still resolve it.
  *
  * <p>The operator call sits outside the claim transaction, for the reason written twice
  * elsewhere in this codebase: an operator that does not answer must not hold a database
@@ -83,7 +86,7 @@ public class Reconciler {
             if (outcome.resolved()) {
                 continue;
             }
-            if (policy.windowExhausted(claim.unknownSince(), now) && store.markEscalated(claim.reference(), now)) {
+            if (policy.windowExhausted(claim.unresolvedSince(), now) && store.markEscalated(claim.reference(), now)) {
                 log.warn("payment {} escalated to a human after {} reconciler attempt(s); operator's last answer: {}",
                         claim.reference(), claim.attempts(), outcome.lastOperatorAnswer());
             }

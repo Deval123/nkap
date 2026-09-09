@@ -2,11 +2,17 @@
 #
 # The argument of the whole project, in one run against the live stack from `compose.yaml`.
 #
-#   1. script the operator to accept the submission and then go silent, with a callback later
+#   1. script the operator to accept the submission and then go silent — no callback
 #   2. POST /payments  -> 202, and the payment is UNKNOWN (not FAILED)
 #   3. GET  /payments/{ref} says UNKNOWN, and the ledger has not moved
-#   4. wait: the reconciler re-queries the operator, or the late callback does
-#   5. SUCCEEDED, one ledger entry, two postings, summing to zero
+#   4. wait: the reconciler re-queries the operator — its first re-query still fails, the next
+#      succeeds — and settles the payment
+#   5. SUCCEEDED, and the transition into it is attributed to RECONCILER; one ledger entry,
+#      two postings, summing to zero
+#
+# There is deliberately no callback in the scenario. CallbackApiIT already proves that path;
+# with it gone, only the reconciler — the thing this project is built on — can resolve the
+# payment, so this run proves the reconciler and not a webhook.
 #
 # Every step is asserted. The script exits non-zero the moment one does not hold — which
 # is what lets CI run it as a test. Run it from anywhere after `docker compose up`:
@@ -54,7 +60,6 @@ say "1. Scripting the operator: it accepts the submission, then never answers"
 curl -fsS -X POST "$SIMULATOR/_nkap/scenarios" \
   -H 'Content-Type: application/json' \
   -d '{
-        "callbackUrl": "http://gateway:8080/callbacks/mtn",
         "rules": [{
           "scenario": {
             "name": "network-drops-after-submit",
@@ -62,15 +67,12 @@ curl -fsS -X POST "$SIMULATOR/_nkap/scenarios" \
             "onQuery": [
               { "status": "PENDING", "reason": "SERVICE_UNAVAILABLE" },
               { "status": "SUCCESSFUL" }
-            ],
-            "callbacks": [
-              { "after": "PT4S", "times": 1, "status": "SUCCESSFUL" }
             ]
           }
         }]
       }'
 ok "the submission will hang; the first re-query answers SERVICE_UNAVAILABLE, the next SUCCESSFUL"
-info "a callback for the same reference is scheduled 4s after the submission"
+info "no callback — only the reconciler can resolve this"
 
 # --- 2. submit a payment ----------------------------------------------------------
 
@@ -112,11 +114,12 @@ ok "the ledger has not moved — no entry, no posting"
 
 # --- 4. wait for resolution -----------------------------------------------------
 
-say "4. Waiting for the reconciler, or the late callback, to resolve it"
+say "4. Waiting for the reconciler to re-query the operator and settle it"
 last=""
 resolved=""
 for _ in $(seq 1 40); do
-  state="$(curl -fsS "$GATEWAY/payments/$reference" | jq -r '.state')"
+  payment="$(curl -fsS "$GATEWAY/payments/$reference")"
+  state="$(printf '%s' "$payment" | jq -r '.state')"
   if [ "$state" != "$last" ]; then
     info "state: $state"
     last="$state"
@@ -130,6 +133,10 @@ done
 [ -n "$resolved" ] || fail "the payment was still $last after 80s"
 ok "resolved to SUCCEEDED"
 
+cause="$(printf '%s' "$payment" | jq -r '.history[] | select(.to == "SUCCEEDED") | .cause')"
+[ "$cause" = "RECONCILER" ] || fail "the transition into SUCCEEDED is attributed to '$cause', expected RECONCILER"
+ok "the transition into SUCCEEDED carries cause RECONCILER — the reconciler resolved it, no callback involved"
+
 # --- 5. show the settled ledger entry ------------------------------------------
 
 say "5. The ledger entry that settlement wrote"
@@ -139,8 +146,12 @@ entries="$(psql "SELECT count(*) FROM ledger_entry WHERE reference = '$reference
 postings="$(psql "SELECT count(*) FROM posting WHERE entry_id = 'collection:$reference'")"
 [ "$postings" = "2" ] || fail "expected exactly two postings, found $postings"
 
+# This one can no longer fail: PostgreSQL refuses an unbalanced entry at commit (a deferred
+# constraint trigger). It stays here to show the reader what balance means, not because the
+# script could catch it being broken — the entry and posting counts above are the checks
+# that can actually fire.
 sum="$(psql "SELECT coalesce(sum(amount_minor), 0) FROM posting WHERE entry_id = 'collection:$reference'")"
-[ "$sum" = "0" ] || fail "the postings must sum to zero, they sum to $sum"
+[ "$sum" = "0" ] || fail "the postings sum to $sum — which the database should have refused"
 
 printf '\n'
 psql "SELECT '     ' || rpad(account, 32, ' ') || lpad(to_char(amount_minor, 'S999G999G990'), 12, ' ')

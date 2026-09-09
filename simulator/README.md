@@ -148,6 +148,22 @@ curl -s -m 2 -X POST localhost:8081/collection/v1_0/requesttopay \
 curl -s localhost:8081/collection/v1_0/requesttopay/$REF   # {"status":"SUCCESSFUL"}
 ```
 
+### Configurable latency
+
+Simulate slow operator responses on submit or query by declaring a `delay`:
+
+```bash
+curl -s -X POST localhost:8081/_nkap/scenarios -H 'Content-Type: application/json' -d '{
+  "rules": [{
+    "scenario": {
+      "name": "slow-operator",
+      "onSubmit": { "delay": "PT3S", "outcome": "ACCEPT" },
+      "onQuery": [{ "delay": "PT1.5S", "status": "SUCCESSFUL" }]
+    }
+  }]
+}'
+```
+
 ## Callbacks
 
 A scenario's `callbacks` are delivered as real outbound `POST`s.

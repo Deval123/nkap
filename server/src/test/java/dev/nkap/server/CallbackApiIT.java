@@ -9,6 +9,7 @@ import dev.nkap.core.ledger.AccountId;
 import dev.nkap.core.ledger.Ledger;
 import dev.nkap.core.ledger.LedgerEntry;
 import dev.nkap.core.money.Currency;
+import dev.nkap.server.support.PostgresSpringBootIT;
 import java.time.Duration;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterAll;
@@ -16,7 +17,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.http.HttpEntity;
@@ -30,10 +30,10 @@ import org.springframework.test.context.DynamicPropertySource;
  * The gateway-level rules the conformance kit cannot hold, because they are properties of
  * this state machine and this idempotency store rather than of any adapter: a duplicate
  * callback settles once, and a callback that overtakes the submit response is not lost.
- * Driven end to end — a real server, a real MTN adapter, a real simulator over HTTP.
+ * Driven end to end — a real server, a real MTN adapter, a real simulator over HTTP, and a
+ * real PostgreSQL behind the stores.
  */
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-class CallbackApiTest {
+class CallbackApiIT extends PostgresSpringBootIT {
 
     private static final EmbeddedSimulator SIMULATOR = EmbeddedSimulator.start();
 

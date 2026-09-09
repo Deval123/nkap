@@ -17,9 +17,10 @@ import java.util.Objects;
  * which is the only place the machine is decided. Nothing outside this class assigns a
  * state, and no state is added here that the machine does not know.
  *
- * <p>Not thread-safe, and it does not need to be in this slice: the idempotency store
- * hands exactly one caller {@code Proceed} for a given key, so two requests never mutate
- * the same payment at once.
+ * <p>Not thread-safe, and it does not need to be: every read-decide-write for one
+ * reference is serialised on the payment's row with {@code SELECT … FOR UPDATE}, inside
+ * the transaction that persists the result, so two callers never hold the same payment at
+ * once.
  */
 public final class Payment {
 
@@ -48,6 +49,24 @@ public final class Payment {
     /** A new payment in {@link PaymentState#CREATED}, persisted before the operator is called. */
     public static Payment create(ReferenceId reference, ProviderId provider, String merchantId, PaymentIntent intent) {
         return new Payment(reference, provider, merchantId, intent, Instant.now());
+    }
+
+    /**
+     * Rebuilds a payment from storage. The only caller is a {@link PaymentRepository}
+     * implementation reading rows back; nothing else assigns a state from outside, and this
+     * does not run the state machine — the transitions it replays already happened and were
+     * validated when they were first applied.
+     */
+    public static Payment rehydrate(ReferenceId reference, ProviderId provider, String merchantId, PaymentIntent intent,
+                                    PaymentState state, String providerReference, String providerTransactionId,
+                                    Instant createdAt, Instant updatedAt, List<PaymentTransition> history) {
+        Payment payment = new Payment(reference, provider, merchantId, intent, createdAt);
+        payment.state = Objects.requireNonNull(state, "state");
+        payment.updatedAt = Objects.requireNonNull(updatedAt, "updatedAt");
+        payment.providerReference = providerReference == null ? "" : providerReference;
+        payment.providerTransactionId = providerTransactionId == null ? "" : providerTransactionId;
+        payment.history.addAll(history);
+        return payment;
     }
 
     /**

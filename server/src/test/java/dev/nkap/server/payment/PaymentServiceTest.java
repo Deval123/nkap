@@ -34,7 +34,7 @@ class PaymentServiceTest {
     private final PaymentRepository payments = new InMemoryPaymentRepository();
     private final ProviderAdapter adapter = mock(ProviderAdapter.class);
     private final AdapterRegistry adapters = mock(AdapterRegistry.class);
-    private final PaymentService service = new PaymentService(payments, adapters, new ReferenceLocks());
+    private final PaymentService service = new PaymentService(payments, adapters, new DirectTransactionManager());
 
     private static PaymentIntent intent() {
         return new PaymentIntent(Capability.COLLECT, Money.of(5000, Currency.EUR),

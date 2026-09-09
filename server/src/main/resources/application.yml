@@ -4,6 +4,16 @@ server:
 spring:
   application:
     name: nkap-server
+  datasource:
+    # The database connection comes from the environment, like the operator credentials.
+    # The compose file (§6) will pin the server and its PostgreSQL together.
+    url: ${NKAP_DB_URL:jdbc:postgresql://localhost:5432/nkap}
+    username: ${NKAP_DB_USER:nkap}
+    password: ${NKAP_DB_PASSWORD:nkap}
+  flyway:
+    # Migrations run at startup. The schema is the invariants' real home; see
+    # db/migration and its hand-written inverses in db/rollback.
+    locations: classpath:db/migration
   jackson:
     deserialization:
       # An amount is an integer count of minor units. "5000.0" is not that.

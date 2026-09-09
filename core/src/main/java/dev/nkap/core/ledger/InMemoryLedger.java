@@ -25,8 +25,7 @@ public final class InMemoryLedger implements Ledger {
     public synchronized void append(LedgerEntry entry) {
         Objects.requireNonNull(entry, "entry");
         if (!knownIds.add(entry.id())) {
-            throw new LedgerInvariantViolation(
-                    "Entry " + entry.id() + " is already recorded: the ledger is append-only, correct it with a reversal");
+            throw new DuplicateLedgerEntryException(entry.id());
         }
         entries.add(entry);
     }

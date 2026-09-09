@@ -30,10 +30,18 @@ final class EmbeddedSimulator implements AutoCloseable {
         app.setBannerMode(Banner.Mode.OFF);
         // Command-line args outrank the simulator's application.yml. Immediate shutdown
         // because the NO_RESPONSE scenario deliberately leaves a request hanging.
+        //
+        // The simulator has no database. It is booted here inside the server test JVM,
+        // whose classpath now carries spring-boot-starter-jdbc, Flyway and the PostgreSQL
+        // driver — enough for their auto-configuration to switch on and try to connect.
+        // Turn it off explicitly for this process.
         this.context = app.run(
                 "--server.port=0",
                 "--server.shutdown=immediate",
-                "--spring.lifecycle.timeout-per-shutdown-phase=3s");
+                "--spring.lifecycle.timeout-per-shutdown-phase=3s",
+                "--spring.autoconfigure.exclude="
+                        + "org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration,"
+                        + "org.springframework.boot.autoconfigure.flyway.FlywayAutoConfiguration");
         int port = ((ServletWebServerApplicationContext) context).getWebServer().getPort();
         this.baseUri = "http://localhost:" + port;
     }

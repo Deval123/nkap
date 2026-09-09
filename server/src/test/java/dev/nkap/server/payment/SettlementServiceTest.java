@@ -38,7 +38,7 @@ class SettlementServiceTest {
     private final dev.nkap.server.provider.AdapterRegistry adapters = mock(dev.nkap.server.provider.AdapterRegistry.class);
     private final Ledger ledger = new InMemoryLedger();
     private final SettlementService settlement =
-            new SettlementService(payments, adapters, ledger, new ReferenceLocks());
+            new SettlementService(payments, adapters, ledger, new DirectTransactionManager());
 
     SettlementServiceTest() {
         when(adapters.require(MTN)).thenReturn(adapter);

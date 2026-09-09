@@ -16,4 +16,4 @@ jobs:
           distribution: temurin
           java-version: '21'
           cache: maven
-      - run: mvn -B --no-transfer-progress clean verify
+      - run: mvn -B --no-transfer-progress clean verify -Dnkap.docker.required=true

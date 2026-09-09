@@ -45,7 +45,11 @@ public enum PaymentState {
 
     static {
         Map<PaymentState, Set<PaymentState>> allowed = new EnumMap<>(PaymentState.class);
-        allowed.put(CREATED, EnumSet.of(SUBMITTED, UNKNOWN, FAILED));
+        // CREATED may go straight to PENDING: some operators acknowledge a submission with
+        // "the payer must approve" in a single step. That is a real state of the world, and
+        // {@code SubmitResult.Acknowledged} already admits it; forcing it through SUBMITTED
+        // would record a transition that never happened.
+        allowed.put(CREATED, EnumSet.of(SUBMITTED, PENDING, UNKNOWN, FAILED));
         allowed.put(SUBMITTED, EnumSet.of(PENDING, SUCCEEDED, FAILED, EXPIRED, UNKNOWN));
         allowed.put(PENDING, EnumSet.of(SUCCEEDED, FAILED, EXPIRED, UNKNOWN));
         allowed.put(UNKNOWN, EnumSet.of(SUCCEEDED, FAILED, EXPIRED, PENDING));

@@ -87,6 +87,11 @@ class SettlementTransactionIT {
             public Optional<Payment> findByReferenceForUpdate(ReferenceId ref) {
                 return realRepo.findByReferenceForUpdate(ref);
             }
+
+            @Override
+            public java.util.List<Payment> findEscalated() {
+                return realRepo.findEscalated();
+            }
         };
 
         ProviderAdapter adapter = mock(ProviderAdapter.class);

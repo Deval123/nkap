@@ -17,10 +17,12 @@ import java.sql.ResultSet;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.UUID;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 
@@ -42,13 +44,17 @@ public final class PostgresPaymentRepository implements PaymentRepository {
     private static final String UPSERT_PAYMENT = """
             INSERT INTO payment (reference, provider, merchant_id, operation, amount_minor, currency,
                                  counterparty_msisdn, payer_message, payee_note, provider_options,
-                                 state, provider_reference, provider_transaction_id, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                 state, provider_reference, provider_transaction_id, created_at, updated_at,
+                                 reconcile_attempts, reconcile_due_at, escalated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT (reference) DO UPDATE SET
                 state = EXCLUDED.state,
                 provider_reference = EXCLUDED.provider_reference,
                 provider_transaction_id = EXCLUDED.provider_transaction_id,
-                updated_at = EXCLUDED.updated_at
+                updated_at = EXCLUDED.updated_at,
+                reconcile_attempts = EXCLUDED.reconcile_attempts,
+                reconcile_due_at = EXCLUDED.reconcile_due_at,
+                escalated_at = EXCLUDED.escalated_at
             """;
 
     private static final String INSERT_TRANSITION = """
@@ -85,7 +91,10 @@ public final class PostgresPaymentRepository implements PaymentRepository {
                 payment.providerReference(),
                 payment.providerTransactionId(),
                 OffsetDateTime.ofInstant(payment.createdAt(), ZoneOffset.UTC),
-                OffsetDateTime.ofInstant(payment.updatedAt(), ZoneOffset.UTC));
+                OffsetDateTime.ofInstant(payment.updatedAt(), ZoneOffset.UTC),
+                payment.reconcileAttempts(),
+                atUtc(payment.reconcileDueAt()),
+                atUtc(payment.escalatedAt()));
 
         List<PaymentTransition> history = payment.history();
         for (int seq = 0; seq < history.size(); seq++) {
@@ -111,6 +120,19 @@ public final class PostgresPaymentRepository implements PaymentRepository {
     @Override
     public Optional<Payment> findByReferenceForUpdate(ReferenceId reference) {
         return load(reference, true);
+    }
+
+    @Override
+    public List<Payment> findEscalated() {
+        List<UUID> references = jdbc.queryForList(
+                "SELECT reference FROM payment WHERE escalated_at IS NOT NULL AND state = 'UNKNOWN' "
+                        + "ORDER BY escalated_at",
+                UUID.class);
+        List<Payment> escalated = new ArrayList<>(references.size());
+        for (UUID reference : references) {
+            load(new ReferenceId(reference), false).ifPresent(escalated::add);
+        }
+        return escalated;
     }
 
     private Optional<Payment> load(ReferenceId reference, boolean forUpdate) {
@@ -144,7 +166,14 @@ public final class PostgresPaymentRepository implements PaymentRepository {
                 row.providerTransactionId,
                 row.createdAt,
                 row.updatedAt,
-                history));
+                history,
+                row.reconcileAttempts,
+                row.reconcileDueAt,
+                row.escalatedAt));
+    }
+
+    private static OffsetDateTime atUtc(Instant instant) {
+        return instant == null ? null : OffsetDateTime.ofInstant(instant, ZoneOffset.UTC);
     }
 
     private String writeOptions(Map<String, String> options) {
@@ -167,7 +196,8 @@ public final class PostgresPaymentRepository implements PaymentRepository {
             String provider, String merchantId, String operation, long amountMinor, String currency,
             String counterpartyMsisdn, String payerMessage, String payeeNote, String providerOptions,
             String state, String providerReference, String providerTransactionId,
-            Instant createdAt, Instant updatedAt) {
+            Instant createdAt, Instant updatedAt,
+            int reconcileAttempts, Instant reconcileDueAt, Instant escalatedAt) {
     }
 
     private static final RowMapper<Row> ROW_MAPPER = (ResultSet rs, int rowNum) -> new Row(
@@ -184,7 +214,14 @@ public final class PostgresPaymentRepository implements PaymentRepository {
             rs.getString("provider_reference"),
             rs.getString("provider_transaction_id"),
             rs.getObject("created_at", OffsetDateTime.class).toInstant(),
-            rs.getObject("updated_at", OffsetDateTime.class).toInstant());
+            rs.getObject("updated_at", OffsetDateTime.class).toInstant(),
+            rs.getInt("reconcile_attempts"),
+            instantOrNull(rs.getObject("reconcile_due_at", OffsetDateTime.class)),
+            instantOrNull(rs.getObject("escalated_at", OffsetDateTime.class)));
+
+    private static Instant instantOrNull(OffsetDateTime value) {
+        return value == null ? null : value.toInstant();
+    }
 
     private static final RowMapper<PaymentTransition> TRANSITION_MAPPER = (ResultSet rs, int rowNum) -> new PaymentTransition(
             PaymentState.valueOf(rs.getString("from_state")),

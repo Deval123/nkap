@@ -1,6 +1,9 @@
 package dev.nkap.server.payment;
 
+import dev.nkap.core.payment.PaymentState;
 import dev.nkap.core.payment.ReferenceId;
+import java.util.Comparator;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
@@ -31,5 +34,13 @@ public final class InMemoryPaymentRepository implements PaymentRepository {
     @Override
     public Optional<Payment> findByReferenceForUpdate(ReferenceId reference) {
         return findByReference(reference);
+    }
+
+    @Override
+    public List<Payment> findEscalated() {
+        return byReference.values().stream()
+                .filter(payment -> payment.escalatedAt() != null && payment.state() == PaymentState.UNKNOWN)
+                .sorted(Comparator.comparing(Payment::escalatedAt))
+                .toList();
     }
 }

@@ -23,6 +23,29 @@ spring:
       enabled: true
 
 nkap:
+  reconciler:
+    # The reconciler and its scheduler. Off means UNKNOWN payments are never chased —
+    # only for a deployment that runs the reconciler as a separate process, or a test.
+    enabled: true
+    # How often a pass runs. Too short and every tick re-queries the operator for the same
+    # still-pending payments, turning the reconciler into a load generator; too long and a
+    # payment that could have been resolved in seconds sits UNKNOWN for minutes.
+    interval: 30s
+    # The most payments one pass claims. A bound, so a backlog after an outage drains at a
+    # steady rate instead of firing thousands of operator calls at once.
+    batch-size: 100
+    # The delay before the first retry, doubling each attempt. Too short wastes calls on
+    # payments the payer simply has not approved yet; the first useful re-query is rarely
+    # sooner than a minute after the timeout.
+    backoff-base: 1m
+    # The ceiling on a single interval, so backoff does not stretch to days. Once here, the
+    # reconciler keeps checking at this cadence until the window runs out.
+    backoff-max: 1h
+    # How long to keep retrying before escalating to a human. Too short escalates payments
+    # that would have resolved on their own — a slow payer, an operator catching up — and
+    # trains people to wave escalations away; too long delays a real investigation. It is a
+    # deadline for a human to look, not a verdict: the payment stays UNKNOWN either way.
+    window: 24h
   provider:
     # The provider a POST /payments is routed to. Routing by country arrives with
     # multi-country support; for now there is one.

@@ -17,3 +17,22 @@ jobs:
           java-version: '21'
           cache: maven
       - run: mvn -B --no-transfer-progress clean verify -Dnkap.docker.required=true
+
+  # Separate from `build` so a compose failure names itself. The quick start is the most
+  # fragile artifact in the repository — it breaks on a base-image change, a port
+  # collision, a property rename — and the first thing every newcomer runs. Something not
+  # exercised by CI stops working without anyone noticing.
+  demo:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Build the images and start the stack
+        run: docker compose up --build -d --wait --wait-timeout 240
+      - name: Run the quick-start demo
+        run: ./examples/demo.sh
+      - name: Stack logs
+        if: failure()
+        run: docker compose logs
+      - name: Tear down
+        if: always()
+        run: docker compose down -v

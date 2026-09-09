@@ -74,4 +74,11 @@ class PaymentStateTest {
         assertThrows(IllegalTransitionException.class,
                 () -> PaymentState.CREATED.transitionTo(PaymentState.SUCCEEDED));
     }
+
+    @Test
+    @DisplayName("a submission may be acknowledged as PENDING: some operators say 'awaiting the payer' in one step")
+    void submissionMayBeAcknowledgedAsPending() {
+        assertTrue(PaymentState.CREATED.canTransitionTo(PaymentState.PENDING));
+        assertEquals(PaymentState.PENDING, PaymentState.CREATED.transitionTo(PaymentState.PENDING));
+    }
 }

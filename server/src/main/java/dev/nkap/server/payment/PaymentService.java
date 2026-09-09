@@ -8,6 +8,7 @@ import dev.nkap.provider.ProviderId;
 import dev.nkap.provider.ProviderUnavailableException;
 import dev.nkap.provider.SubmitResult;
 import dev.nkap.server.provider.AdapterRegistry;
+import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -26,6 +27,13 @@ import org.springframework.stereotype.Service;
  * {@link PaymentState#UNKNOWN} and logged loudly. Only {@code adapters.require} and
  * {@code Payment.create}, both before the save, may throw, which is what lets
  * {@code PaymentController} release the idempotency claim safely when they do.
+ *
+ * <p>Applying the submit response is serialised with the callback path through
+ * {@link ReferenceLocks}. A callback for this reference can arrive and be confirmed while
+ * {@code adapter.submit} is still in flight; if it advances the payment out of
+ * {@code CREATED}, this response is stale and the callback already recorded the truth.
+ * The submit <em>call</em> is made outside the lock — it can block for the whole request
+ * timeout, and a callback must not wait that long.
  */
 @Service
 public class PaymentService {
@@ -34,19 +42,21 @@ public class PaymentService {
 
     private final PaymentRepository payments;
     private final AdapterRegistry adapters;
+    private final ReferenceLocks locks;
 
-    public PaymentService(PaymentRepository payments, AdapterRegistry adapters) {
+    public PaymentService(PaymentRepository payments, AdapterRegistry adapters, ReferenceLocks locks) {
         this.payments = payments;
         this.adapters = adapters;
+        this.locks = locks;
     }
 
     /**
      * The {@code Proceed} path of {@code POST /payments}. Returns the payment in whichever
      * state the submission left it: {@code SUBMITTED} / {@code PENDING} on acknowledgement,
      * {@code FAILED} on an outright refusal by the operator, {@code UNKNOWN} when the
-     * operator did not answer or when submitting failed unexpectedly on our side. Once the
-     * payment is persisted it never throws — silence, and even our own bugs, are
-     * {@code UNKNOWN}, never an error and never {@code FAILED}.
+     * operator did not answer or when submitting failed unexpectedly on our side —
+     * or {@code SUCCEEDED} / {@code FAILED} already, when a callback confirmed the payment
+     * before this response arrived. Once the payment is persisted it never throws.
      */
     public Payment createAndSubmit(ProviderId providerId, String merchantId, PaymentIntent intent) {
         ProviderAdapter adapter = adapters.require(providerId);
@@ -55,35 +65,74 @@ public class PaymentService {
         Payment payment = Payment.create(reference, providerId, merchantId, intent);
         payments.save(payment);
 
-        // Past this line nothing may escape: the request may already be with the operator.
-        try {
-            SubmitResult result = adapter.submit(intent, reference);
-            switch (result) {
-                case SubmitResult.Acknowledged acknowledged -> {
-                    payment.recordProviderReference(acknowledged.providerReference());
-                    payment.applyTransition(acknowledged.state(), PaymentTransition.Cause.SUBMIT_RESPONSE,
-                            "", "", acknowledged.rawResponse());
-                }
-                case SubmitResult.Rejected rejected -> payment.applyTransition(PaymentState.FAILED,
-                        PaymentTransition.Cause.SUBMIT_RESPONSE,
-                        rejected.providerCode(), rejected.reason(), rejected.rawResponse());
+        SubmitOutcome outcome = callOperator(adapter, intent, reference);
+
+        locks.run(reference, () -> {
+            Payment current = payments.findByReference(reference).orElseThrow();
+            if (current.state() != PaymentState.CREATED) {
+                // A callback confirmed this payment while the submit call was in flight.
+                // The response is stale — the callback path already recorded the
+                // transitions, and forcing CREATED -> SUBMITTED now would be illegal.
+                outcome.providerReference().ifPresent(current::recordProviderReference);
+                log.info("submit response for {} is stale: a callback already advanced it to {}",
+                        reference, current.state());
+                payments.save(current);
+                return;
             }
+            applyOutcome(outcome, current, reference);
+            payments.save(current);
+        });
+
+        return payments.findByReference(reference).orElseThrow();
+    }
+
+    private SubmitOutcome callOperator(ProviderAdapter adapter, PaymentIntent intent, ReferenceId reference) {
+        try {
+            return new SubmitOutcome(adapter.submit(intent, reference), null, null);
         } catch (ProviderUnavailableException noAnswer) {
-            log.info("submit for {} did not answer; recording UNKNOWN: {}", reference, noAnswer.getMessage());
+            return new SubmitOutcome(null, noAnswer, null);
+        } catch (RuntimeException unexpected) {
+            return new SubmitOutcome(null, null, unexpected);
+        }
+    }
+
+    private void applyOutcome(SubmitOutcome outcome, Payment payment, ReferenceId reference) {
+        if (outcome.noAnswer() != null) {
+            log.info("submit for {} did not answer; recording UNKNOWN: {}", reference, outcome.noAnswer().getMessage());
             payment.applyTransition(payment.state().onProviderTimeout(), PaymentTransition.Cause.SUBMIT_RESPONSE,
-                    "", noAnswer.getMessage(), "");
-        } catch (RuntimeException failedAfterTheRequestMayHaveGoneOut) {
+                    "", outcome.noAnswer().getMessage(), "");
+            return;
+        }
+        if (outcome.unexpected() != null) {
             // A defect on our side, after the point where the operator may already have the
             // request. In the data this is indistinguishable from an operator timeout, so
             // only this log tells them apart: it must be loud, with the stack trace.
             // Recording FAILED here would be the one conclusion this project forbids.
             log.error("submit for {} failed unexpectedly; recording UNKNOWN, not FAILED", reference,
-                    failedAfterTheRequestMayHaveGoneOut);
+                    outcome.unexpected());
             payment.applyTransition(payment.state().onProviderTimeout(), PaymentTransition.Cause.SUBMIT_RESPONSE,
-                    "", "unexpected error while submitting: " + failedAfterTheRequestMayHaveGoneOut, "");
+                    "", "unexpected error while submitting: " + outcome.unexpected(), "");
+            return;
         }
+        switch (outcome.result()) {
+            case SubmitResult.Acknowledged acknowledged -> {
+                payment.recordProviderReference(acknowledged.providerReference());
+                payment.applyTransition(acknowledged.state(), PaymentTransition.Cause.SUBMIT_RESPONSE,
+                        "", "", acknowledged.rawResponse());
+            }
+            case SubmitResult.Rejected rejected -> payment.applyTransition(PaymentState.FAILED,
+                    PaymentTransition.Cause.SUBMIT_RESPONSE,
+                    rejected.providerCode(), rejected.reason(), rejected.rawResponse());
+        }
+    }
 
-        payments.save(payment);
-        return payment;
+    /** What {@code adapter.submit} produced: an acknowledgement or rejection, a "no answer", or a bug. */
+    private record SubmitOutcome(SubmitResult result, ProviderUnavailableException noAnswer, RuntimeException unexpected) {
+
+        Optional<String> providerReference() {
+            return result instanceof SubmitResult.Acknowledged acknowledged && !acknowledged.providerReference().isBlank()
+                    ? Optional.of(acknowledged.providerReference())
+                    : Optional.empty();
+        }
     }
 }

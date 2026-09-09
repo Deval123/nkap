@@ -80,7 +80,7 @@ CREATE TRIGGER payment_transition_append_only
     FOR EACH ROW EXECUTE FUNCTION nkap_forbid_mutation();
 
 -- ------------------------------------------------------------------------------------
--- The ledger. Two invariants are made structural rather than checked:
+-- The ledger. Three invariants are made structural rather than checked:
 --
 --   * One currency per entry. The currency lives on the entry; a posting has no currency
 --     column and inherits the entry's. A mixed-currency entry cannot be expressed.
@@ -89,15 +89,21 @@ CREATE TRIGGER payment_transition_append_only
 --     constraint trigger verifies it at COMMIT: postings are inserted one at a time and
 --     the entry is only required to balance when the transaction ends.
 --
+--   * Shape, once recorded, cannot change. Zero-sum alone does not stop a balanced pair
+--     being appended to an entry recorded a week ago — the sum stays zero and nothing
+--     forbids the extra postings. The entry declares its own posting count, and the
+--     deferred trigger requires the actual count to equal it, not merely be at least two.
+--
 -- Both ledger tables are append-only.
 -- ------------------------------------------------------------------------------------
 
 CREATE TABLE ledger_entry (
-    id          text        PRIMARY KEY,
-    occurred_at timestamptz NOT NULL,
-    reference   text        NOT NULL,
-    description text        NOT NULL DEFAULT '',
-    currency    text        NOT NULL
+    id            text        PRIMARY KEY,
+    occurred_at   timestamptz NOT NULL,
+    reference     text        NOT NULL,
+    description   text        NOT NULL DEFAULT '',
+    currency      text        NOT NULL,
+    posting_count integer     NOT NULL CONSTRAINT ledger_entry_two_sided CHECK (posting_count >= 2)
 );
 
 CREATE INDEX ledger_entry_reference_idx ON ledger_entry (reference);
@@ -126,23 +132,38 @@ CREATE TRIGGER posting_append_only
 CREATE FUNCTION nkap_ledger_entry_balances() RETURNS trigger
     LANGUAGE plpgsql AS $$
 DECLARE
-    posting_count integer;
-    posting_sum   bigint;
+    checked_entry_id text;
+    declared_count    integer;
+    actual_count      integer;
+    actual_sum        bigint;
 BEGIN
-    SELECT count(*), coalesce(sum(amount_minor), 0)
-      INTO posting_count, posting_sum
-      FROM posting
-     WHERE entry_id = NEW.entry_id;
+    -- Deferred, and attached to both posting and ledger_entry, because either can be the
+    -- last write of a transaction that leaves an entry wrong. A posting insert catches a
+    -- short entry, an unbalanced one, or a balanced pair appended to an entry recorded
+    -- earlier. A ledger_entry insert catches an entry that never receives a single posting
+    -- at all — no posting insert ever fires for that one, so the entry needs its own check.
+    IF TG_TABLE_NAME = 'posting' THEN
+        checked_entry_id := NEW.entry_id;
+    ELSE
+        checked_entry_id := NEW.id;
+    END IF;
 
-    IF posting_count < 2 THEN
-        RAISE EXCEPTION 'ledger entry "%" has % posting(s): a movement always has at least two sides',
-            NEW.entry_id, posting_count
+    SELECT posting_count INTO declared_count FROM ledger_entry WHERE id = checked_entry_id;
+
+    SELECT count(*), coalesce(sum(amount_minor), 0)
+      INTO actual_count, actual_sum
+      FROM posting
+     WHERE entry_id = checked_entry_id;
+
+    IF actual_count <> declared_count THEN
+        RAISE EXCEPTION 'ledger entry "%" declares % posting(s) but has %: its shape cannot change after it is recorded',
+            checked_entry_id, declared_count, actual_count
             USING ERRCODE = 'check_violation';
     END IF;
 
-    IF posting_sum <> 0 THEN
+    IF actual_sum <> 0 THEN
         RAISE EXCEPTION 'ledger entry "%" does not balance: its postings sum to %, expected 0',
-            NEW.entry_id, posting_sum
+            checked_entry_id, actual_sum
             USING ERRCODE = 'check_violation';
     END IF;
 
@@ -152,5 +173,10 @@ $$;
 
 CREATE CONSTRAINT TRIGGER posting_entry_balances
     AFTER INSERT ON posting
+    DEFERRABLE INITIALLY DEFERRED
+    FOR EACH ROW EXECUTE FUNCTION nkap_ledger_entry_balances();
+
+CREATE CONSTRAINT TRIGGER ledger_entry_declared_balances
+    AFTER INSERT ON ledger_entry
     DEFERRABLE INITIALLY DEFERRED
     FOR EACH ROW EXECUTE FUNCTION nkap_ledger_entry_balances();

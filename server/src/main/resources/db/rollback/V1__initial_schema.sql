@@ -9,6 +9,7 @@
 -- flyway_schema_history so the database is re-migratable.
 
 DROP TRIGGER IF EXISTS posting_entry_balances ON posting;
+DROP TRIGGER IF EXISTS ledger_entry_declared_balances ON ledger_entry;
 DROP TRIGGER IF EXISTS posting_append_only ON posting;
 DROP TRIGGER IF EXISTS ledger_entry_append_only ON ledger_entry;
 DROP TRIGGER IF EXISTS payment_transition_append_only ON payment_transition;

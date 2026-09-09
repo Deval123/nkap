@@ -18,41 +18,59 @@ import java.util.Objects;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.BatchPreparedStatementSetter;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * {@link Ledger} in PostgreSQL.
  *
  * <p>The invariants are the schema's, not this class's (see {@code V1__initial_schema.sql}):
- * the currency lives on the entry so a mixed-currency entry cannot be expressed, a deferred
- * constraint trigger enforces zero-sum at commit, and a {@code BEFORE UPDATE OR DELETE}
- * trigger makes both tables append-only. This class only writes and reads rows.
+ * the currency lives on the entry so a mixed-currency entry cannot be expressed, deferred
+ * constraint triggers enforce zero-sum and the entry's declared posting count at commit, and
+ * a {@code BEFORE UPDATE OR DELETE} trigger makes both tables append-only. This class only
+ * writes and reads rows — {@code posting_count} is set here from {@code entry.postings()}
+ * so the entry declares its own shape at the moment it is recorded.
+ *
+ * <p>{@code append} inserts the entry and its postings in one transaction: the deferred
+ * trigger on {@code ledger_entry} checks the declared count against the actual one at
+ * commit, so a caller relying on autocommit — the entry row committing on its own, before a
+ * single posting exists — would trip that check every time. {@link TransactionTemplate}'s
+ * default propagation joins a transaction already open (as {@code SettlementService} keeps
+ * the entry and the payment's state change together) rather than nesting one inside it.
  *
  * <p>{@code append} maps the one integrity error it must classify — a duplicate entry id,
  * which the primary key raises <em>immediately</em> — to {@link DuplicateLedgerEntryException}.
- * Every other integrity error propagates. A zero-sum or foreign-key violation cannot come
- * from a {@link LedgerEntry} (its own constructor guarantees balance); if the deferred
- * trigger ever fires it is on adversarial SQL, and it aborts the transaction at commit.
+ * Every other integrity error propagates. A zero-sum or shape violation cannot come from a
+ * {@link LedgerEntry} (its own constructor guarantees balance); if the deferred trigger ever
+ * fires it is on adversarial SQL, and it aborts the transaction at commit.
  */
 public final class PostgresLedger implements Ledger {
 
     private final JdbcTemplate jdbc;
+    private final TransactionTemplate tx;
 
-    public PostgresLedger(JdbcTemplate jdbc) {
+    public PostgresLedger(JdbcTemplate jdbc, PlatformTransactionManager txManager) {
         this.jdbc = jdbc;
+        this.tx = new TransactionTemplate(txManager);
     }
 
     @Override
     public void append(LedgerEntry entry) {
         Objects.requireNonNull(entry, "entry");
+        tx.executeWithoutResult(status -> insertEntryAndPostings(entry));
+    }
+
+    private void insertEntryAndPostings(LedgerEntry entry) {
         try {
             jdbc.update(
-                    "INSERT INTO ledger_entry (id, occurred_at, reference, description, currency) "
-                            + "VALUES (?, ?, ?, ?, ?)",
+                    "INSERT INTO ledger_entry (id, occurred_at, reference, description, currency, posting_count) "
+                            + "VALUES (?, ?, ?, ?, ?, ?)",
                     entry.id(),
                     OffsetDateTime.ofInstant(entry.occurredAt(), ZoneOffset.UTC),
                     entry.reference(),
                     entry.description(),
-                    entry.currency().name());
+                    entry.currency().name(),
+                    entry.postings().size());
         } catch (DuplicateKeyException duplicate) {
             throw new DuplicateLedgerEntryException(entry.id());
         }

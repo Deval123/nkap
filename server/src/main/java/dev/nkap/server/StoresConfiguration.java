@@ -10,6 +10,7 @@ import dev.nkap.server.persistence.PostgresPaymentRepository;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.transaction.PlatformTransactionManager;
 
 /**
  * The stores, backed by PostgreSQL.
@@ -29,8 +30,8 @@ class StoresConfiguration {
     }
 
     @Bean
-    Ledger ledger(JdbcTemplate jdbc) {
-        return new PostgresLedger(jdbc);
+    Ledger ledger(JdbcTemplate jdbc, PlatformTransactionManager txManager) {
+        return new PostgresLedger(jdbc, txManager);
     }
 
     @Bean

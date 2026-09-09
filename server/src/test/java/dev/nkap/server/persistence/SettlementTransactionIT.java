@@ -58,7 +58,7 @@ class SettlementTransactionIT {
     @Test
     @DisplayName("a settlement that fails after the ledger write leaves neither the entry nor the SUCCEEDED transition")
     void a_failure_after_the_ledger_write_rolls_back_everything() {
-        PostgresLedger ledger = new PostgresLedger(jdbc);
+        PostgresLedger ledger = new PostgresLedger(jdbc, txManager);
         PostgresPaymentRepository realRepo = new PostgresPaymentRepository(jdbc, new ObjectMapper());
 
         ReferenceId reference = ReferenceId.newReference();
@@ -114,7 +114,7 @@ class SettlementTransactionIT {
     @Test
     @DisplayName("a settlement that succeeds writes the entry and the SUCCEEDED transition together")
     void a_successful_settlement_writes_both() {
-        PostgresLedger ledger = new PostgresLedger(jdbc);
+        PostgresLedger ledger = new PostgresLedger(jdbc, txManager);
         PostgresPaymentRepository repo = new PostgresPaymentRepository(jdbc, new ObjectMapper());
 
         ReferenceId reference = ReferenceId.newReference();

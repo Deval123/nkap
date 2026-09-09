@@ -43,7 +43,7 @@ class LedgerConstraintsIT {
         PostgresDatabase db = PostgresDatabase.shared();
         dataSource = db.dataSource();
         jdbc = db.jdbcTemplate();
-        ledger = new PostgresLedger(jdbc);
+        ledger = new PostgresLedger(jdbc, db.transactionManager());
     }
 
     private static String freshEntryId() {
@@ -62,7 +62,7 @@ class LedgerConstraintsIT {
         String id = freshEntryId();
         try (Connection connection = dataSource.getConnection()) {
             connection.setAutoCommit(false);
-            insertEntry(connection, id, "EUR");
+            insertEntry(connection, id, "EUR", 2);
             insertPosting(connection, id, 0, "provider:mtn:float:EUR", 5_000);   // deferred check: no error yet
             insertPosting(connection, id, 1, "merchant:acme:payable:EUR", -3_000); // still no error
 
@@ -74,17 +74,69 @@ class LedgerConstraintsIT {
     }
 
     @Test
-    @DisplayName("a single-posting entry is refused too: a movement has at least two sides")
+    @DisplayName("a balanced pair of postings appended to an already-recorded entry is refused: "
+            + "an entry's shape cannot change after it is recorded")
+    void a_balanced_pair_appended_to_a_recorded_entry_is_refused() throws SQLException {
+        String id = freshEntryId();
+        ledger.append(balanced(id, 5_000));
+
+        try (Connection connection = dataSource.getConnection()) {
+            connection.setAutoCommit(false);
+            insertPosting(connection, id, 2, "provider:mtn:float:EUR", 500_000);
+            insertPosting(connection, id, 3, "merchant:pirate:payable:EUR", -500_000);
+
+            assertThatThrownBy(connection::commit)
+                    .isInstanceOf(SQLException.class)
+                    .hasMessageContaining("declares 2 posting(s) but has 4");
+        }
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM posting WHERE entry_id = ?", Integer.class, id)).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("a single-posting entry is refused too: it declares two postings but receives one")
     void a_single_posting_entry_is_refused_at_commit() throws SQLException {
         String id = freshEntryId();
         try (Connection connection = dataSource.getConnection()) {
             connection.setAutoCommit(false);
-            insertEntry(connection, id, "EUR");
+            insertEntry(connection, id, "EUR", 2);
             insertPosting(connection, id, 0, "provider:mtn:float:EUR", 5_000);
 
             assertThatThrownBy(connection::commit)
                     .isInstanceOf(SQLException.class)
-                    .hasMessageContaining("at least two sides");
+                    .hasMessageContaining("declares 2 posting(s) but has 1");
+        }
+    }
+
+    @Test
+    @DisplayName("an entry recorded with no postings at all is refused: nothing ever inserts a posting for it, "
+            + "so its own trigger has to be the one that checks")
+    void an_entry_with_no_postings_is_refused_at_commit() throws SQLException {
+        String id = freshEntryId();
+        try (Connection connection = dataSource.getConnection()) {
+            connection.setAutoCommit(false);
+            insertEntry(connection, id, "EUR", 2);
+
+            assertThatThrownBy(connection::commit)
+                    .isInstanceOf(SQLException.class)
+                    .hasMessageContaining("declares 2 posting(s) but has 0");
+        }
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM ledger_entry WHERE id = ?", Integer.class, id)).isZero();
+    }
+
+    @Test
+    @DisplayName("an entry declaring three postings that receives two is refused at commit: "
+            + "a real application bug the schema now catches")
+    void an_entry_declaring_three_postings_receiving_two_is_refused_at_commit() throws SQLException {
+        String id = freshEntryId();
+        try (Connection connection = dataSource.getConnection()) {
+            connection.setAutoCommit(false);
+            insertEntry(connection, id, "EUR", 3);
+            insertPosting(connection, id, 0, "provider:mtn:float:EUR", 5_000);
+            insertPosting(connection, id, 1, "merchant:acme:payable:EUR", -5_000);
+
+            assertThatThrownBy(connection::commit)
+                    .isInstanceOf(SQLException.class)
+                    .hasMessageContaining("declares 3 posting(s) but has 2");
         }
     }
 
@@ -94,7 +146,7 @@ class LedgerConstraintsIT {
         String id = freshEntryId();
         try (Connection connection = dataSource.getConnection()) {
             connection.setAutoCommit(false);
-            insertEntry(connection, id, "EUR");
+            insertEntry(connection, id, "EUR", 2);
             insertPosting(connection, id, 0, "provider:mtn:float:EUR", 5_000);
             insertPosting(connection, id, 1, "merchant:acme:payable:EUR", -5_000);
             connection.commit();
@@ -176,12 +228,14 @@ class LedgerConstraintsIT {
         assertThat(ledger.balance(AccountId.of("provider:mtn:float:XAF"), Currency.XAF).amount()).isGreaterThanOrEqualTo(5_000);
     }
 
-    private static void insertEntry(Connection connection, String id, String currency) throws SQLException {
+    private static void insertEntry(Connection connection, String id, String currency, int postingCount) throws SQLException {
         try (var ps = connection.prepareStatement(
-                "INSERT INTO ledger_entry (id, occurred_at, reference, description, currency) VALUES (?, now(), ?, '', ?)")) {
+                "INSERT INTO ledger_entry (id, occurred_at, reference, description, currency, posting_count) "
+                        + "VALUES (?, now(), ?, '', ?, ?)")) {
             ps.setString(1, id);
             ps.setString(2, UUID.randomUUID().toString());
             ps.setString(3, currency);
+            ps.setInt(4, postingCount);
             ps.executeUpdate();
         }
     }

@@ -6,13 +6,25 @@ import java.util.Optional;
 /**
  * Where payments are kept.
  *
- * <p>An interface because PostgreSQL is the next block and this is the seam it plugs into.
- * The in-memory implementation is a step, not a mode: there is no flag that selects it.
+ * <p>The production implementation is {@code PostgresPaymentRepository}; an in-memory one
+ * lives in the test tree as a fast double for the service unit tests. There is no flag and
+ * no in-memory mode — {@code StoresConfiguration} builds the PostgreSQL one and nothing
+ * else does.
  */
 public interface PaymentRepository {
 
-    /** Persists the payment's current state. Overwrites any earlier snapshot of the same reference. */
+    /** Persists the payment: the row, and any history rows not yet stored. Idempotent. */
     void save(Payment payment);
 
+    /** The payment for {@code reference}, without taking a lock — for reads that only display it. */
     Optional<Payment> findByReference(ReferenceId reference);
+
+    /**
+     * The payment for {@code reference}, taking its row for the duration of the current
+     * transaction so a concurrent read-decide-write for the same reference waits. This is
+     * the serialisation the callback path and the submit path share; outside a transaction
+     * it behaves like {@link #findByReference}. The in-memory double, single-writer by
+     * construction, does not lock.
+     */
+    Optional<Payment> findByReferenceForUpdate(ReferenceId reference);
 }

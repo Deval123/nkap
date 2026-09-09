@@ -12,6 +12,8 @@ import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * Creates a payment, hands it to the operator, and records honestly what came back.
@@ -21,19 +23,19 @@ import org.springframework.stereotype.Service;
  * the reconciler can find; without that write, a request that reached the operator but not
  * the response is money lost to everyone.
  *
- * <p>The other half of that guarantee is structural: once {@code payments.save} has run,
- * <strong>nothing escapes this method</strong>. The operator may already hold the request,
- * so an unexpected failure past that line is not-knowing, not failure — it is recorded
- * {@link PaymentState#UNKNOWN} and logged loudly. Only {@code adapters.require} and
- * {@code Payment.create}, both before the save, may throw, which is what lets
- * {@code PaymentController} release the idempotency claim safely when they do.
+ * <p>Once the payment is persisted, nothing escapes: the operator may already hold the
+ * request, so an unexpected failure past that line is not-knowing, not failure — recorded
+ * {@link PaymentState#UNKNOWN} and logged loudly, never {@code FAILED}. Only
+ * {@code adapters.require} and {@code Payment.create}, both before the first save, may
+ * throw, which is what lets {@code PaymentController} release the idempotency claim.
  *
- * <p>Applying the submit response is serialised with the callback path through
- * {@link ReferenceLocks}. A callback for this reference can arrive and be confirmed while
- * {@code adapter.submit} is still in flight; if it advances the payment out of
- * {@code CREATED}, this response is stale and the callback already recorded the truth.
- * The submit <em>call</em> is made outside the lock — it can block for the whole request
- * timeout, and a callback must not wait that long.
+ * <p>The submit response is applied inside one transaction that takes the payment's row
+ * with {@code SELECT … FOR UPDATE}. A callback for this reference can arrive and be
+ * confirmed while {@code adapter.submit} is still in flight; if it has advanced the payment
+ * out of {@code CREATED}, this response is stale and the callback already recorded the
+ * truth. The submit <strong>call</strong> stays outside the transaction — an operator that
+ * does not answer would otherwise hold a database transaction open for the whole timeout.
+ * The transaction opens when the answer is in hand.
  */
 @Service
 public class PaymentService {
@@ -42,33 +44,32 @@ public class PaymentService {
 
     private final PaymentRepository payments;
     private final AdapterRegistry adapters;
-    private final ReferenceLocks locks;
+    private final TransactionTemplate tx;
 
-    public PaymentService(PaymentRepository payments, AdapterRegistry adapters, ReferenceLocks locks) {
+    public PaymentService(PaymentRepository payments, AdapterRegistry adapters, PlatformTransactionManager txManager) {
         this.payments = payments;
         this.adapters = adapters;
-        this.locks = locks;
+        this.tx = new TransactionTemplate(txManager);
     }
 
     /**
      * The {@code Proceed} path of {@code POST /payments}. Returns the payment in whichever
      * state the submission left it: {@code SUBMITTED} / {@code PENDING} on acknowledgement,
-     * {@code FAILED} on an outright refusal by the operator, {@code UNKNOWN} when the
-     * operator did not answer or when submitting failed unexpectedly on our side —
-     * or {@code SUCCEEDED} / {@code FAILED} already, when a callback confirmed the payment
+     * {@code FAILED} on an outright refusal, {@code UNKNOWN} on no answer or an unexpected
+     * error on our side — or a state a callback reached first, if one confirmed the payment
      * before this response arrived. Once the payment is persisted it never throws.
      */
     public Payment createAndSubmit(ProviderId providerId, String merchantId, PaymentIntent intent) {
         ProviderAdapter adapter = adapters.require(providerId);
 
         ReferenceId reference = ReferenceId.newReference();
-        Payment payment = Payment.create(reference, providerId, merchantId, intent);
-        payments.save(payment);
+        Payment created = Payment.create(reference, providerId, merchantId, intent);
+        payments.save(created);
 
         SubmitOutcome outcome = callOperator(adapter, intent, reference);
 
-        locks.run(reference, () -> {
-            Payment current = payments.findByReference(reference).orElseThrow();
+        tx.executeWithoutResult(status -> {
+            Payment current = payments.findByReferenceForUpdate(reference).orElseThrow();
             if (current.state() != PaymentState.CREATED) {
                 // A callback confirmed this payment while the submit call was in flight.
                 // The response is stale — the callback path already recorded the

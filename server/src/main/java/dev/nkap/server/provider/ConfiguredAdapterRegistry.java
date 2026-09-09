@@ -1,5 +1,6 @@
 package dev.nkap.server.provider;
 
+import dev.nkap.core.money.Currency;
 import dev.nkap.provider.ProviderAdapter;
 import dev.nkap.provider.ProviderId;
 import java.util.LinkedHashMap;
@@ -10,14 +11,16 @@ import java.util.Optional;
 import org.springframework.stereotype.Component;
 
 /**
- * Every {@link ProviderAdapter} bean in the context, indexed by {@link ProviderAdapter#id()}.
+ * Every {@link ProviderAdapter} bean in the context, indexed by {@link ProviderAdapter#id()},
+ * with the routing declared for each provider in configuration.
  */
 @Component
 public final class ConfiguredAdapterRegistry implements AdapterRegistry {
 
     private final Map<ProviderId, ProviderAdapter> byId;
+    private final Map<ProviderId, Currency> settlementCurrencies;
 
-    public ConfiguredAdapterRegistry(List<ProviderAdapter> adapters) {
+    public ConfiguredAdapterRegistry(List<ProviderAdapter> adapters, List<ProviderRouting> routes) {
         Map<ProviderId, ProviderAdapter> index = new LinkedHashMap<>();
         for (ProviderAdapter adapter : adapters) {
             ProviderAdapter clash = index.putIfAbsent(adapter.id(), adapter);
@@ -26,6 +29,15 @@ public final class ConfiguredAdapterRegistry implements AdapterRegistry {
             }
         }
         this.byId = Map.copyOf(index);
+
+        Map<ProviderId, Currency> currencies = new LinkedHashMap<>();
+        for (ProviderRouting route : routes) {
+            Currency clash = currencies.putIfAbsent(route.provider(), route.currency());
+            if (clash != null && clash != route.currency()) {
+                throw new IllegalStateException("two routes disagree on the currency for provider " + route.provider());
+            }
+        }
+        this.settlementCurrencies = Map.copyOf(currencies);
     }
 
     @Override
@@ -41,5 +53,10 @@ public final class ConfiguredAdapterRegistry implements AdapterRegistry {
                     + "; configured: " + byId.keySet());
         }
         return adapter;
+    }
+
+    @Override
+    public Optional<Currency> settlementCurrency(ProviderId id) {
+        return Optional.ofNullable(settlementCurrencies.get(id));
     }
 }

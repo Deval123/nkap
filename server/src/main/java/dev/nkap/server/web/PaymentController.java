@@ -15,6 +15,7 @@ import dev.nkap.provider.ProviderId;
 import dev.nkap.server.payment.Payment;
 import dev.nkap.server.payment.PaymentRepository;
 import dev.nkap.server.payment.PaymentService;
+import dev.nkap.server.provider.AdapterRegistry;
 import java.util.Locale;
 import java.util.Map;
 import org.springframework.beans.factory.annotation.Value;
@@ -49,14 +50,17 @@ class PaymentController {
     private final PaymentService payments;
     private final PaymentRepository repository;
     private final IdempotencyStore idempotency;
+    private final AdapterRegistry adapters;
     private final ObjectMapper json;
     private final ProviderId defaultProvider;
 
     PaymentController(PaymentService payments, PaymentRepository repository, IdempotencyStore idempotency,
-                      ObjectMapper json, @Value("${nkap.provider.default}") String defaultProvider) {
+                      AdapterRegistry adapters, ObjectMapper json,
+                      @Value("${nkap.provider.default}") String defaultProvider) {
         this.payments = payments;
         this.repository = repository;
         this.idempotency = idempotency;
+        this.adapters = adapters;
         this.json = json;
         this.defaultProvider = ProviderId.of(defaultProvider);
     }
@@ -72,9 +76,10 @@ class PaymentController {
                     "POST /payments requires an Idempotency-Key header so a retry cannot pay twice.");
         }
 
-        // Validate before touching the idempotency store: a malformed request must not
-        // leave a claim behind that a retry would then collide with.
+        // Validate before touching the idempotency store: a request that cannot be served
+        // must not leave a claim behind that a retry would then collide with.
         PaymentIntent intent = toIntent(request);
+        rejectUnservedCurrency(intent);
         IdempotencyKey key = new IdempotencyKey(request.merchantId(), idempotencyKey);
         RequestFingerprint fingerprint = RequestFingerprint.of(canonical(request));
 
@@ -129,6 +134,23 @@ class PaymentController {
                 HttpStatus.NOT_FOUND, ProblemTypes.PAYMENT_NOT_FOUND, "No such payment",
                 "No payment exists for reference " + reference + "."));
         return ResponseEntity.ok(PaymentResponse.of(payment));
+    }
+
+    /**
+     * Turns away a currency the addressed deployment does not settle, before any payment or
+     * idempotency claim exists. This is not a failed payment: no operator was asked, and
+     * the caller simply routed to an installation that does not serve that currency.
+     */
+    private void rejectUnservedCurrency(PaymentIntent intent) {
+        Currency requested = intent.amount().currency();
+        adapters.settlementCurrency(defaultProvider)
+                .filter(settled -> settled != requested)
+                .ifPresent(settled -> {
+                    throw new ApiException(HttpStatus.BAD_REQUEST, ProblemTypes.UNSERVED_CURRENCY,
+                            "This deployment does not serve that currency",
+                            "Payments here settle in " + settled + "; this request was for " + requested
+                                    + ". No payment was created.");
+                });
     }
 
     // --- request -> intent -----------------------------------------------------

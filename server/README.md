@@ -30,6 +30,10 @@ selects it and no documented mode.
 
 - `amount` is an **integer count of minor units** — `5000` XAF is 5000 francs, `5000` EUR
   is 50.00. A fractional number is a **400**, before anything is persisted.
+- `currency` must be the one this deployment settles in (`nkap.provider.mtn.currency`). A
+  request in any other currency is a **400** with its own problem type, before a payment or
+  an idempotency claim exists: no operator was asked and nothing is unknown — the caller
+  addressed an installation that does not serve that currency.
 - The **`Idempotency-Key` header is required**. Absent, that is a 400. A repeat with the
   same key and body replays the first answer verbatim; the same key with a different body
   is a **409**; a key whose first request is still running is also a **409**, with a

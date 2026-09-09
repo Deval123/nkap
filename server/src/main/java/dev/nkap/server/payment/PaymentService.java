@@ -63,15 +63,6 @@ public class PaymentService {
             log.info("submit for {} did not answer; recording UNKNOWN: {}", reference, noAnswer.getMessage());
             payment.applyTransition(payment.state().onProviderTimeout(), PaymentTransition.Cause.SUBMIT_RESPONSE,
                     "", noAnswer.getMessage(), "");
-        } catch (IllegalArgumentException adapterRefusedTheIntent) {
-            // The adapter rejected the intent on its own terms — a currency it does not
-            // settle, for instance. That is a definitive no, not an unknown. ProviderAdapter
-            // has no declared channel for an adapter-side refusal (SubmitResult.Rejected is
-            // for a provider-side one), so it arrives as an unchecked exception; the server
-            // records it the same way as a provider refusal.
-            log.info("submit for {} was refused by the adapter: {}", reference, adapterRefusedTheIntent.getMessage());
-            payment.applyTransition(PaymentState.FAILED, PaymentTransition.Cause.SUBMIT_RESPONSE,
-                    "ADAPTER_REFUSED_INTENT", adapterRefusedTheIntent.getMessage(), "");
         }
 
         payments.save(payment);

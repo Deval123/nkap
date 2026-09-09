@@ -204,17 +204,20 @@ class PaymentApiTest {
     }
 
     @Test
-    @DisplayName("a currency the resolved adapter does not settle is a 201 describing a FAILED payment, not a 500")
-    void a_currency_the_adapter_cannot_settle_is_a_failed_payment() {
+    @DisplayName("a currency this deployment does not settle is a 400, nothing persisted, no idempotency claim left")
+    void a_currency_the_deployment_does_not_serve_is_400_and_persists_nothing() {
         String key = UUID.randomUUID().toString();
         String xafBody = body(5000).replace("\"currency\":\"EUR\"", "\"currency\":\"XAF\"");
 
-        ResponseEntity<String> created = post(key, xafBody);
+        ResponseEntity<String> rejected = post(key, xafBody);
 
-        assertThat(created.getStatusCode().value()).isEqualTo(201);
-        JsonNode payment = parse(created.getBody());
-        assertThat(payment.get("state").asText()).isEqualTo("FAILED");
-        assertThat(payment.get("history").get(0).get("operatorCode").asText()).isEqualTo("ADAPTER_REFUSED_INTENT");
+        assertThat(rejected.getStatusCode().value()).isEqualTo(400);
+        assertThat(parse(rejected.getBody()).get("type").asText()).endsWith("unserved-currency");
+
+        // No payment exists, and the key was never claimed: the same key now works.
+        ResponseEntity<String> retry = post(key, body(5000));
+        assertThat(retry.getStatusCode().value()).isEqualTo(201);
+        assertThat(parse(retry.getBody()).get("state").asText()).isEqualTo("SUBMITTED");
     }
 
     @Test

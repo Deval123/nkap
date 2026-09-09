@@ -34,6 +34,9 @@ public final class ProblemTypes {
     /** No adapter is configured for the provider the request routes to. */
     public static final URI PROVIDER_NOT_CONFIGURED = URI.create(BASE + "provider-not-configured");
 
+    /** The addressed deployment does not settle the currency the request asked for. */
+    public static final URI UNSERVED_CURRENCY = URI.create(BASE + "unserved-currency");
+
     private ProblemTypes() {
     }
 }

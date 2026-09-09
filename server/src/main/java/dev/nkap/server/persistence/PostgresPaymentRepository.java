@@ -45,7 +45,7 @@ public final class PostgresPaymentRepository implements PaymentRepository {
             INSERT INTO payment (reference, provider, merchant_id, operation, amount_minor, currency,
                                  counterparty_msisdn, payer_message, payee_note, provider_options,
                                  state, provider_reference, provider_transaction_id, created_at, updated_at,
-                                 reconcile_attempts, reconcile_due_at, escalated_at, unknown_since)
+                                 reconcile_attempts, reconcile_due_at, escalated_at, unresolved_since)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT (reference) DO UPDATE SET
                 state = EXCLUDED.state,
@@ -55,7 +55,7 @@ public final class PostgresPaymentRepository implements PaymentRepository {
                 reconcile_attempts = EXCLUDED.reconcile_attempts,
                 reconcile_due_at = EXCLUDED.reconcile_due_at,
                 escalated_at = EXCLUDED.escalated_at,
-                unknown_since = EXCLUDED.unknown_since
+                unresolved_since = EXCLUDED.unresolved_since
             """;
 
     private static final String INSERT_TRANSITION = """
@@ -96,7 +96,7 @@ public final class PostgresPaymentRepository implements PaymentRepository {
                 payment.reconcileAttempts(),
                 atUtc(payment.reconcileDueAt()),
                 atUtc(payment.escalatedAt()),
-                atUtc(payment.unknownSince()));
+                atUtc(payment.unresolvedSince()));
 
         List<PaymentTransition> history = payment.history();
         for (int seq = 0; seq < history.size(); seq++) {
@@ -127,8 +127,8 @@ public final class PostgresPaymentRepository implements PaymentRepository {
     @Override
     public List<Payment> findEscalated() {
         List<UUID> references = jdbc.queryForList(
-                "SELECT reference FROM payment WHERE escalated_at IS NOT NULL AND state = 'UNKNOWN' "
-                        + "ORDER BY escalated_at",
+                "SELECT reference FROM payment WHERE escalated_at IS NOT NULL "
+                        + "AND state IN ('SUBMITTED', 'PENDING', 'UNKNOWN') ORDER BY escalated_at",
                 UUID.class);
         List<Payment> escalated = new ArrayList<>(references.size());
         for (UUID reference : references) {
@@ -172,7 +172,7 @@ public final class PostgresPaymentRepository implements PaymentRepository {
                 row.reconcileAttempts,
                 row.reconcileDueAt,
                 row.escalatedAt,
-                row.unknownSince));
+                row.unresolvedSince));
     }
 
     private static OffsetDateTime atUtc(Instant instant) {
@@ -200,7 +200,7 @@ public final class PostgresPaymentRepository implements PaymentRepository {
             String counterpartyMsisdn, String payerMessage, String payeeNote, String providerOptions,
             String state, String providerReference, String providerTransactionId,
             Instant createdAt, Instant updatedAt,
-            int reconcileAttempts, Instant reconcileDueAt, Instant escalatedAt, Instant unknownSince) {
+            int reconcileAttempts, Instant reconcileDueAt, Instant escalatedAt, Instant unresolvedSince) {
     }
 
     private static final RowMapper<Row> ROW_MAPPER = (ResultSet rs, int rowNum) -> new Row(
@@ -221,7 +221,7 @@ public final class PostgresPaymentRepository implements PaymentRepository {
             rs.getInt("reconcile_attempts"),
             instantOrNull(rs.getObject("reconcile_due_at", OffsetDateTime.class)),
             instantOrNull(rs.getObject("escalated_at", OffsetDateTime.class)),
-            instantOrNull(rs.getObject("unknown_since", OffsetDateTime.class)));
+            instantOrNull(rs.getObject("unresolved_since", OffsetDateTime.class)));
 
     private static Instant instantOrNull(OffsetDateTime value) {
         return value == null ? null : value.toInstant();

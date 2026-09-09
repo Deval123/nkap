@@ -36,18 +36,19 @@ public final class Payment {
     private String providerReference = "";
     private String providerTransactionId = "";
 
-    // The reconciler's schedule. Meaningful only while the payment is UNKNOWN: a payment
-    // that becomes UNKNOWN is due for reconciliation immediately (reconcileDueAt = now,
-    // attempts = 0), and any earlier escalation is cleared so a payment that cycled back
-    // through UNKNOWN is picked up again. The reconciler advances attempts and reconcileDueAt
-    // itself; escalatedAt is stamped when the retry window is spent and a human is paged —
-    // it is a flag, not a state, and the payment stays UNKNOWN. unknownSince is when this
-    // episode began: the escalation window is wall-clock time measured from it, not a count
-    // of passes, so it is stamped fresh with the rest whenever the payment re-enters UNKNOWN.
+    // The reconciler's schedule. Meaningful while the payment is unresolved — SUBMITTED,
+    // PENDING or UNKNOWN. Entering, or hopping within, that set makes the payment due for
+    // reconciliation immediately (reconcileDueAt = now, attempts = 0) and clears any
+    // earlier escalation, so a payment that keeps changing non-terminal state is picked up
+    // again. The reconciler advances attempts and reconcileDueAt itself; escalatedAt is
+    // stamped when the retry window is spent and a human is paged — a flag, not a state.
+    // unresolvedSince is when the payment BECAME unresolved: the escalation window is
+    // wall-clock time measured from it, so it is stamped only on the way in from CREATED,
+    // not on every hop between SUBMITTED, PENDING and UNKNOWN.
     private int reconcileAttempts;
     private Instant reconcileDueAt;
     private Instant escalatedAt;
-    private Instant unknownSince;
+    private Instant unresolvedSince;
 
     private Payment(ReferenceId reference, ProviderId provider, String merchantId, PaymentIntent intent, Instant now) {
         this.reference = Objects.requireNonNull(reference, "reference");
@@ -74,7 +75,7 @@ public final class Payment {
                                     PaymentState state, String providerReference, String providerTransactionId,
                                     Instant createdAt, Instant updatedAt, List<PaymentTransition> history,
                                     int reconcileAttempts, Instant reconcileDueAt, Instant escalatedAt,
-                                    Instant unknownSince) {
+                                    Instant unresolvedSince) {
         Payment payment = new Payment(reference, provider, merchantId, intent, createdAt);
         payment.state = Objects.requireNonNull(state, "state");
         payment.updatedAt = Objects.requireNonNull(updatedAt, "updatedAt");
@@ -84,7 +85,7 @@ public final class Payment {
         payment.reconcileAttempts = reconcileAttempts;
         payment.reconcileDueAt = reconcileDueAt;
         payment.escalatedAt = escalatedAt;
-        payment.unknownSince = unknownSince;
+        payment.unresolvedSince = unresolvedSince;
         return payment;
     }
 
@@ -97,15 +98,20 @@ public final class Payment {
         PaymentState previous = this.state;
         this.state = previous.transitionTo(target);
         this.updatedAt = Instant.now();
-        if (this.state == PaymentState.UNKNOWN) {
-            // A payment that just became UNKNOWN is due for the reconciler now, on a clean
-            // schedule. Clearing escalatedAt re-arms a payment that had been escalated and
-            // then cycled back through UNKNOWN; unknownSince starts this episode's window,
-            // so the earlier episode's elapsed time does not count against it.
+        if (this.state.isUnresolved()) {
+            // Entering, or hopping within, the states the reconciler chases. Re-arm the
+            // schedule so the next pass claims it: attempts back to zero, any escalation
+            // cleared, due now.
             this.reconcileAttempts = 0;
             this.reconcileDueAt = this.updatedAt;
             this.escalatedAt = null;
-            this.unknownSince = this.updatedAt;
+            // The escalation window is measured from when the payment became unresolved,
+            // not from each hop between SUBMITTED, PENDING and UNKNOWN — an operator that
+            // alternates two non-terminal answers would otherwise reset it every pass and
+            // the payment would never be escalated. Stamp it only on the way in.
+            if (!previous.isUnresolved()) {
+                this.unresolvedSince = this.updatedAt;
+            }
         }
         this.history.add(new PaymentTransition(previous, this.state, this.updatedAt, cause, operatorCode, note, rawResponse));
     }
@@ -176,11 +182,13 @@ public final class Payment {
     }
 
     /**
-     * When this payment entered {@code UNKNOWN} for the current episode — the instant the
-     * escalation window is measured from — or {@code null} if it never entered {@code UNKNOWN}.
+     * When this payment became unresolved — left {@code CREATED} for a non-terminal state —
+     * which is the instant the escalation window is measured from. Unchanged by later hops
+     * between {@code SUBMITTED}, {@code PENDING} and {@code UNKNOWN}. {@code null} for a
+     * payment that never left {@code CREATED} or went straight to a terminal state.
      */
-    public Instant unknownSince() {
-        return unknownSince;
+    public Instant unresolvedSince() {
+        return unresolvedSince;
     }
 
     /** The transitions so far, oldest first. Unmodifiable. */

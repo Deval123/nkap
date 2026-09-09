@@ -9,13 +9,13 @@ import java.time.Instant;
  *
  * <p>They are answered by different things. The interval is a function of the attempt
  * count — attempts are counted from one, attempt 1 being the first retry after the payment
- * reached {@code UNKNOWN} — doubling from {@code backoffBase} and capped at
- * {@code backoffMax}. The window is a function of the <strong>clock</strong>: it is spent
- * once {@code window} of wall-clock time has passed since the payment entered
- * {@code UNKNOWN}, regardless of how many passes ran in between. An earlier version summed
- * the theoretical intervals of the attempts made and called that the elapsed time; the two
- * only agree while every pass runs on schedule, and {@code nkap.reconciler.window} is
- * configured as a {@code Duration} that an operator reads as wall-clock time.
+ * became unresolved — doubling from {@code backoffBase} and capped at {@code backoffMax}.
+ * The window is a function of the <strong>clock</strong>: it is spent once {@code window}
+ * of wall-clock time has passed since the payment became unresolved, regardless of how
+ * many passes ran in between. An earlier version summed the theoretical intervals of the
+ * attempts made and called that the elapsed time; the two only agree while every pass runs
+ * on schedule, and {@code nkap.reconciler.window} is configured as a {@code Duration} that
+ * an operator reads as wall-clock time.
  */
 public final class ReconciliationPolicy {
 
@@ -50,18 +50,18 @@ public final class ReconciliationPolicy {
      * Whether the retry window has elapsed — the point at which the reconciler stops
      * retrying and escalates instead.
      *
-     * <p>{@code unknownSince} is when the payment entered {@code UNKNOWN}; {@code now} is
-     * the current instant. The window is spent once {@code window} has passed between them.
+     * <p>{@code unresolvedSince} is when the payment became unresolved; {@code now} is the
+     * current instant. The window is spent once {@code window} has passed between them.
      *
-     * <p>A {@code null} {@code unknownSince} — a payment that predates the column and
+     * <p>A {@code null} {@code unresolvedSince} — a payment that predates the column and
      * slipped past its backfill — is treated as exhausted: a payment nobody escalates is
      * the exact outcome the reconciler exists to prevent, so the safe failure is to hand
      * it to a human on its next unresolved attempt rather than to leave it forever.
      */
-    public boolean windowExhausted(Instant unknownSince, Instant now) {
-        if (unknownSince == null) {
+    public boolean windowExhausted(Instant unresolvedSince, Instant now) {
+        if (unresolvedSince == null) {
             return true;
         }
-        return Duration.between(unknownSince, now).compareTo(window) >= 0;
+        return Duration.between(unresolvedSince, now).compareTo(window) >= 0;
     }
 }

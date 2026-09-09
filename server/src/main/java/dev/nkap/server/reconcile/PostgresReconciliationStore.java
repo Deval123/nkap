@@ -21,25 +21,28 @@ import org.springframework.transaction.support.TransactionTemplate;
  */
 public final class PostgresReconciliationStore implements ReconciliationStore {
 
+    /** The three unresolved states, as a SQL list literal, shared by the claim and the escalate. */
+    private static final String UNRESOLVED_STATES = "('SUBMITTED', 'PENDING', 'UNKNOWN')";
+
     private static final String CLAIM_DUE = """
-            SELECT reference, provider, reconcile_attempts, unknown_since
+            SELECT reference, provider, reconcile_attempts, unresolved_since
               FROM payment
-             WHERE state = 'UNKNOWN'
+             WHERE state IN %s
                AND escalated_at IS NULL
                AND reconcile_due_at IS NOT NULL
                AND reconcile_due_at <= ?
              ORDER BY reconcile_due_at
              FOR UPDATE SKIP LOCKED
              LIMIT ?
-            """;
+            """.formatted(UNRESOLVED_STATES);
 
     private static final String ADVANCE_SCHEDULE =
             "UPDATE payment SET reconcile_attempts = ?, reconcile_due_at = ? WHERE reference = ?";
 
     private static final String ESCALATE = """
             UPDATE payment SET escalated_at = ?
-             WHERE reference = ? AND state = 'UNKNOWN' AND escalated_at IS NULL
-            """;
+             WHERE reference = ? AND state IN %s AND escalated_at IS NULL
+            """.formatted(UNRESOLVED_STATES);
 
     private final JdbcTemplate jdbc;
     private final TransactionTemplate tx;
@@ -63,7 +66,7 @@ public final class PostgresReconciliationStore implements ReconciliationStore {
                 OffsetDateTime nextDue = OffsetDateTime.ofInstant(
                         now.plus(policy.intervalForAttempt(attempts)), ZoneOffset.UTC);
                 jdbc.update(ADVANCE_SCHEDULE, attempts, nextDue, row.reference().value());
-                claimed.add(new Claim(ProviderId.of(row.provider()), row.reference(), attempts, row.unknownSince()));
+                claimed.add(new Claim(ProviderId.of(row.provider()), row.reference(), attempts, row.unresolvedSince()));
             }
             return claimed;
         });
@@ -76,14 +79,14 @@ public final class PostgresReconciliationStore implements ReconciliationStore {
         return Boolean.TRUE.equals(escalated);
     }
 
-    private record Due(ReferenceId reference, String provider, int attempts, Instant unknownSince) {
+    private record Due(ReferenceId reference, String provider, int attempts, Instant unresolvedSince) {
     }
 
     private static final RowMapper<Due> DUE_MAPPER = (ResultSet rs, int rowNum) -> new Due(
             new ReferenceId(rs.getObject("reference", UUID.class)),
             rs.getString("provider"),
             rs.getInt("reconcile_attempts"),
-            instantOrNull(rs.getObject("unknown_since", OffsetDateTime.class)));
+            instantOrNull(rs.getObject("unresolved_since", OffsetDateTime.class)));
 
     private static Instant instantOrNull(OffsetDateTime value) {
         return value == null ? null : value.toInstant();

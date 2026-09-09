@@ -1,6 +1,5 @@
 package dev.nkap.server.payment;
 
-import dev.nkap.core.payment.PaymentState;
 import dev.nkap.core.payment.ReferenceId;
 import java.util.Comparator;
 import java.util.List;
@@ -39,7 +38,7 @@ public final class InMemoryPaymentRepository implements PaymentRepository {
     @Override
     public List<Payment> findEscalated() {
         return byReference.values().stream()
-                .filter(payment -> payment.escalatedAt() != null && payment.state() == PaymentState.UNKNOWN)
+                .filter(payment -> payment.escalatedAt() != null && payment.state().isUnresolved())
                 .sorted(Comparator.comparing(Payment::escalatedAt))
                 .toList();
     }

@@ -19,26 +19,26 @@ import java.util.List;
 public interface ReconciliationStore {
 
     /**
-     * Claims up to {@code batch} payments that are {@code UNKNOWN}, not escalated, and due
-     * at or before {@code now}; advances each claimed payment's attempt count and next-due
-     * time by the policy; and returns what was claimed. One transaction, {@code FOR UPDATE
-     * SKIP LOCKED}.
+     * Claims up to {@code batch} payments that are unresolved ({@code SUBMITTED},
+     * {@code PENDING} or {@code UNKNOWN}), not escalated, and due at or before {@code now};
+     * advances each claimed payment's attempt count and next-due time by the policy; and
+     * returns what was claimed. One transaction, {@code FOR UPDATE SKIP LOCKED}.
      */
     List<Claim> claimDue(int batch, Instant now);
 
     /**
-     * Stamps {@code escalated_at} on a payment, but only if it is still {@code UNKNOWN} and
-     * not already escalated — so a payment a callback resolved between the claim and now is
-     * left alone. Returns whether it actually escalated.
+     * Stamps {@code escalated_at} on a payment, but only if it is still unresolved and not
+     * already escalated — so a payment resolved between the claim and now is left alone.
+     * Returns whether it actually escalated.
      */
     boolean markEscalated(ReferenceId reference, Instant at);
 
     /**
      * One claimed payment: which provider to ask, how many attempts it has now had, and
-     * when it entered {@code UNKNOWN} — the instant the escalation window is measured from.
-     * {@code unknownSince} is {@code null} only for a payment that predates the migration
-     * that added the column and slipped past its backfill.
+     * when it became unresolved — the instant the escalation window is measured from.
+     * {@code unresolvedSince} is {@code null} only for a payment that predates the column
+     * and slipped past its backfill.
      */
-    record Claim(ProviderId provider, ReferenceId reference, int attempts, Instant unknownSince) {
+    record Claim(ProviderId provider, ReferenceId reference, int attempts, Instant unresolvedSince) {
     }
 }

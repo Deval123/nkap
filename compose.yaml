@@ -1,0 +1,88 @@
+# `docker compose up` — PostgreSQL, the simulator and the gateway, built from source.
+#
+# This is the clone path: you check out the repository and build. Pulling a published
+# image is a separate roadmap line. Once the stack is up, run the demo:
+#
+#     docker compose up --build -d
+#     ./examples/demo.sh
+#
+# Nothing in this file is a secret. The MTN values are placeholders that point the
+# gateway at the simulator; a real deployment supplies its own through the environment.
+
+name: nkap
+
+services:
+  db:
+    image: postgres:16.6-alpine
+    environment:
+      POSTGRES_DB: nkap
+      POSTGRES_USER: nkap
+      # Not a secret: this database holds a demo and is not reachable from outside the
+      # compose network (no published port). A real deployment sets its own.
+      POSTGRES_PASSWORD: nkap
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nkap -d nkap"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  simulator:
+    build:
+      context: .
+      dockerfile: simulator/Dockerfile
+    ports:
+      - "8081:8081"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8081/_nkap/scenarios"]
+      interval: 2s
+      timeout: 3s
+      retries: 40
+
+  gateway:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    depends_on:
+      # Not "the container exists" — "the service answers". A first run that fails and
+      # works on the second is a first impression you do not get back.
+      db:
+        condition: service_healthy
+      simulator:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    environment:
+      NKAP_DB_URL: jdbc:postgresql://db:5432/nkap
+      NKAP_DB_USER: nkap
+      NKAP_DB_PASSWORD: nkap
+
+      # The MTN profile, pointed at the simulator. PLACEHOLDERS, not secrets — named so
+      # nobody mistakes them for something to keep. A real deployment provides real ones
+      # through these same environment variables.
+      NKAP_PROVIDER_MTN_BASE_URL: http://simulator:8081
+      NKAP_PROVIDER_MTN_TARGET_ENVIRONMENT: sandbox
+      NKAP_PROVIDER_MTN_SUBSCRIPTION_KEY: placeholder-not-a-real-subscription-key
+      NKAP_PROVIDER_MTN_API_USER: placeholder-not-a-real-api-user
+      NKAP_PROVIDER_MTN_API_KEY: placeholder-not-a-real-api-key
+      NKAP_PROVIDER_MTN_CURRENCY: EUR
+      NKAP_PROVIDER_MTN_COUNTRY: demoland
+
+      # Demo-only cadence, set here rather than in application.yml. The defaults there were
+      # chosen for a real deployment and their comments explain why; a fast loop makes the
+      # demo watchable in one sitting without pretending the production values are wrong.
+      #  - request-timeout: a submission that never answers should turn into UNKNOWN in
+      #    seconds here, not the 20s a real client would wait.
+      #  - the reconciler runs every few seconds with a few-second backoff, so the payment
+      #    resolves while someone is still watching the terminal.
+      #  - window is minutes, not a day, but still far longer than the demo runs — the demo
+      #    shows resolution, not escalation.
+      NKAP_PROVIDER_MTN_REQUEST_TIMEOUT: PT2S
+      NKAP_RECONCILER_INTERVAL: PT3S
+      NKAP_RECONCILER_BACKOFF_BASE: PT3S
+      NKAP_RECONCILER_BACKOFF_MAX: PT10S
+      NKAP_RECONCILER_WINDOW: PT2M
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8080/actuator/health"]
+      interval: 3s
+      timeout: 3s
+      retries: 40

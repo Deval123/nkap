@@ -64,15 +64,30 @@ A balance is never stored. It is the sum of an account's postings, so it can alw
 explained by pointing at the entries that produced it.
 
 ```
-Collection of 5 000 XAF for merchant acme, operator fee 100, platform fee 50
+A settled collection of 5 000 XAF for merchant acme — gross, two postings:
 
   provider:mtn:float:XAF          DR  5 000
-  merchant:acme:payable:XAF       CR  4 850
-  fees:mtn:XAF                    CR    100
-  fees:platform:XAF               CR     50
+  merchant:acme:payable:XAF       CR  5 000
+                                  ------------
+                                      0
+
+The operator's fee is a second entry, written when the statement says what it was:
+
+  fees:mtn:XAF                    DR    100
+  provider:mtn:float:XAF          CR    100
                                   ------------
                                       0
 ```
+
+The fee is not part of the settlement, and that is deliberate. A payment must be recordable
+from what the payment itself carries; an entry that needed a fee the operator may never send
+could not be written at all. The operator's statement is the authority on fees, and an entry
+added a day later is not a correction — it is a second entry about a second real event,
+which is what an append-only ledger is for. Nkap charges no fee of its own. See
+[ADR 0006](docs/adr/0006-what-a-settled-collection-posts.md).
+
+Where Nkap sits, and why it is not Mojaloop, not a ledger engine and not another
+unified API: [docs/positioning.md](docs/positioning.md).
 
 ## The rule that shapes everything else
 

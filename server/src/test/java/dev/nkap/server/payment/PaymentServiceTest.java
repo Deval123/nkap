@@ -34,7 +34,7 @@ class PaymentServiceTest {
     private final PaymentRepository payments = new InMemoryPaymentRepository();
     private final ProviderAdapter adapter = mock(ProviderAdapter.class);
     private final AdapterRegistry adapters = mock(AdapterRegistry.class);
-    private final PaymentService service = new PaymentService(payments, adapters);
+    private final PaymentService service = new PaymentService(payments, adapters, new ReferenceLocks());
 
     private static PaymentIntent intent() {
         return new PaymentIntent(Capability.COLLECT, Money.of(5000, Currency.EUR),
@@ -79,6 +79,29 @@ class PaymentServiceTest {
 
         assertThat(payment.state()).isEqualTo(PaymentState.PENDING);
         assertThat(payment.providerReference()).isEqualTo("op-ref");
+    }
+
+    @Test
+    @DisplayName("a submit response is dropped, not forced, when a callback already advanced the payment")
+    void a_stale_submit_response_is_not_applied() throws Exception {
+        when(adapters.require(MTN)).thenReturn(adapter);
+        // The callback path advances the payment out of CREATED while submit is in flight;
+        // then submit returns its (now stale) acknowledgement.
+        when(adapter.submit(any(), any())).thenAnswer(invocation -> {
+            ReferenceId reference = invocation.getArgument(1);
+            Payment inFlight = payments.findByReference(reference).orElseThrow();
+            inFlight.applyTransition(PaymentState.SUBMITTED, PaymentTransition.Cause.CALLBACK, "", "", "");
+            inFlight.applyTransition(PaymentState.SUCCEEDED, PaymentTransition.Cause.CALLBACK, "", "", "");
+            payments.save(inFlight);
+            return new SubmitResult.Acknowledged(PaymentState.SUBMITTED, "op-ref", "{}");
+        });
+
+        Payment payment = service.createAndSubmit(MTN, "merchant-1", intent());
+
+        assertThat(payment.state()).isEqualTo(PaymentState.SUCCEEDED);
+        assertThat(payment.providerReference()).isEqualTo("op-ref");
+        assertThat(payment.history()).extracting(t -> t.cause().name())
+                .containsExactly("CALLBACK", "CALLBACK");
     }
 
     @Test

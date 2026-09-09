@@ -3,14 +3,14 @@
 The Nkap gateway: the HTTP surface that assembles `core`, an adapter, and the payment
 lifecycle into something that runs.
 
-This is the **first vertical slice** (issue #30). A payment is created over HTTP, reaches
-the operator through the MTN adapter, and its state can be read back. **Nothing settles and
-nothing is written to the ledger** — only `SUCCEEDED` moves money, and no payment reaches
-`SUCCEEDED` without the callback path, which is the next slice.
+Two slices so far. The **first** (issue #30) creates a payment over HTTP, hands it to MTN
+and reads its state back. The **second** (issue #36) closes the loop: a callback confirmed
+by `query()` can carry a payment to `SUCCEEDED`, and settlement writes the first entries
+this project has ever put in the ledger.
 
 Stores are in memory. That is a step towards PostgreSQL, which implements the same
-interfaces (`IdempotencyStore`, `PaymentRepository`), not a feature: there is no flag that
-selects it and no documented mode.
+interfaces (`IdempotencyStore`, `PaymentRepository`, `Ledger`), not a feature: there is no
+flag that selects it and no documented mode.
 
 ## Endpoints
 
@@ -54,6 +54,58 @@ Reads stored state and the full transition history. It **does not call the opera
 read that hits a third party is a read that times out, and closing an `UNKNOWN` is the
 reconciler's job. `404` if unknown, `400` if the reference is not well-formed.
 
+### `POST /callbacks/{providerId}`
+
+The operator's webhook. It is **unauthenticated** — MTN sends no signature we have
+observed — and safe anyway because it settles nothing by itself: a callback is a hint that
+asking is now worthwhile, and `adapter.query()` is the only authority. The worst a forged
+callback achieves is making the gateway ask a question it was entitled to ask.
+
+- **202** whenever the gateway took responsibility for the message — **including a callback
+  naming a reference it never issued**. A `404` there would let a caller probe which
+  references exist. Nothing is written for an unknown or untrusted callback.
+- **400** only when the body cannot be parsed as that provider's callback. That says
+  nothing about our data.
+- **404** when `{providerId}` names no configured adapter.
+
+For a callback that names a payment we hold, the gateway calls `query()` and applies its
+answer, cause `CALLBACK`:
+
+- a definite `SUCCEEDED` settles the payment and posts to the ledger (below); `FAILED` /
+  `EXPIRED` are recorded and post nothing;
+- if the query does not answer, or answers `UNKNOWN`, **nothing changes** — a failed second
+  opinion must not erase what we already knew;
+- a callback that arrives before the submit response finds the payment in `CREATED`. It
+  records `CREATED → SUBMITTED` first — receiving a callback proves the operator has the
+  request — then the confirmed state. Two transitions, both true; the state machine is not
+  widened.
+
+Read-decide-write is serialised per reference (an in-process lock; PostgreSQL will use
+`SELECT … FOR UPDATE` on the payment row).
+
+**The gateway does not tell MTN where to send callbacks.** The callback URL is configured
+on the MTN product; `POST /callbacks/mtn` is that URL. Sending `X-Callback-Url` per request
+waits until the gateway knows its own public address — deployment configuration, a later
+change.
+
+**Authenticating this endpoint is deferred to its own issue.** For MTN it means source-IP
+allow-listing, which is deployment configuration rather than code. Confirm-by-query is what
+keeps the endpoint safe until then.
+
+### Settlement — what a `SUCCEEDED` collection posts
+
+Per ADR 0006, the **gross** amount, two postings, in the payment's currency:
+
+```
+DR  provider:<providerId>:float:<CCY>     amount
+CR  merchant:<merchantId>:payable:<CCY>   amount
+```
+
+No fee posting — operator fees arrive later through statement reconciliation, and
+`ProviderStatus.providerFee` is recorded on the payment but never reaches the ledger.
+Exactly-once is structural: the entry id is derived from the reference, so a second
+settlement is refused by `Ledger.append`, not written twice.
+
 ## Errors
 
 `application/problem+json` (RFC 7807) for every error, from one `@RestControllerAdvice`,
@@ -78,7 +130,9 @@ A missing value leaves the field blank and the context refuses to start — a cl
 at boot rather than the first payment failing. Which provider a `POST /payments` routes to
 is `nkap.provider.default` (`mtn`); routing by country arrives with multi-country support.
 
-## Not in this slice
+## Not in these slices
 
-The ledger, operator fees (an accounting decision that deserves an ADR), callbacks,
-PostgreSQL, disbursements, balance, holder validation, the reconciler.
+Outgoing webhooks, the reconciler, statement reconciliation and operator fees, refunds,
+disbursements, balance, holder validation, PostgreSQL, authenticating the callback endpoint
+(its own issue — source-IP allow-listing, deployment configuration). No payment reaches
+`SUCCEEDED` without a callback and a confirming `query()`.

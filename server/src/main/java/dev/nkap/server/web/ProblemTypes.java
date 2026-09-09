@@ -37,6 +37,12 @@ public final class ProblemTypes {
     /** The addressed deployment does not settle the currency the request asked for. */
     public static final URI UNSERVED_CURRENCY = URI.create(BASE + "unserved-currency");
 
+    /** The path segment of {@code POST /callbacks/{providerId}} names a provider this server has no adapter for. */
+    public static final URI UNKNOWN_CALLBACK_PROVIDER = URI.create(BASE + "unknown-callback-provider");
+
+    /** A callback body could not be parsed as the named provider's callback. */
+    public static final URI UNPARSEABLE_CALLBACK = URI.create(BASE + "unparseable-callback");
+
     private ProblemTypes() {
     }
 }

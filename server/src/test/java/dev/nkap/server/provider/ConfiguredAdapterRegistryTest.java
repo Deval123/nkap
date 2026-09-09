@@ -9,7 +9,6 @@ import dev.nkap.core.money.Currency;
 import dev.nkap.provider.ProviderAdapter;
 import dev.nkap.provider.ProviderId;
 import java.util.List;
-import java.util.NoSuchElementException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -32,12 +31,12 @@ class ConfiguredAdapterRegistryTest {
     }
 
     @Test
-    @DisplayName("require on an unconfigured provider fails loudly, naming what is configured")
+    @DisplayName("require on an unconfigured provider throws its own type, with the configured ids kept for the log")
     void require_on_an_unknown_provider_throws() {
         AdapterRegistry registry = new ConfiguredAdapterRegistry(List.of(adapterFor("mtn")), List.of());
 
         assertThatThrownBy(() -> registry.require(ProviderId.of("orange")))
-                .isInstanceOf(NoSuchElementException.class)
+                .isInstanceOf(NoAdapterConfiguredException.class)
                 .hasMessageContaining("orange")
                 .hasMessageContaining("mtn");
         assertThat(registry.find(ProviderId.of("orange"))).isEmpty();

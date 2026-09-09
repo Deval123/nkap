@@ -17,7 +17,7 @@ public interface AdapterRegistry {
 
     Optional<ProviderAdapter> find(ProviderId id);
 
-    /** The adapter for {@code id}, or an unchecked failure if none is configured. */
+    /** The adapter for {@code id}, or {@link NoAdapterConfiguredException} if none is configured. */
     ProviderAdapter require(ProviderId id);
 
     /**

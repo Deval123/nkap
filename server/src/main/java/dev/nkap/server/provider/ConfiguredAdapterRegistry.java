@@ -6,7 +6,6 @@ import dev.nkap.provider.ProviderId;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.NoSuchElementException;
 import java.util.Optional;
 import org.springframework.stereotype.Component;
 
@@ -49,8 +48,7 @@ public final class ConfiguredAdapterRegistry implements AdapterRegistry {
     public ProviderAdapter require(ProviderId id) {
         ProviderAdapter adapter = byId.get(id);
         if (adapter == null) {
-            throw new NoSuchElementException("no adapter is configured for provider " + id
-                    + "; configured: " + byId.keySet());
+            throw new NoAdapterConfiguredException(id, byId.keySet());
         }
         return adapter;
     }

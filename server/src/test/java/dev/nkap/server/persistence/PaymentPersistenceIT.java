@@ -2,6 +2,7 @@ package dev.nkap.server.persistence;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.within;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.nkap.core.idempotency.IdempotencyKey;
@@ -79,7 +80,10 @@ class PaymentPersistenceIT {
         assertThat(read.intent().operation()).isEqualTo(Capability.COLLECT);
         assertThat(read.intent().amount()).isEqualTo(Money.of(5_000, Currency.EUR));
         assertThat(read.intent().counterpartyMsisdn()).isEqualTo("46733123453");
-        assertThat(read.createdAt()).isEqualTo(written.createdAt().truncatedTo(ChronoUnit.MICROS));
+        // Instant.now() carries nanoseconds; timestamptz keeps microseconds and rounds to the
+        // nearest, so the round-trip can differ from the original by up to half a microsecond.
+        // What "read back identical" means for a timestamp is "to the precision the column has".
+        assertThat(read.createdAt()).isCloseTo(written.createdAt(), within(1, ChronoUnit.MICROS));
         assertThat(read.history()).hasSize(2);
         assertThat(read.history().get(0).from()).isEqualTo(PaymentState.CREATED);
         assertThat(read.history().get(0).to()).isEqualTo(PaymentState.SUBMITTED);

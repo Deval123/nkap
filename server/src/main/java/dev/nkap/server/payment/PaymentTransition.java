@@ -27,7 +27,11 @@ public record PaymentTransition(
         String note,
         String rawResponse) {
 
-    /** What moved a payment. Only {@link #SUBMIT_RESPONSE} occurs in the first slice. */
+    /**
+     * What moved a payment. {@link #SUBMIT_RESPONSE} and {@link #CALLBACK} occur so far —
+     * the latter for a transition a confirmed callback produced. {@link #QUERY} and
+     * {@link #RECONCILER} arrive with the reconciler.
+     */
     public enum Cause {
         SUBMIT_RESPONSE,
         QUERY,

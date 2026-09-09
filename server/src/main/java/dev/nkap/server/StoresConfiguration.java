@@ -2,6 +2,8 @@ package dev.nkap.server;
 
 import dev.nkap.core.idempotency.IdempotencyStore;
 import dev.nkap.core.idempotency.InMemoryIdempotencyStore;
+import dev.nkap.core.ledger.InMemoryLedger;
+import dev.nkap.core.ledger.Ledger;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -19,5 +21,10 @@ class StoresConfiguration {
     @Bean
     IdempotencyStore idempotencyStore() {
         return new InMemoryIdempotencyStore();
+    }
+
+    @Bean
+    Ledger ledger() {
+        return new InMemoryLedger();
     }
 }

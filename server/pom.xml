@@ -87,7 +87,9 @@
         *Test  -> surefire, unit and web-slice tests, no Docker.
         *IT    -> failsafe, Testcontainers against a real PostgreSQL. Each *IT is
         skipped when Docker is unavailable (see DockerAvailable), so `mvn verify`
-        stays green on a machine without Docker; CI (ubuntu-latest) has it.
+        stays green on a developer machine without Docker. CI (ubuntu-latest) has Docker
+        and passes -Dnkap.docker.required=true, which turns a missing Docker into a
+        build failure instead of a silent skip — see DockerAvailable's javadoc.
       -->
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>

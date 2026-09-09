@@ -37,6 +37,22 @@
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-maven-plugin</artifactId>
         <version>${spring-boot.version}</version>
+        <executions>
+          <!--
+            The runnable, layered jar the Dockerfile packages. A classifier keeps it
+            beside the plain jar, which the server module still depends on as a test
+            library — a fat jar there would not resolve.
+          -->
+          <execution>
+            <id>repackage-boot-jar</id>
+            <goals>
+              <goal>repackage</goal>
+            </goals>
+            <configuration>
+              <classifier>boot</classifier>
+            </configuration>
+          </execution>
+        </executions>
       </plugin>
     </plugins>
   </build>

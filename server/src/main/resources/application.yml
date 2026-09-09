@@ -22,6 +22,14 @@ spring:
     problemdetails:
       enabled: true
 
+management:
+  endpoints:
+    web:
+      exposure:
+        # Only the health check the compose file polls. Nothing else is exposed — metrics
+        # and the rest of Actuator are a separate roadmap line.
+        include: health
+
 nkap:
   reconciler:
     # The reconciler and its scheduler. Off means UNKNOWN payments are never chased —

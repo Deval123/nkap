@@ -130,6 +130,45 @@ FROM payment WHERE escalated_at IS NOT NULL AND state = 'UNKNOWN' ORDER BY escal
 milliseconds, without a container or a database — which is what makes an outside
 contribution to the ledger reviewable.
 
+## Quick start
+
+Requires Docker. No JDK.
+
+```bash
+git clone https://github.com/Deval123/nkap
+cd nkap
+docker compose up --build -d      # builds the gateway and the simulator from source
+./examples/demo.sh
+```
+
+`examples/demo.sh` puts one payment through the failure this project exists for, and
+asserts every step:
+
+1. the operator is scripted to accept the submission and then go **silent**;
+2. `POST /payments` returns **202** and the payment is `UNKNOWN` — not `FAILED`, because
+   nothing answered and the gateway does not guess;
+3. `GET /payments/{reference}` confirms `UNKNOWN`, and the ledger has **no entry**;
+4. the reconciler re-queries the operator on a demo-fast cadence — the first re-query still
+   fails, the next succeeds — or the late callback gets there first;
+5. the payment resolves to `SUCCEEDED`: **one** ledger entry, **two** postings, summing to
+   **zero**.
+
+The network dropped at the worst possible moment and the accounting truth was not lost.
+Nothing in the run is staged: it is the real gateway, the real reconciler, and a real
+PostgreSQL enforcing the ledger's invariants as constraints — the zero-sum check that
+prints at the end is the database's, not the script's.
+
+```bash
+docker compose down -v            # stop, and wipe the database
+```
+
+From a cold clone — no build cache, base images not yet pulled — `docker compose up
+--build` takes about half a minute on a fast connection; most of the variable part is the
+one-time download of the build's dependencies (~1000 artifacts) inside the image, so a
+slow link makes the first run longer. Later runs reuse the layers. The demo itself
+finishes in about five seconds. `compose.yaml` builds from source — a published image you
+can pull without a checkout is a later step on the [roadmap](#roadmap).
+
 ## Build
 
 Requires JDK 21 and Maven 3.9+.

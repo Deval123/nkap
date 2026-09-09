@@ -1,0 +1,18 @@
+# The image build needs the Maven reactor and nothing else. Keeping docs, the compose
+# file and the demo script out of the context means editing any of them does not bust
+# the image build cache.
+.git/
+.github/
+.idea/
+.vscode/
+**/target/
+*.iml
+*.md
+docs/
+examples/
+compose.yaml
+**/Dockerfile
+.dockerignore
+.gitignore
+.DS_Store
+PLAN.md

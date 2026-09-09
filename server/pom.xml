@@ -29,6 +29,15 @@
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-web</artifactId>
     </dependency>
+    <!--
+      Actuator is here for one endpoint: /actuator/health, which the compose file's
+      health check polls so the stack starts in order. Only `health` is exposed (see
+      application.yml). Metrics are a separate roadmap line and are not turned on here.
+    -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-actuator</artifactId>
+    </dependency>
 
     <!-- The state lives in PostgreSQL: plain SQL through JdbcTemplate, Flyway for the schema. -->
     <dependency>
@@ -107,6 +116,23 @@
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-maven-plugin</artifactId>
         <version>${spring-boot.version}</version>
+        <executions>
+          <!--
+            The runnable, layered jar the Dockerfile packages. A classifier keeps it
+            beside the plain jar rather than replacing it: the project uses the Spring
+            Boot BOM, not the starter parent, so repackage is opt-in and this is where
+            it is opted into.
+          -->
+          <execution>
+            <id>repackage-boot-jar</id>
+            <goals>
+              <goal>repackage</goal>
+            </goals>
+            <configuration>
+              <classifier>boot</classifier>
+            </configuration>
+          </execution>
+        </executions>
       </plugin>
     </plugins>
   </build>

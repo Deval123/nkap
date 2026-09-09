@@ -80,19 +80,135 @@ class ReconcilerIT {
         ledger = new PostgresLedger(jdbc, txManager);
     }
 
+    // === the window is wall-clock time since the payment became UNKNOWN, not a sum of attempts ===
+
+    @Test
+    @DisplayName("a payment UNKNOWN for less than the window is retried and not escalated, however many attempts it has")
+    void within_the_window_it_is_retried_not_escalated_whatever_the_attempt_count() {
+        // window: one hour. The clock is ten minutes past the moment the payment became
+        // UNKNOWN — well inside — but fifty passes have been recorded, as a crash loop
+        // that claims and advances the count without any real waiting would leave it.
+        ReconcilerProperties properties = new ReconcilerProperties(
+                Duration.ofSeconds(30), 50,
+                Duration.ofMinutes(1), Duration.ofHours(1), Duration.ofHours(1));
+        Instant unknownSince = Instant.now().truncatedTo(ChronoUnit.SECONDS);
+        AdjustableClock clock = new AdjustableClock(unknownSince.plus(Duration.ofMinutes(10)));
+        Reconciler reconciler = reconcilerWith(properties, operatorThatIsSilent(), clock);
+
+        ReferenceId reference = anUnknownPaymentDueForReconciliation();
+        jdbc.update("UPDATE payment SET reconcile_attempts = 50, unknown_since = ?, reconcile_due_at = ? "
+                        + "WHERE reference = ?",
+                OffsetDateTime.ofInstant(unknownSince, ZoneOffset.UTC),
+                OffsetDateTime.ofInstant(unknownSince.minus(Duration.ofMinutes(1)), ZoneOffset.UTC),
+                reference.value());
+
+        reconciler.runOnce();
+
+        Map<String, Object> row = paymentRow(reference);
+        assertThat(row.get("escalated_at"))
+                .as("ten minutes into a one-hour window, no attempt count escalates the payment")
+                .isNull();
+        assertThat(row.get("state")).isEqualTo(PaymentState.UNKNOWN.name());
+        assertThat(((Number) row.get("reconcile_attempts")).intValue()).as("it was retried").isEqualTo(51);
+        assertThat(reconcileDueAt(reference)).as("the next attempt is scheduled").isAfter(clock.instant());
+    }
+
+    @Test
+    @DisplayName("a payment UNKNOWN for longer than the window is escalated on its next unresolved attempt, and stays UNKNOWN")
+    void past_the_window_it_is_escalated_on_the_next_unresolved_attempt() {
+        // window: one hour. Only one pass has been recorded, but the clock is two hours
+        // past the moment the payment became UNKNOWN. The elapsed time escalates it, not
+        // the count.
+        ReconcilerProperties properties = new ReconcilerProperties(
+                Duration.ofSeconds(30), 50,
+                Duration.ofMinutes(1), Duration.ofHours(1), Duration.ofHours(1));
+        Instant unknownSince = Instant.now().truncatedTo(ChronoUnit.SECONDS);
+        AdjustableClock clock = new AdjustableClock(unknownSince.plus(Duration.ofHours(2)));
+        Reconciler reconciler = reconcilerWith(properties, operatorThatIsSilent(), clock);
+
+        ReferenceId reference = anUnknownPaymentDueForReconciliation();
+        jdbc.update("UPDATE payment SET reconcile_attempts = 1, unknown_since = ?, reconcile_due_at = ? "
+                        + "WHERE reference = ?",
+                OffsetDateTime.ofInstant(unknownSince, ZoneOffset.UTC),
+                OffsetDateTime.ofInstant(unknownSince.plus(Duration.ofMinutes(1)), ZoneOffset.UTC),
+                reference.value());
+
+        reconciler.runOnce();
+
+        Map<String, Object> row = paymentRow(reference);
+        assertThat(row.get("escalated_at")).as("two hours into a one-hour window, it is escalated").isNotNull();
+        assertThat(row.get("state")).isEqualTo(PaymentState.UNKNOWN.name());
+        assertThat(statesEverReached(reference))
+                .as("escalation is not a verdict — never FAILED")
+                .doesNotContain(PaymentState.FAILED.name());
+    }
+
+    @Test
+    @DisplayName("past the window, the confirming call still happens first: a resolving answer settles the payment instead of escalating")
+    void a_confirming_call_past_the_window_can_still_resolve_instead_of_escalate() {
+        ReconcilerProperties properties = new ReconcilerProperties(
+                Duration.ofSeconds(30), 50, Duration.ofMinutes(1), Duration.ofHours(1), Duration.ofSeconds(1));
+        Reconciler reconciler = reconcilerWith(properties, operatorAnswering(new ProviderStatus(
+                PaymentState.SUCCEEDED, "SUCCESSFUL", "txn-last", null, "", "{\"status\":\"SUCCESSFUL\"}")));
+
+        ReferenceId reference = anUnknownPaymentDueForReconciliation();
+        jdbc.update("UPDATE payment SET unknown_since = now() - interval '1 hour' WHERE reference = ?",
+                reference.value());
+
+        reconciler.runOnce();
+
+        Map<String, Object> row = paymentRow(reference);
+        assertThat(row.get("state")).as("the last try resolved it").isEqualTo(PaymentState.SUCCEEDED.name());
+        assertThat(row.get("escalated_at")).as("a resolved payment is never escalated, window spent or not").isNull();
+        assertThat(ledger.entriesForReference(reference.toString())).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("a payment that leaves UNKNOWN and re-enters it starts a fresh window; the earlier episode does not count")
+    void re_entering_unknown_starts_a_fresh_window() {
+        ReconcilerProperties properties = new ReconcilerProperties(
+                Duration.ofSeconds(30), 50, Duration.ofMinutes(1), Duration.ofHours(1), Duration.ofHours(1));
+        Reconciler reconciler = reconcilerWith(properties, operatorThatIsSilent());
+
+        ReferenceId reference = anUnknownPaymentDueForReconciliation();
+        // The first episode started two hours ago — well past the one-hour window.
+        jdbc.update("UPDATE payment SET unknown_since = now() - interval '2 hours' WHERE reference = ?",
+                reference.value());
+
+        // The payment is resolved, then times out again: a second, fresh episode.
+        Payment payment = payments.findByReference(reference).orElseThrow();
+        payment.applyTransition(PaymentState.PENDING, PaymentTransition.Cause.CALLBACK, "PENDING", "", "");
+        payment.applyTransition(PaymentState.UNKNOWN, PaymentTransition.Cause.QUERY, "", "timed out again", "");
+        payments.save(payment);
+        jdbc.update("UPDATE payment SET reconcile_due_at = now() - interval '1 minute' WHERE reference = ?",
+                reference.value());
+
+        reconciler.runOnce();
+
+        Map<String, Object> row = paymentRow(reference);
+        assertThat(row.get("escalated_at"))
+                .as("the fresh episode is seconds old — the two-hour-old one does not count")
+                .isNull();
+        assertThat(row.get("state")).isEqualTo(PaymentState.UNKNOWN.name());
+        assertThat(unknownSince(reference)).as("unknown_since was re-stamped for the new episode")
+                .isAfter(Instant.now().minus(Duration.ofMinutes(5)));
+    }
+
     // === 4. the one that matters most, written first =================================
 
     @Test
     @DisplayName("when the reconciliation window expires the payment is escalated, stays UNKNOWN, and is never FAILED")
     void an_expired_window_escalates_and_never_yields_failed() {
-        // The window is one second; the first backoff is ten minutes. The first attempt
-        // already spends the whole window, so this pass is the one that escalates.
+        // The window is one second and the payment has been UNKNOWN for an hour, so this
+        // pass is the one that escalates.
         ReconcilerProperties properties = new ReconcilerProperties(
                 Duration.ofSeconds(30), 50,
                 Duration.ofMinutes(10), Duration.ofMinutes(10), Duration.ofSeconds(1));
         Reconciler reconciler = reconcilerWith(properties, operatorThatIsSilent());
 
         ReferenceId reference = anUnknownPaymentDueForReconciliation();
+        jdbc.update("UPDATE payment SET unknown_since = now() - interval '1 hour' WHERE reference = ?",
+                reference.value());
 
         reconciler.runOnce();
 
@@ -189,6 +305,8 @@ class ReconcilerIT {
         Reconciler reconciler = reconcilerWith(properties, registryFor(silentOperator));
 
         ReferenceId reference = anUnknownPaymentDueForReconciliation();
+        jdbc.update("UPDATE payment SET unknown_since = now() - interval '1 hour' WHERE reference = ?",
+                reference.value());
 
         reconciler.runOnce();                       // one query, then escalates
         assertThat(paymentRow(reference).get("escalated_at")).isNotNull();
@@ -348,6 +466,11 @@ class ReconcilerIT {
 
     private static Instant reconcileDueAt(ReferenceId reference) {
         return jdbc.queryForObject("SELECT reconcile_due_at FROM payment WHERE reference = ?",
+                OffsetDateTime.class, reference.value()).toInstant();
+    }
+
+    private static Instant unknownSince(ReferenceId reference) {
+        return jdbc.queryForObject("SELECT unknown_since FROM payment WHERE reference = ?",
                 OffsetDateTime.class, reference.value()).toInstant();
     }
 

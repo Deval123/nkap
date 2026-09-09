@@ -41,10 +41,14 @@ nkap:
     # The ceiling on a single interval, so backoff does not stretch to days. Once here, the
     # reconciler keeps checking at this cadence until the window runs out.
     backoff-max: 1h
-    # How long to keep retrying before escalating to a human. Too short escalates payments
-    # that would have resolved on their own — a slow payer, an operator catching up — and
-    # trains people to wave escalations away; too long delays a real investigation. It is a
-    # deadline for a human to look, not a verdict: the payment stays UNKNOWN either way.
+    # How long a payment may stay UNKNOWN before it is handed to a human. This is
+    # wall-clock time since the payment became UNKNOWN — measured from a timestamp on the
+    # row, not inferred from how many reconciler passes have run, so a day-long outage or a
+    # restart loop does not shift it. Too short escalates payments that would have resolved
+    # on their own — a slow payer, an operator catching up — and trains people to wave
+    # escalations away; too long leaves money that may be stuck unexamined for that whole
+    # time. It is a deadline for a human to look, not a verdict: the payment stays UNKNOWN
+    # either way, and a later callback or query can still resolve it.
     window: 24h
   provider:
     # The provider a POST /payments is routed to. Routing by country arrives with

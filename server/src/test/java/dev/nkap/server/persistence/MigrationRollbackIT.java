@@ -31,7 +31,8 @@ import org.testcontainers.containers.PostgreSQLContainer;
 class MigrationRollbackIT {
 
     /** The migrations that have a hand-written inverse, oldest first. */
-    private static final List<String> MIGRATIONS = List.of("V1__initial_schema", "V2__reconciler_schedule");
+    private static final List<String> MIGRATIONS = List.of(
+            "V1__initial_schema", "V2__reconciler_schedule", "V3__reconciler_window_is_a_duration");
 
     @Test
     @DisplayName("running every inverse newest-first returns the schema to empty, and the database is migratable again")
@@ -71,8 +72,11 @@ class MigrationRollbackIT {
             Set<String> paymentColumnsAfterV1 = columnsOf(jdbc, "payment");
 
             migrate(postgres);
+            // Peel back to V2 first, so this test is about the V2 inverse alone.
+            jdbc.execute(inverseOf("V3__reconciler_window_is_a_duration"));
             assertThat(columnsOf(jdbc, "payment"))
-                    .contains("reconcile_attempts", "reconcile_due_at", "escalated_at");
+                    .contains("reconcile_attempts", "reconcile_due_at", "escalated_at")
+                    .doesNotContain("unknown_since");
             assertThat(indexesOf(jdbc, "payment")).contains("payment_reconcile_due_idx");
 
             jdbc.execute(inverseOf("V2__reconciler_schedule"));
@@ -81,9 +85,35 @@ class MigrationRollbackIT {
             assertThat(columnsOf(jdbc, "payment")).isEqualTo(paymentColumnsAfterV1);
             assertThat(indexesOf(jdbc, "payment")).doesNotContain("payment_reconcile_due_idx");
 
-            // V2 forward again — the inverse removed its history row.
+            // Forward again — both inverses removed their history rows.
             migrate(postgres);
             assertThat(columnsOf(jdbc, "payment")).contains("reconcile_due_at");
+        }
+    }
+
+    @Test
+    @DisplayName("the inverse of V3 removes exactly the unknown_since column, leaving the V2 schema intact")
+    void the_inverse_of_v3_returns_the_schema_to_v2() throws IOException {
+        try (PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>(PostgresDatabase.IMAGE)) {
+            postgres.start();
+            JdbcTemplate jdbc = jdbcFor(postgres);
+
+            migrateTo(postgres, "2");
+            Set<String> afterV2 = schemaObjects(jdbc);
+            Set<String> paymentColumnsAfterV2 = columnsOf(jdbc, "payment");
+            assertThat(paymentColumnsAfterV2).doesNotContain("unknown_since");
+
+            migrate(postgres);
+            assertThat(columnsOf(jdbc, "payment")).contains("unknown_since");
+
+            jdbc.execute(inverseOf("V3__reconciler_window_is_a_duration"));
+
+            assertThat(schemaObjects(jdbc)).isEqualTo(afterV2);
+            assertThat(columnsOf(jdbc, "payment")).isEqualTo(paymentColumnsAfterV2);
+
+            // V3 forward again — the inverse removed its history row.
+            migrate(postgres);
+            assertThat(columnsOf(jdbc, "payment")).contains("unknown_since");
         }
     }
 

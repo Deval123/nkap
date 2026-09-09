@@ -13,7 +13,9 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  *                    turn one pass into a storm of operator calls
  * @param backoffBase the delay before the first retry; each subsequent retry doubles it
  * @param backoffMax  the ceiling on a single interval, so backoff does not grow without limit
- * @param window      the total time to keep retrying a payment before escalating it to a human
+ * @param window      wall-clock time a payment may stay {@code UNKNOWN} before it is escalated
+ *                    to a human — measured from when it became {@code UNKNOWN}, not from the
+ *                    number of passes that have run
  */
 @ConfigurationProperties("nkap.reconciler")
 public record ReconcilerProperties(

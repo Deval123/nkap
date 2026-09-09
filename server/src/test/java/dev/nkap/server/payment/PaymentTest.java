@@ -92,7 +92,7 @@ class PaymentTest {
     }
 
     @Test
-    @DisplayName("entering UNKNOWN arms the reconciler: due now, no attempts yet, not escalated")
+    @DisplayName("entering UNKNOWN arms the reconciler: due now, no attempts yet, not escalated, window starts now")
     void entering_unknown_arms_the_reconciler_schedule() {
         Payment payment = newPayment();
 
@@ -101,6 +101,7 @@ class PaymentTest {
         assertThat(payment.reconcileAttempts()).isZero();
         assertThat(payment.reconcileDueAt()).isEqualTo(payment.updatedAt());
         assertThat(payment.escalatedAt()).isNull();
+        assertThat(payment.unknownSince()).isEqualTo(payment.updatedAt());
     }
 
     @Test

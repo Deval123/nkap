@@ -33,7 +33,12 @@ public interface ReconciliationStore {
      */
     boolean markEscalated(ReferenceId reference, Instant at);
 
-    /** One claimed payment: which provider to ask, and how many attempts it has now had. */
-    record Claim(ProviderId provider, ReferenceId reference, int attempts) {
+    /**
+     * One claimed payment: which provider to ask, how many attempts it has now had, and
+     * when it entered {@code UNKNOWN} — the instant the escalation window is measured from.
+     * {@code unknownSince} is {@code null} only for a payment that predates the migration
+     * that added the column and slipped past its backfill.
+     */
+    record Claim(ProviderId provider, ReferenceId reference, int attempts, Instant unknownSince) {
     }
 }

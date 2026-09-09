@@ -22,7 +22,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 public final class PostgresReconciliationStore implements ReconciliationStore {
 
     private static final String CLAIM_DUE = """
-            SELECT reference, provider, reconcile_attempts
+            SELECT reference, provider, reconcile_attempts, unknown_since
               FROM payment
              WHERE state = 'UNKNOWN'
                AND escalated_at IS NULL
@@ -63,7 +63,7 @@ public final class PostgresReconciliationStore implements ReconciliationStore {
                 OffsetDateTime nextDue = OffsetDateTime.ofInstant(
                         now.plus(policy.intervalForAttempt(attempts)), ZoneOffset.UTC);
                 jdbc.update(ADVANCE_SCHEDULE, attempts, nextDue, row.reference().value());
-                claimed.add(new Claim(ProviderId.of(row.provider()), row.reference(), attempts));
+                claimed.add(new Claim(ProviderId.of(row.provider()), row.reference(), attempts, row.unknownSince()));
             }
             return claimed;
         });
@@ -76,11 +76,16 @@ public final class PostgresReconciliationStore implements ReconciliationStore {
         return Boolean.TRUE.equals(escalated);
     }
 
-    private record Due(ReferenceId reference, String provider, int attempts) {
+    private record Due(ReferenceId reference, String provider, int attempts, Instant unknownSince) {
     }
 
     private static final RowMapper<Due> DUE_MAPPER = (ResultSet rs, int rowNum) -> new Due(
             new ReferenceId(rs.getObject("reference", UUID.class)),
             rs.getString("provider"),
-            rs.getInt("reconcile_attempts"));
+            rs.getInt("reconcile_attempts"),
+            instantOrNull(rs.getObject("unknown_since", OffsetDateTime.class)));
+
+    private static Instant instantOrNull(OffsetDateTime value) {
+        return value == null ? null : value.toInstant();
+    }
 }

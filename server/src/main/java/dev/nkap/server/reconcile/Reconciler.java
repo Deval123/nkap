@@ -83,7 +83,7 @@ public class Reconciler {
             if (outcome.resolved()) {
                 continue;
             }
-            if (policy.windowExhausted(claim.attempts()) && store.markEscalated(claim.reference(), now)) {
+            if (policy.windowExhausted(claim.unknownSince(), now) && store.markEscalated(claim.reference(), now)) {
                 log.warn("payment {} escalated to a human after {} reconciler attempt(s); operator's last answer: {}",
                         claim.reference(), claim.attempts(), outcome.lastOperatorAnswer());
             }

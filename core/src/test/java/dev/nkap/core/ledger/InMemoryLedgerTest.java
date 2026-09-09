@@ -49,6 +49,19 @@ class InMemoryLedgerTest {
     }
 
     @Test
+    @DisplayName("a duplicate id raises the duplicate-specific exception, and it is still a LedgerInvariantViolation")
+    void duplicateRaisesTheDuplicateSpecificException() {
+        ledger.append(collection("e-1", 5_000));
+
+        DuplicateLedgerEntryException thrown = assertThrows(DuplicateLedgerEntryException.class,
+                () -> ledger.append(collection("e-1", 9_000)));
+
+        assertEquals("e-1", thrown.entryId());
+        assertTrue(thrown instanceof LedgerInvariantViolation, "callers catching the parent must be unaffected");
+        assertEquals(1, ledger.entries().size());
+    }
+
+    @Test
     @DisplayName("entries can be traced back to the payment that produced them")
     void findsEntriesByReference() {
         ledger.append(collection("e-1", 5_000));

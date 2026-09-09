@@ -7,6 +7,7 @@ import dev.nkap.provider.ProviderId;
 import dev.nkap.provider.RawCallback;
 import dev.nkap.provider.UntrustedCallbackException;
 import dev.nkap.server.payment.PaymentRepository;
+import dev.nkap.server.payment.PaymentTransition;
 import dev.nkap.server.payment.SettlementService;
 import dev.nkap.server.provider.AdapterRegistry;
 import java.util.Map;
@@ -91,7 +92,7 @@ class CallbackController {
             return ResponseEntity.accepted().build();
         }
 
-        settlement.confirm(id, reference);
+        settlement.confirm(id, reference, PaymentTransition.Cause.CALLBACK);
         return ResponseEntity.accepted().build();
     }
 

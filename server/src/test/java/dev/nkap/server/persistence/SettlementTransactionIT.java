@@ -101,7 +101,7 @@ class SettlementTransactionIT {
 
         SettlementService settlement = new SettlementService(failsRightAfterTheLedgerWrite, adapters, ledger, txManager);
 
-        assertThatThrownBy(() -> settlement.confirm(ProviderId.of("mtn"), reference))
+        assertThatThrownBy(() -> settlement.confirm(ProviderId.of("mtn"), reference, PaymentTransition.Cause.CALLBACK))
                 .isInstanceOf(IllegalStateException.class);
 
         assertThat(ledger.entriesForReference(reference.toString())).isEmpty();
@@ -132,7 +132,8 @@ class SettlementTransactionIT {
             throw new AssertionError(impossible);
         }
 
-        new SettlementService(repo, adapters, ledger, txManager).confirm(ProviderId.of("mtn"), reference);
+        new SettlementService(repo, adapters, ledger, txManager)
+                .confirm(ProviderId.of("mtn"), reference, PaymentTransition.Cause.CALLBACK);
 
         assertThat(ledger.entriesForReference(reference.toString())).hasSize(1);
         Payment settled = repo.findByReference(reference).orElseThrow();

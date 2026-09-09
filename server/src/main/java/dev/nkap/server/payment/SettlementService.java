@@ -22,7 +22,16 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
- * Turns a callback into, at most, a confirmed transition and one ledger entry.
+ * Turns a prompt to look — a callback, or the reconciler's turn — into, at most, a
+ * confirmed transition and one ledger entry.
+ *
+ * <p>There is <strong>one</strong> write path here on purpose. A callback and a reconciler
+ * pass want exactly the same thing: take the payment under lock, ask the operator, apply
+ * the answer only if it is conclusive, settle once on {@code SUCCEEDED}, change nothing
+ * when the query does not answer. The only difference is the {@link PaymentTransition.Cause}
+ * recorded on the transition — {@code CALLBACK} or {@code RECONCILER} — so that is a
+ * parameter and nothing else is duplicated. A second settlement path is how two behaviours
+ * drift apart, and this one writes to the ledger.
  *
  * <p>A callback is a hint, never evidence: it can be duplicated, delayed, replayed or
  * forged, and the endpoint is unauthenticated. So nothing here trusts the callback's
@@ -67,64 +76,66 @@ public class SettlementService {
     }
 
     /**
-     * Confirms a callback for a payment this gateway holds, and applies whatever the
-     * operator's {@code query} then reports. Does nothing, silently, when there is nothing
-     * safe to do. Never throws for a provider problem.
+     * The one write path for "ask the operator, then apply whatever it conclusively says",
+     * shared by the callback endpoint ({@code cause = CALLBACK}) and the reconciler
+     * ({@code cause = RECONCILER}). Does nothing, silently, when there is nothing safe to
+     * do. Never throws for a provider problem. Returns what happened, for a caller — the
+     * reconciler — that has to decide what to do next.
      */
-    public void confirm(ProviderId providerId, ReferenceId reference) {
+    public ConfirmationOutcome confirm(ProviderId providerId, ReferenceId reference, PaymentTransition.Cause cause) {
         Payment peek = payments.findByReference(reference).orElse(null);
         if (peek == null) {
-            return;
+            return ConfirmationOutcome.notHeld();
         }
         if (peek.state().isTerminal()) {
-            log.debug("callback for {} ignored: payment is already {}", reference, peek.state());
-            return;
+            log.debug("{} for {} ignored: payment is already {}", cause, reference, peek.state());
+            return ConfirmationOutcome.alreadyResolved(peek.state());
         }
 
         ProviderStatus status;
         try {
             status = adapters.require(providerId).query(reference);
         } catch (ProviderUnavailableException noAnswer) {
-            log.info("callback for {}: the confirming query did not answer, changing nothing: {}",
-                    reference, noAnswer.getMessage());
-            return;
+            log.info("{} for {}: the confirming query did not answer, changing nothing: {}",
+                    cause, reference, noAnswer.getMessage());
+            return ConfirmationOutcome.noAnswer();
         }
 
-        tx.executeWithoutResult(txStatus -> applyConfirmed(reference, status));
+        return tx.execute(txStatus -> applyConfirmed(reference, status, cause));
     }
 
     /** The read-decide-write, in one transaction, on the row locked with {@code FOR UPDATE}. */
-    private void applyConfirmed(ReferenceId reference, ProviderStatus status) {
+    private ConfirmationOutcome applyConfirmed(ReferenceId reference, ProviderStatus status, PaymentTransition.Cause cause) {
         Payment payment = payments.findByReferenceForUpdate(reference).orElseThrow();
         if (payment.state().isTerminal()) {
-            return;
+            return ConfirmationOutcome.alreadyResolved(payment.state());
         }
 
         PaymentState confirmed = status.state();
         if (confirmed == PaymentState.UNKNOWN) {
-            log.info("callback for {}: the operator's answer is not conclusive ({}), changing nothing",
-                    reference, blankToDash(status.providerStatusCode()));
-            return;
+            log.info("{} for {}: the operator's answer is not conclusive ({}), changing nothing",
+                    cause, reference, blankToDash(status.providerStatusCode()));
+            return ConfirmationOutcome.inconclusive(payment.state(), status.providerStatusCode());
         }
         if (confirmed == payment.state()) {
-            return;
+            return ConfirmationOutcome.inconclusive(payment.state(), status.providerStatusCode());
         }
 
         // A callback for a still-CREATED payment is itself proof the operator received the
         // request — that is what SUBMITTED means. Record that leg, then the one the query
         // reports. The state machine is not widened; both transitions happened.
         if (payment.state() == PaymentState.CREATED && !payment.state().canTransitionTo(confirmed)) {
-            payment.applyTransition(PaymentState.SUBMITTED, PaymentTransition.Cause.CALLBACK,
+            payment.applyTransition(PaymentState.SUBMITTED, cause,
                     "", "callback received before the submit response", status.rawResponse());
         }
 
         if (!payment.state().canTransitionTo(confirmed)) {
-            log.warn("callback for {}: operator reports {} but payment is {}; changing nothing",
-                    reference, confirmed, payment.state());
-            return;
+            log.warn("{} for {}: operator reports {} but payment is {}; changing nothing",
+                    cause, reference, confirmed, payment.state());
+            return ConfirmationOutcome.inconclusive(payment.state(), status.providerStatusCode());
         }
 
-        payment.applyTransition(confirmed, PaymentTransition.Cause.CALLBACK,
+        payment.applyTransition(confirmed, cause,
                 status.providerStatusCode(), status.failureReason(), status.rawResponse());
         status.transactionId().ifPresent(payment::recordProviderTransactionId);
 
@@ -132,6 +143,7 @@ public class SettlementService {
             settle(payment);
         }
         payments.save(payment);
+        return ConfirmationOutcome.resolved(payment.state(), status.providerStatusCode());
     }
 
     /**

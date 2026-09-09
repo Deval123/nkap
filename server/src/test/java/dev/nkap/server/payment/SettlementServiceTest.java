@@ -70,7 +70,7 @@ class SettlementServiceTest {
         Payment payment = persisted(PaymentState.SUBMITTED);
         when(adapter.query(any())).thenReturn(status(PaymentState.SUCCEEDED, "SUCCESSFUL"));
 
-        settlement.confirm(MTN, payment.reference());
+        settlement.confirm(MTN, payment.reference(), PaymentTransition.Cause.CALLBACK);
 
         assertThat(payment.state()).isEqualTo(PaymentState.SUCCEEDED);
         assertThat(payment.providerTransactionId()).isEqualTo("txn-99");
@@ -90,8 +90,8 @@ class SettlementServiceTest {
         Payment payment = persisted(PaymentState.SUBMITTED);
         when(adapter.query(any())).thenReturn(status(PaymentState.SUCCEEDED, "SUCCESSFUL"));
 
-        settlement.confirm(MTN, payment.reference());
-        settlement.confirm(MTN, payment.reference());
+        settlement.confirm(MTN, payment.reference(), PaymentTransition.Cause.CALLBACK);
+        settlement.confirm(MTN, payment.reference(), PaymentTransition.Cause.CALLBACK);
 
         assertThat(payment.history()).filteredOn(t -> t.cause() == PaymentTransition.Cause.CALLBACK).hasSize(1);
         assertThat(ledger.entriesForReference(payment.reference().toString())).hasSize(1);
@@ -103,7 +103,7 @@ class SettlementServiceTest {
         Payment payment = persisted(PaymentState.CREATED);
         when(adapter.query(any())).thenReturn(status(PaymentState.SUCCEEDED, "SUCCESSFUL"));
 
-        settlement.confirm(MTN, payment.reference());
+        settlement.confirm(MTN, payment.reference(), PaymentTransition.Cause.CALLBACK);
 
         assertThat(payment.state()).isEqualTo(PaymentState.SUCCEEDED);
         assertThat(payment.history()).extracting(t -> t.from().name() + "->" + t.to().name())
@@ -118,7 +118,7 @@ class SettlementServiceTest {
         Payment payment = persisted(PaymentState.SUBMITTED);
         when(adapter.query(any())).thenThrow(new ProviderUnavailableException("read timed out"));
 
-        settlement.confirm(MTN, payment.reference());
+        settlement.confirm(MTN, payment.reference(), PaymentTransition.Cause.CALLBACK);
 
         assertThat(payment.state()).isEqualTo(PaymentState.SUBMITTED);
         assertThat(payment.history()).filteredOn(t -> t.cause() == PaymentTransition.Cause.CALLBACK).isEmpty();
@@ -131,7 +131,7 @@ class SettlementServiceTest {
         Payment payment = persisted(PaymentState.SUBMITTED);
         when(adapter.query(any())).thenReturn(status(PaymentState.UNKNOWN, "RESOURCE_NOT_FOUND"));
 
-        settlement.confirm(MTN, payment.reference());
+        settlement.confirm(MTN, payment.reference(), PaymentTransition.Cause.CALLBACK);
 
         assertThat(payment.state()).isEqualTo(PaymentState.SUBMITTED);
         assertThat(ledger.entries()).isEmpty();
@@ -144,7 +144,7 @@ class SettlementServiceTest {
         payment.applyTransition(PaymentState.FAILED, PaymentTransition.Cause.SUBMIT_RESPONSE, "", "", "");
         payments.save(payment);
 
-        settlement.confirm(MTN, payment.reference());
+        settlement.confirm(MTN, payment.reference(), PaymentTransition.Cause.CALLBACK);
 
         assertThat(payment.state()).isEqualTo(PaymentState.FAILED);
         verify(adapter, never()).query(any());
@@ -157,7 +157,7 @@ class SettlementServiceTest {
         Payment payment = persisted(PaymentState.SUBMITTED);
         when(adapter.query(any())).thenReturn(status(PaymentState.FAILED, "NOT_ENOUGH_FUNDS"));
 
-        settlement.confirm(MTN, payment.reference());
+        settlement.confirm(MTN, payment.reference(), PaymentTransition.Cause.CALLBACK);
 
         assertThat(payment.state()).isEqualTo(PaymentState.FAILED);
         assertThat(payment.history()).last().satisfies(t -> {

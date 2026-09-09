@@ -101,7 +101,9 @@ class PaymentController {
         try {
             payment = payments.createAndSubmit(defaultProvider, key.merchantId(), intent);
         } catch (RuntimeException failedBeforePersist) {
-            // Nothing durable was written — release the claim so the caller can retry the same key.
+            // createAndSubmit only throws before it has persisted anything — its contract.
+            // Once the payment is saved a submit-time problem is recorded on it, not
+            // thrown. So nothing durable was written here: release the claim for a retry.
             idempotency.abandon(key);
             throw failedBeforePersist;
         }

@@ -19,6 +19,13 @@ import org.springframework.stereotype.Service;
  * <strong>before</strong> the adapter is called. A crash between the two leaves a payment
  * the reconciler can find; without that write, a request that reached the operator but not
  * the response is money lost to everyone.
+ *
+ * <p>The other half of that guarantee is structural: once {@code payments.save} has run,
+ * <strong>nothing escapes this method</strong>. The operator may already hold the request,
+ * so an unexpected failure past that line is not-knowing, not failure — it is recorded
+ * {@link PaymentState#UNKNOWN} and logged loudly. Only {@code adapters.require} and
+ * {@code Payment.create}, both before the save, may throw, which is what lets
+ * {@code PaymentController} release the idempotency claim safely when they do.
  */
 @Service
 public class PaymentService {
@@ -36,9 +43,10 @@ public class PaymentService {
     /**
      * The {@code Proceed} path of {@code POST /payments}. Returns the payment in whichever
      * state the submission left it: {@code SUBMITTED} / {@code PENDING} on acknowledgement,
-     * {@code FAILED} on an outright refusal, {@code UNKNOWN} when the operator did not
-     * answer. It never throws for a provider problem — silence is {@code UNKNOWN}, not an
-     * error.
+     * {@code FAILED} on an outright refusal by the operator, {@code UNKNOWN} when the
+     * operator did not answer or when submitting failed unexpectedly on our side. Once the
+     * payment is persisted it never throws — silence, and even our own bugs, are
+     * {@code UNKNOWN}, never an error and never {@code FAILED}.
      */
     public Payment createAndSubmit(ProviderId providerId, String merchantId, PaymentIntent intent) {
         ProviderAdapter adapter = adapters.require(providerId);
@@ -47,6 +55,7 @@ public class PaymentService {
         Payment payment = Payment.create(reference, providerId, merchantId, intent);
         payments.save(payment);
 
+        // Past this line nothing may escape: the request may already be with the operator.
         try {
             SubmitResult result = adapter.submit(intent, reference);
             switch (result) {
@@ -63,6 +72,15 @@ public class PaymentService {
             log.info("submit for {} did not answer; recording UNKNOWN: {}", reference, noAnswer.getMessage());
             payment.applyTransition(payment.state().onProviderTimeout(), PaymentTransition.Cause.SUBMIT_RESPONSE,
                     "", noAnswer.getMessage(), "");
+        } catch (RuntimeException failedAfterTheRequestMayHaveGoneOut) {
+            // A defect on our side, after the point where the operator may already have the
+            // request. In the data this is indistinguishable from an operator timeout, so
+            // only this log tells them apart: it must be loud, with the stack trace.
+            // Recording FAILED here would be the one conclusion this project forbids.
+            log.error("submit for {} failed unexpectedly; recording UNKNOWN, not FAILED", reference,
+                    failedAfterTheRequestMayHaveGoneOut);
+            payment.applyTransition(payment.state().onProviderTimeout(), PaymentTransition.Cause.SUBMIT_RESPONSE,
+                    "", "unexpected error while submitting: " + failedAfterTheRequestMayHaveGoneOut, "");
         }
 
         payments.save(payment);

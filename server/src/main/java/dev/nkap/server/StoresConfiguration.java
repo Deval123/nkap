@@ -1,30 +1,40 @@
 package dev.nkap.server;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.nkap.core.idempotency.IdempotencyStore;
-import dev.nkap.core.idempotency.InMemoryIdempotencyStore;
-import dev.nkap.core.ledger.InMemoryLedger;
 import dev.nkap.core.ledger.Ledger;
+import dev.nkap.server.payment.PaymentRepository;
+import dev.nkap.server.persistence.PostgresIdempotencyStore;
+import dev.nkap.server.persistence.PostgresLedger;
+import dev.nkap.server.persistence.PostgresPaymentRepository;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
- * The in-memory stores, registered as beans because they live in {@code core} and cannot
- * carry a Spring annotation.
+ * The stores, backed by PostgreSQL.
  *
- * <p>They are a step towards PostgreSQL, which implements the same interfaces. There is no
- * flag that selects in-memory and no documented mode — swapping in the database swaps
- * these beans, nothing else.
+ * <p>The interfaces live in {@code core} and {@code server.payment}; the implementations
+ * here are plain SQL through {@link JdbcTemplate}. The in-memory reference implementations
+ * stay in {@code core} (and the test tree) as what the rules were written against — the
+ * server simply does not wire them. There is no flag and no documented in-memory mode:
+ * this class is the one place that decides, and swapping a bean is the whole change.
  */
 @Configuration
 class StoresConfiguration {
 
     @Bean
-    IdempotencyStore idempotencyStore() {
-        return new InMemoryIdempotencyStore();
+    IdempotencyStore idempotencyStore(JdbcTemplate jdbc) {
+        return new PostgresIdempotencyStore(jdbc);
     }
 
     @Bean
-    Ledger ledger() {
-        return new InMemoryLedger();
+    Ledger ledger(JdbcTemplate jdbc) {
+        return new PostgresLedger(jdbc);
+    }
+
+    @Bean
+    PaymentRepository paymentRepository(JdbcTemplate jdbc, ObjectMapper json) {
+        return new PostgresPaymentRepository(jdbc, json);
     }
 }

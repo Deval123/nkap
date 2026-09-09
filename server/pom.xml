@@ -30,6 +30,24 @@
       <artifactId>spring-boot-starter-web</artifactId>
     </dependency>
 
+    <!-- The state lives in PostgreSQL: plain SQL through JdbcTemplate, Flyway for the schema. -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-jdbc</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.postgresql</groupId>
+      <artifactId>postgresql</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.flywaydb</groupId>
+      <artifactId>flyway-core</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.flywaydb</groupId>
+      <artifactId>flyway-database-postgresql</artifactId>
+    </dependency>
+
     <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-test</artifactId>
@@ -40,6 +58,17 @@
       <groupId>dev.nkap</groupId>
       <artifactId>nkap-simulator</artifactId>
       <version>${project.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <!-- The integration tests (*IT) run against a real PostgreSQL in a container. -->
+    <dependency>
+      <groupId>org.testcontainers</groupId>
+      <artifactId>postgresql</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.testcontainers</groupId>
+      <artifactId>junit-jupiter</artifactId>
       <scope>test</scope>
     </dependency>
   </dependencies>
@@ -53,6 +82,24 @@
           <!-- Spring MVC binds @PathVariable / @RequestHeader by parameter name. -->
           <parameters>true</parameters>
         </configuration>
+      </plugin>
+      <!--
+        *Test  -> surefire, unit and web-slice tests, no Docker.
+        *IT    -> failsafe, Testcontainers against a real PostgreSQL. Each *IT is
+        skipped when Docker is unavailable (see DockerAvailable), so `mvn verify`
+        stays green on a machine without Docker; CI (ubuntu-latest) has it.
+      -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-failsafe-plugin</artifactId>
+        <executions>
+          <execution>
+            <goals>
+              <goal>integration-test</goal>
+              <goal>verify</goal>
+            </goals>
+          </execution>
+        </executions>
       </plugin>
       <plugin>
         <groupId>org.springframework.boot</groupId>

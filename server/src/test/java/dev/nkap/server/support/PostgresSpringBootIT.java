@@ -20,5 +20,9 @@ public abstract class PostgresSpringBootIT {
         registry.add("spring.datasource.url", db::jdbcUrl);
         registry.add("spring.datasource.username", db::username);
         registry.add("spring.datasource.password", db::password);
+        // The reconciler's scheduled pass would otherwise fire mid-test and resolve or
+        // reschedule a payment an assertion is looking at. ReconcilerIT drives runOnce()
+        // directly and does not use this base.
+        registry.add("nkap.reconciler.enabled", () -> "false");
     }
 }

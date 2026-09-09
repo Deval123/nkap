@@ -92,6 +92,18 @@ class PaymentTest {
     }
 
     @Test
+    @DisplayName("entering UNKNOWN arms the reconciler: due now, no attempts yet, not escalated")
+    void entering_unknown_arms_the_reconciler_schedule() {
+        Payment payment = newPayment();
+
+        payment.applyTransition(PaymentState.UNKNOWN, PaymentTransition.Cause.SUBMIT_RESPONSE, "", "timed out", "");
+
+        assertThat(payment.reconcileAttempts()).isZero();
+        assertThat(payment.reconcileDueAt()).isEqualTo(payment.updatedAt());
+        assertThat(payment.escalatedAt()).isNull();
+    }
+
+    @Test
     @DisplayName("history() is a copy: mutating the returned list does not change the payment")
     void history_is_a_defensive_copy() {
         Payment payment = newPayment();

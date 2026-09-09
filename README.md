@@ -105,6 +105,16 @@ CREATED → SUBMITTED → PENDING → SUCCEEDED   (terminal)
               every timeout lands here
 ```
 
+A payment in `UNKNOWN` is re-queried by the reconciler on an exponential backoff
+(`nkap.reconciler.*`). When the window is spent it is **escalated** — flagged for a human,
+still `UNKNOWN`, never `FAILED` — and logged once at WARN. Escalated payments awaiting a
+human are `PaymentRepository.findEscalated()`, or:
+
+```sql
+SELECT reference, merchant_id, amount_minor, currency, reconcile_attempts, escalated_at
+FROM payment WHERE escalated_at IS NOT NULL AND state = 'UNKNOWN' ORDER BY escalated_at;
+```
+
 ## Modules
 
 | Module | What lives there |

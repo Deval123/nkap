@@ -36,6 +36,16 @@ public final class Payment {
     private String providerReference = "";
     private String providerTransactionId = "";
 
+    // The reconciler's schedule. Meaningful only while the payment is UNKNOWN: a payment
+    // that becomes UNKNOWN is due for reconciliation immediately (reconcileDueAt = now,
+    // attempts = 0), and any earlier escalation is cleared so a payment that cycled back
+    // through UNKNOWN is picked up again. The reconciler advances attempts and reconcileDueAt
+    // itself; escalatedAt is stamped when the retry window is spent and a human is paged —
+    // it is a flag, not a state, and the payment stays UNKNOWN.
+    private int reconcileAttempts;
+    private Instant reconcileDueAt;
+    private Instant escalatedAt;
+
     private Payment(ReferenceId reference, ProviderId provider, String merchantId, PaymentIntent intent, Instant now) {
         this.reference = Objects.requireNonNull(reference, "reference");
         this.provider = Objects.requireNonNull(provider, "provider");
@@ -59,13 +69,17 @@ public final class Payment {
      */
     public static Payment rehydrate(ReferenceId reference, ProviderId provider, String merchantId, PaymentIntent intent,
                                     PaymentState state, String providerReference, String providerTransactionId,
-                                    Instant createdAt, Instant updatedAt, List<PaymentTransition> history) {
+                                    Instant createdAt, Instant updatedAt, List<PaymentTransition> history,
+                                    int reconcileAttempts, Instant reconcileDueAt, Instant escalatedAt) {
         Payment payment = new Payment(reference, provider, merchantId, intent, createdAt);
         payment.state = Objects.requireNonNull(state, "state");
         payment.updatedAt = Objects.requireNonNull(updatedAt, "updatedAt");
         payment.providerReference = providerReference == null ? "" : providerReference;
         payment.providerTransactionId = providerTransactionId == null ? "" : providerTransactionId;
         payment.history.addAll(history);
+        payment.reconcileAttempts = reconcileAttempts;
+        payment.reconcileDueAt = reconcileDueAt;
+        payment.escalatedAt = escalatedAt;
         return payment;
     }
 
@@ -78,6 +92,14 @@ public final class Payment {
         PaymentState previous = this.state;
         this.state = previous.transitionTo(target);
         this.updatedAt = Instant.now();
+        if (this.state == PaymentState.UNKNOWN) {
+            // A payment that just became UNKNOWN is due for the reconciler now, on a clean
+            // schedule. Clearing escalatedAt re-arms a payment that had been escalated and
+            // then cycled back through UNKNOWN.
+            this.reconcileAttempts = 0;
+            this.reconcileDueAt = this.updatedAt;
+            this.escalatedAt = null;
+        }
         this.history.add(new PaymentTransition(previous, this.state, this.updatedAt, cause, operatorCode, note, rawResponse));
     }
 
@@ -129,6 +151,21 @@ public final class Payment {
 
     public Instant updatedAt() {
         return updatedAt;
+    }
+
+    /** How many times the reconciler has queried the operator about this payment. */
+    public int reconcileAttempts() {
+        return reconcileAttempts;
+    }
+
+    /** When the reconciler's next attempt is due, or {@code null} if it never entered UNKNOWN. */
+    public Instant reconcileDueAt() {
+        return reconcileDueAt;
+    }
+
+    /** When this payment was escalated to a human, or {@code null} if it has not been. */
+    public Instant escalatedAt() {
+        return escalatedAt;
     }
 
     /** The transitions so far, oldest first. Unmodifiable. */

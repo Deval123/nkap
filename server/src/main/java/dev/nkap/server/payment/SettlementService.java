@@ -9,12 +9,14 @@ import dev.nkap.core.money.Currency;
 import dev.nkap.core.money.Money;
 import dev.nkap.core.payment.PaymentState;
 import dev.nkap.core.payment.ReferenceId;
+import dev.nkap.provider.Capability;
 import dev.nkap.provider.ProviderId;
 import dev.nkap.provider.ProviderStatus;
 import dev.nkap.provider.ProviderUnavailableException;
 import dev.nkap.server.provider.AdapterRegistry;
 import java.time.Instant;
 import java.util.List;
+import java.util.Locale;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -152,24 +154,42 @@ public class SettlementService {
     }
 
     /**
-     * Posts the gross amount, two postings, per ADR 0006. No fee posting — fees arrive
-     * later through statement reconciliation.
+     * Posts the gross amount, two postings, in one currency, summing to zero. No fee posting
+     * — the operator's fee arrives later from the statement as its own entry (ADR 0006,
+     * unchanged for disbursements).
+     *
+     * <p>The <strong>direction</strong> is the operation's, and it is the one thing this
+     * method could not stay operation-agnostic about: a settled collection took money into
+     * the float and increased what Nkap owes the merchant (ADR 0006); a settled disbursement
+     * is its mirror — the float goes down, the merchant is owed less (ADR 0007). Everything
+     * else — the state machine, {@code confirm}/{@code applyConfirmed}, the reconciler, the
+     * statement importer — needed no change.
      */
     private void settle(Payment payment) {
         Money gross = payment.intent().amount();
         Currency currency = gross.currency();
         AccountId providerFloat = AccountId.providerFloat(payment.provider().toString(), currency);
         AccountId merchantPayable = AccountId.merchantPayable(payment.merchantId(), currency);
+        boolean disbursement = payment.intent().operation() == Capability.DISBURSE;
+
+        Posting floatPosting = disbursement
+                ? Posting.credit(providerFloat, gross)   // ADR 0007: money left the float
+                : Posting.debit(providerFloat, gross);   // ADR 0006: money entered the float
+        Posting merchantPosting = disbursement
+                ? Posting.debit(merchantPayable, gross)   // we owe the merchant less
+                : Posting.credit(merchantPayable, gross); // we owe the merchant more
+        String verb = disbursement ? "Disbursement" : "Collection";
 
         LedgerEntry entry = new LedgerEntry(
-                entryId(payment.reference()),
+                entryId(payment),
                 Instant.now(),
                 payment.reference().toString(),
-                "Collection settled: " + gross + " for " + payment.merchantId(),
-                List.of(Posting.debit(providerFloat, gross), Posting.credit(merchantPayable, gross)));
+                verb + " settled: " + gross + " for " + payment.merchantId(),
+                List.of(floatPosting, merchantPosting));
         try {
             ledger.append(entry);
-            log.info("settled {}: DR {} / CR {} {}", payment.reference(), providerFloat, merchantPayable, gross);
+            log.info("settled {} ({}): {} / {} {}", payment.reference(), verb.toLowerCase(Locale.ROOT),
+                    floatPosting, merchantPosting, gross);
         } catch (DuplicateLedgerEntryException alreadyRecorded) {
             // Only this exact type is swallowed. The row lock on the payment already makes a
             // second settlement impossible within one node; across nodes the id derived
@@ -180,8 +200,10 @@ public class SettlementService {
         }
     }
 
-    private static String entryId(ReferenceId reference) {
-        return "collection:" + reference;
+    /** {@code collection:<ref>} or {@code disbursement:<ref>} — derived from the reference, so a re-settle is refused by the ledger. */
+    private static String entryId(Payment payment) {
+        String prefix = payment.intent().operation() == Capability.DISBURSE ? "disbursement:" : "collection:";
+        return prefix + payment.reference();
     }
 
     private static String blankToDash(String value) {

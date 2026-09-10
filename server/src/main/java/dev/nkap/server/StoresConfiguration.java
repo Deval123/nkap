@@ -7,6 +7,10 @@ import dev.nkap.server.payment.PaymentRepository;
 import dev.nkap.server.persistence.PostgresIdempotencyStore;
 import dev.nkap.server.persistence.PostgresLedger;
 import dev.nkap.server.persistence.PostgresPaymentRepository;
+import dev.nkap.server.statement.CsvStatementParser;
+import dev.nkap.server.statement.PostgresStatementReconciliationStore;
+import dev.nkap.server.statement.StatementParser;
+import dev.nkap.server.statement.StatementReconciliationStore;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -37,5 +41,17 @@ class StoresConfiguration {
     @Bean
     PaymentRepository paymentRepository(JdbcTemplate jdbc, ObjectMapper json) {
         return new PostgresPaymentRepository(jdbc, json);
+    }
+
+    @Bean
+    StatementReconciliationStore statementReconciliationStore(JdbcTemplate jdbc, PlatformTransactionManager txManager) {
+        return new PostgresStatementReconciliationStore(jdbc, txManager);
+    }
+
+    @Bean
+    StatementParser statementParser() {
+        // The one implementation, and a placeholder until a real MTN statement has been seen
+        // — the column layout is ours (see CsvStatementParser and docs/providers/mtn.md).
+        return new CsvStatementParser();
     }
 }

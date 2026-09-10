@@ -78,3 +78,18 @@ Left open deliberately rather than guessed. Each is worth a pull request adding 
 - Whether production returns codes absent from the documentation.
 - The shape and headers of a real callback, and whether it is ever the only notification.
 - Whether Disbursements differ beyond the IP allow-listing requirement.
+- **How an operator statement is obtained** — a portal download, a report API, an emailed
+  file, an SFTP drop — and on what cadence. Nothing fetches one today; statement
+  reconciliation is a host-side command (`--nkap.statement.import=<path>`) run against a
+  file already on the machine, not a network endpoint.
+- **What a statement line contains, field by field.** Statement reconciliation was built
+  against an *invented* provider-neutral model (`server`'s `statement` package): per line,
+  an operator transaction id, a gross amount in minor units, a fee (may be absent), a
+  timestamp, and an outcome of `SETTLED` or `FAILED`. The reconciler matches on the
+  transaction id — the same value a settled `ProviderStatus` carries as
+  `financialTransactionId` — and compares the gross amount; a fee, when present, posts
+  `DR fees:mtn:<CCY> / CR provider:mtn:float:<CCY>` per [ADR 0006](../adr/0006-what-a-settled-collection-posts.md).
+  The CSV layout the placeholder parser reads (`CsvStatementParser`) is equally ours:
+  `operator_transaction_id,amount_minor,fee_minor,currency,occurred_at,status`. When a real
+  MTN statement is seen, this file records what it holds and the parser is the only code
+  that changes — reconciliation, persistence and the report all work in the neutral model.

@@ -43,6 +43,9 @@ public final class ProblemTypes {
     /** A callback body could not be parsed as the named provider's callback. */
     public static final URI UNPARSEABLE_CALLBACK = URI.create(BASE + "unparseable-callback");
 
+    /** No statement import exists for the id in the path. */
+    public static final URI IMPORT_NOT_FOUND = URI.create(BASE + "statement-import-not-found");
+
     private ProblemTypes() {
     }
 }

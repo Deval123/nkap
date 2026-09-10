@@ -67,16 +67,22 @@ class CallbackApiIT extends PostgresSpringBootIT {
     @Autowired
     Ledger ledger;
 
+    @Autowired
+    dev.nkap.server.auth.ApiKeyStore apiKeys;
+
+    private String apiKey;
+
     @BeforeEach
     void resetSimulator() {
         SIMULATOR.reset();
+        apiKey = apiKeys.provision("merchant-1", false, "CallbackApiIT").token();
     }
 
     // --- helpers -------------------------------------------------------------
 
     private static String paymentBody(long amountMinorUnits) {
         return """
-            {"merchantId":"merchant-1","operation":"COLLECT","amount":%d,"currency":"EUR",
+            {"operation":"COLLECT","amount":%d,"currency":"EUR",
              "counterpartyMsisdn":"46733123453","payerMessage":"rent","payeeNote":"march"}"""
                 .formatted(amountMinorUnits);
     }
@@ -92,10 +98,12 @@ class CallbackApiIT extends PostgresSpringBootIT {
     private ResponseEntity<String> postPayment(String requestBody) {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.setBearerAuth(apiKey);
         headers.set("Idempotency-Key", UUID.randomUUID().toString());
         return http.postForEntity("/payments", new HttpEntity<>(requestBody, headers), String.class);
     }
 
+    /** The callback endpoint takes no credential — that is the point of this helper carrying none. */
     private ResponseEntity<String> postCallback(String bodyJson) {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
@@ -106,8 +114,15 @@ class CallbackApiIT extends PostgresSpringBootIT {
         return "{\"referenceId\":\"" + reference + "\",\"status\":\"" + status + "\"}";
     }
 
+    private ResponseEntity<String> getPaymentResponse(String reference) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(apiKey);
+        return http.exchange("/payments/" + reference, org.springframework.http.HttpMethod.GET,
+                new HttpEntity<>(headers), String.class);
+    }
+
     private JsonNode getPayment(String reference) {
-        return parse(http.getForEntity("/payments/" + reference, String.class).getBody());
+        return parse(getPaymentResponse(reference).getBody());
     }
 
     /** Creates a payment, asserts it is SUBMITTED, and returns its reference. */
@@ -196,7 +211,7 @@ class CallbackApiIT extends PostgresSpringBootIT {
 
         assertThat(answer.getStatusCode().value()).isEqualTo(202);
         assertThat(ledger.entriesForReference(strangerReference)).isEmpty();
-        assertThat(http.getForEntity("/payments/" + strangerReference, String.class).getStatusCode().value())
+        assertThat(getPaymentResponse(strangerReference).getStatusCode().value())
                 .isEqualTo(404);
     }
 

@@ -46,6 +46,12 @@ public final class ProblemTypes {
     /** No statement import exists for the id in the path. */
     public static final URI IMPORT_NOT_FOUND = URI.create(BASE + "statement-import-not-found");
 
+    /** No API key was presented, or the one presented is not recognised. Says nothing about which. */
+    public static final URI UNAUTHENTICATED = URI.create(BASE + "unauthenticated");
+
+    /** The caller is authenticated but the key is not an admin key, and this resource is operator-wide. */
+    public static final URI ADMIN_REQUIRED = URI.create(BASE + "admin-key-required");
+
     private ProblemTypes() {
     }
 }

@@ -12,6 +12,7 @@ import dev.nkap.core.payment.ReferenceId;
 import dev.nkap.provider.Capability;
 import dev.nkap.provider.PaymentIntent;
 import dev.nkap.provider.ProviderId;
+import dev.nkap.server.auth.ApiCredential;
 import dev.nkap.server.payment.Payment;
 import dev.nkap.server.payment.PaymentRepository;
 import dev.nkap.server.payment.PaymentService;
@@ -67,6 +68,7 @@ class PaymentController {
 
     @PostMapping
     ResponseEntity<String> create(
+            ApiCredential caller,
             @RequestHeader(name = "Idempotency-Key", required = false) String idempotencyKey,
             @RequestBody CreatePaymentRequest request) {
 
@@ -80,7 +82,10 @@ class PaymentController {
         // must not leave a claim behind that a retry would then collide with.
         PaymentIntent intent = toIntent(request);
         rejectUnservedCurrency(intent);
-        IdempotencyKey key = new IdempotencyKey(request.merchantId(), idempotencyKey);
+        // The merchant is the one the API key identifies, never a body field. This is what
+        // makes the (merchant, key) scope of the idempotency store an identity the gateway
+        // established rather than one the caller asserted — the hole this slice closes.
+        IdempotencyKey key = new IdempotencyKey(caller.merchantId(), idempotencyKey);
         RequestFingerprint fingerprint = RequestFingerprint.of(canonical(request));
 
         return switch (idempotency.begin(key, fingerprint)) {
@@ -124,7 +129,7 @@ class PaymentController {
     }
 
     @GetMapping("/{reference}")
-    ResponseEntity<PaymentResponse> read(@PathVariable String reference) {
+    ResponseEntity<PaymentResponse> read(ApiCredential caller, @PathVariable String reference) {
         ReferenceId id;
         try {
             id = ReferenceId.of(reference);
@@ -132,9 +137,14 @@ class PaymentController {
             throw new ApiException(HttpStatus.BAD_REQUEST, ProblemTypes.MALFORMED_REFERENCE,
                     "The reference is not well-formed", "'" + reference + "' is not a payment reference.");
         }
-        Payment payment = repository.findByReference(id).orElseThrow(() -> new ApiException(
-                HttpStatus.NOT_FOUND, ProblemTypes.PAYMENT_NOT_FOUND, "No such payment",
-                "No payment exists for reference " + reference + "."));
+        // A payment that belongs to another merchant answers exactly as one that does not
+        // exist. Two different answers is an oracle for whether a reference exists — the
+        // same reasoning that made an unknown callback reference a 202, not a 404.
+        Payment payment = repository.findByReference(id)
+                .filter(p -> p.merchantId().equals(caller.merchantId()))
+                .orElseThrow(() -> new ApiException(
+                        HttpStatus.NOT_FOUND, ProblemTypes.PAYMENT_NOT_FOUND, "No such payment",
+                        "No payment exists for reference " + reference + "."));
         return ResponseEntity.ok(PaymentResponse.of(payment));
     }
 
@@ -158,7 +168,6 @@ class PaymentController {
     // --- request -> intent -----------------------------------------------------
 
     private PaymentIntent toIntent(CreatePaymentRequest request) {
-        requireText(request.merchantId(), "merchantId");
         requireText(request.operation(), "operation");
         requireText(request.currency(), "currency");
         requireText(request.counterpartyMsisdn(), "counterpartyMsisdn");

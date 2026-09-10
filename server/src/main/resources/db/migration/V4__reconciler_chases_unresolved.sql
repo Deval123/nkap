@@ -25,6 +25,11 @@ ALTER TABLE payment RENAME COLUMN unknown_since TO unresolved_since;
 UPDATE payment SET unresolved_since = updated_at
  WHERE state IN ('SUBMITTED', 'PENDING') AND unresolved_since IS NULL;
 
+-- The predicate must stay in step with PaymentState.isUnresolved (and with
+-- PostgresReconciliationStore.UNRESOLVED_STATES, which the claim query uses): if a fourth
+-- non-terminal state is ever added, widen this index in a new migration at the same time.
+-- Left behind, the claim still returns the right rows but stops being an index range scan,
+-- and that only shows up as unexplained slowness once the table is large.
 DROP INDEX payment_reconcile_due_idx;
 CREATE INDEX payment_reconcile_due_idx
     ON payment (reconcile_due_at)

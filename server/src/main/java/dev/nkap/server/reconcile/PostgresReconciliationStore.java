@@ -21,7 +21,15 @@ import org.springframework.transaction.support.TransactionTemplate;
  */
 public final class PostgresReconciliationStore implements ReconciliationStore {
 
-    /** The three unresolved states, as a SQL list literal, shared by the claim and the escalate. */
+    /**
+     * The unresolved states, as a SQL list literal — must match {@link
+     * dev.nkap.core.payment.PaymentState#isUnresolved()}. Shared by the claim and the
+     * escalate here; the partial index the claim relies on
+     * ({@code payment_reconcile_due_idx}, migration {@code V4}) repeats the same predicate
+     * and cannot be derived from the enum, so if a fourth non-terminal state is ever added,
+     * widen the index in a new migration together with this constant. Left out of sync the
+     * claim stays correct but silently stops being an index range scan.
+     */
     private static final String UNRESOLVED_STATES = "('SUBMITTED', 'PENDING', 'UNKNOWN')";
 
     private static final String CLAIM_DUE = """

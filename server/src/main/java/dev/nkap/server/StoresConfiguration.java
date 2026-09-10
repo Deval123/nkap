@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.nkap.core.idempotency.IdempotencyStore;
 import dev.nkap.core.ledger.Ledger;
 import dev.nkap.server.payment.PaymentRepository;
+import dev.nkap.server.auth.ApiKeyStore;
+import dev.nkap.server.auth.PostgresApiKeyStore;
 import dev.nkap.server.persistence.PostgresIdempotencyStore;
 import dev.nkap.server.persistence.PostgresLedger;
 import dev.nkap.server.persistence.PostgresPaymentRepository;
@@ -46,6 +48,11 @@ class StoresConfiguration {
     @Bean
     StatementReconciliationStore statementReconciliationStore(JdbcTemplate jdbc, PlatformTransactionManager txManager) {
         return new PostgresStatementReconciliationStore(jdbc, txManager);
+    }
+
+    @Bean
+    ApiKeyStore apiKeyStore(JdbcTemplate jdbc) {
+        return new PostgresApiKeyStore(jdbc);
     }
 
     @Bean

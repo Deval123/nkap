@@ -33,7 +33,7 @@ class MigrationRollbackIT {
     /** The migrations that have a hand-written inverse, oldest first. */
     private static final List<String> MIGRATIONS = List.of(
             "V1__initial_schema", "V2__reconciler_schedule", "V3__reconciler_window_is_a_duration",
-            "V4__reconciler_chases_unresolved", "V5__statement_reconciliation");
+            "V4__reconciler_chases_unresolved", "V5__statement_reconciliation", "V6__api_keys");
 
     @Test
     @DisplayName("running every inverse newest-first returns the schema to empty, and the database is migratable again")
@@ -74,6 +74,7 @@ class MigrationRollbackIT {
 
             migrate(postgres);
             // Peel back to V2 first, so this test is about the V2 inverse alone.
+            jdbc.execute(inverseOf("V6__api_keys"));
             jdbc.execute(inverseOf("V5__statement_reconciliation"));
             jdbc.execute(inverseOf("V4__reconciler_chases_unresolved"));
             jdbc.execute(inverseOf("V3__reconciler_window_is_a_duration"));
@@ -108,6 +109,7 @@ class MigrationRollbackIT {
 
             migrate(postgres);
             // Peel back to V3 first, so this test is about the V3 inverse alone.
+            jdbc.execute(inverseOf("V6__api_keys"));
             jdbc.execute(inverseOf("V5__statement_reconciliation"));
             jdbc.execute(inverseOf("V4__reconciler_chases_unresolved"));
             assertThat(columnsOf(jdbc, "payment")).contains("unknown_since").doesNotContain("unresolved_since");
@@ -120,6 +122,30 @@ class MigrationRollbackIT {
             // V3 (and V4) forward again — each inverse removed its history row.
             migrate(postgres);
             assertThat(columnsOf(jdbc, "payment")).contains("unresolved_since");
+        }
+    }
+
+    @Test
+    @DisplayName("the inverse of V6 drops exactly the api_key table, leaving the V5 schema intact")
+    void the_inverse_of_v6_returns_the_schema_to_v5() throws IOException {
+        try (PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>(PostgresDatabase.IMAGE)) {
+            postgres.start();
+            JdbcTemplate jdbc = jdbcFor(postgres);
+
+            migrateTo(postgres, "5");
+            Set<String> afterV5 = schemaObjects(jdbc);
+            assertThat(userTables(jdbc)).doesNotContain("api_key");
+
+            migrate(postgres);
+            assertThat(userTables(jdbc)).contains("api_key");
+
+            jdbc.execute(inverseOf("V6__api_keys"));
+
+            assertThat(schemaObjects(jdbc)).isEqualTo(afterV5);
+
+            // V6 forward again — the inverse removed its history row.
+            migrate(postgres);
+            assertThat(userTables(jdbc)).contains("api_key");
         }
     }
 
@@ -137,6 +163,7 @@ class MigrationRollbackIT {
             migrate(postgres);
             assertThat(userTables(jdbc)).contains("statement_import", "statement_line", "statement_finding");
 
+            jdbc.execute(inverseOf("V6__api_keys"));
             jdbc.execute(inverseOf("V5__statement_reconciliation"));
 
             assertThat(schemaObjects(jdbc)).isEqualTo(afterV4);
@@ -163,6 +190,7 @@ class MigrationRollbackIT {
             assertThat(columnsOf(jdbc, "payment")).contains("unresolved_since").doesNotContain("unknown_since");
 
             // Peel back to V4 first, so this test is about the V4 inverse alone.
+            jdbc.execute(inverseOf("V6__api_keys"));
             jdbc.execute(inverseOf("V5__statement_reconciliation"));
             jdbc.execute(inverseOf("V4__reconciler_chases_unresolved"));
 

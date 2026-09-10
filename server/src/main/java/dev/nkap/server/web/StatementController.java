@@ -1,5 +1,6 @@
 package dev.nkap.server.web;
 
+import dev.nkap.server.auth.ApiCredential;
 import dev.nkap.server.statement.ReconciliationReport;
 import dev.nkap.server.statement.StatementReconciliationStore;
 import java.util.UUID;
@@ -14,7 +15,9 @@ import org.springframework.web.bind.annotation.RestController;
  *
  * <p>{@code GET /statements/imports/{id}} rebuilds a stored {@link ReconciliationReport}
  * from its rows so a discrepancy can be tied back to the file and the moment that produced
- * it. It writes nothing and leaks nothing an operator would mind.
+ * it. It writes nothing, but it is operator data across <em>all</em> merchants, so it
+ * requires an <strong>admin</strong> API key — a merchant key is {@code 403}. One boolean
+ * on the key, not a role system.
  *
  * <p>There is deliberately no {@code POST} here. Running an import writes fee and suspense
  * entries to an append-only ledger straight from a file, with nothing between the file and a
@@ -35,7 +38,12 @@ class StatementController {
     }
 
     @GetMapping("/{importId}")
-    ReconciliationReport get(@PathVariable String importId) {
+    ReconciliationReport get(ApiCredential caller, @PathVariable String importId) {
+        if (!caller.admin()) {
+            throw new ApiException(HttpStatus.FORBIDDEN, ProblemTypes.ADMIN_REQUIRED,
+                    "An admin key is required",
+                    "The statement report is operator data across all merchants. This key is a merchant key.");
+        }
         UUID id;
         try {
             id = UUID.fromString(importId);

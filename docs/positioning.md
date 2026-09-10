@@ -75,15 +75,23 @@ several currencies are supported, conversion is not, because conversion needs a 
 date, a position account and a revaluation policy, and a first release that invents any of
 those is a ledger that lies.
 
-**The gateway authenticates nothing.** There is no login, no API key, no request signing.
-The callback endpoint is unauthenticated by necessity — the operator sends no credential —
-and safe because it only ever triggers a confirming query; every other endpoint is
-unauthenticated too, and the deployment is expected to sit behind whatever the operator of
-the system provides: a reverse proxy, a private network, an mTLS gateway. This is why the
-one action that writes to the ledger from a file — statement reconciliation — is a
-host-side command and not a route. Endpoint authentication is its own slice; until then, a
-reader deciding whether to expose this service should assume anyone who can reach it can
-call it.
+**Callers authenticate with an API key; the transport is the deployment's job.** A merchant
+backend sends `Authorization: Bearer <key>`; the key is compared against a stored SHA-256,
+the merchant is the one that key identifies — never a request-body field — and a merchant
+sees only its own payments. Keys are minted by a host-side command, not a route, and shown
+once. There are no sessions and no JWTs: the caller is a backend, not a browser, and
+issuance-and-refresh is a second system to get wrong. Rate limiting, key rotation, mTLS and
+an audit trail are later slices; TLS termination and network placement are the operator's,
+as for any service.
+
+**The callback endpoint stays unauthenticated, on purpose.** The operator sends no
+credential Nkap can verify, and the path is safe because it only ever triggers a confirming
+`adapter.query` and believes nothing in the payload — the argument is written out in
+`SettlementService`. It is the one route that takes no key, and that is a decision, not a
+gap.
+
+The one action that writes to the ledger from a file — statement reconciliation — is a
+host-side command and not a route, for the same reason keys are.
 
 These exclusions are not modesty. They are what keeps the project legally simple enough for
 one person to run and small enough to finish.

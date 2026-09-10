@@ -51,14 +51,20 @@ class PaymentApiIT extends PostgresSpringBootIT {
     @Autowired
     ObjectMapper json;
 
+    @Autowired
+    dev.nkap.server.auth.ApiKeyStore apiKeys;
+
+    private String apiKey;
+
     @BeforeEach
     void resetSimulator() {
         SIMULATOR.reset();
+        apiKey = apiKeys.provision("merchant-1", false, "PaymentApiIT").token();
     }
 
     private static String body(long amountMinorUnits) {
         return """
-            {"merchantId":"merchant-1","operation":"COLLECT","amount":%d,"currency":"EUR",
+            {"operation":"COLLECT","amount":%d,"currency":"EUR",
              "counterpartyMsisdn":"46733123453","payerMessage":"rent","payeeNote":"march"}"""
                 .formatted(amountMinorUnits);
     }
@@ -66,10 +72,18 @@ class PaymentApiIT extends PostgresSpringBootIT {
     private ResponseEntity<String> post(String key, String requestBody) {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.setBearerAuth(apiKey);
         if (key != null) {
             headers.set("Idempotency-Key", key);
         }
         return http.postForEntity("/payments", new HttpEntity<>(requestBody, headers), String.class);
+    }
+
+    private ResponseEntity<String> getPayment(String reference) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(apiKey);
+        return http.exchange("/payments/" + reference, org.springframework.http.HttpMethod.GET,
+                new HttpEntity<>(headers), String.class);
     }
 
     private JsonNode parse(String s) {
@@ -124,7 +138,7 @@ class PaymentApiIT extends PostgresSpringBootIT {
         assertThat(payment.get("detail").asText()).contains("poll").contains("not yet known");
         String reference = payment.get("reference").asText();
 
-        ResponseEntity<String> read = http.getForEntity("/payments/" + reference, String.class);
+        ResponseEntity<String> read = getPayment(reference);
         assertThat(read.getStatusCode().value()).isEqualTo(200);
         JsonNode stored = parse(read.getBody());
         assertThat(stored.get("state").asText()).isEqualTo("UNKNOWN");
@@ -162,7 +176,7 @@ class PaymentApiIT extends PostgresSpringBootIT {
         assertThat(created.getHeaders().getLocation()).isNotNull();
         String reference = parse(created.getBody()).get("reference").asText();
 
-        ResponseEntity<String> read = http.getForEntity("/payments/" + reference, String.class);
+        ResponseEntity<String> read = getPayment(reference);
         assertThat(read.getStatusCode().value()).isEqualTo(200);
         JsonNode payment = parse(read.getBody());
         assertThat(payment.get("state").asText()).isEqualTo("SUBMITTED");
@@ -177,11 +191,11 @@ class PaymentApiIT extends PostgresSpringBootIT {
     @Test
     @DisplayName("a GET on an unknown reference is 404, and on a non-reference is 400")
     void reads_of_missing_and_malformed_references() {
-        ResponseEntity<String> missing = http.getForEntity("/payments/" + UUID.randomUUID(), String.class);
+        ResponseEntity<String> missing = getPayment(UUID.randomUUID().toString());
         assertThat(missing.getStatusCode().value()).isEqualTo(404);
         assertThat(parse(missing.getBody()).get("type").asText()).endsWith("payment-not-found");
 
-        ResponseEntity<String> malformed = http.getForEntity("/payments/not-a-reference", String.class);
+        ResponseEntity<String> malformed = getPayment("not-a-reference");
         assertThat(malformed.getStatusCode().value()).isEqualTo(400);
         assertThat(parse(malformed.getBody()).get("type").asText()).endsWith("malformed-reference");
     }

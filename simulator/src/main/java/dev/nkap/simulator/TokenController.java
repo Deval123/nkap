@@ -6,12 +6,15 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * MTN hands out a short-lived bearer token before any Collections call. The
- * simulator issues a {@link SessionToken} that carries its own expiry, with an
- * {@code expires_in} taken from the declared lifetime (one hour by default).
+ * MTN hands out a short-lived bearer token before any Collections <em>or</em> Disbursements
+ * call. Each product has its own token endpoint ({@code /collection/token/},
+ * {@code /disbursement/token/}) because each is a separate product with its own credentials;
+ * the simulator does not validate credentials, so the two endpoints behave identically —
+ * each issues a fresh {@link SessionToken} with an {@code expires_in} from the declared
+ * lifetime (one hour by default).
  *
- * <p>This endpoint always issues a fresh token and is never itself protected —
- * it is how a client that has just been told 401 gets back in.
+ * <p>Neither endpoint is itself protected — it is how a client that has just been told 401
+ * gets back in.
  */
 @RestController
 public class TokenController {
@@ -22,7 +25,7 @@ public class TokenController {
         this.engine = engine;
     }
 
-    @PostMapping("/collection/token/")
+    @PostMapping({"/collection/token/", "/disbursement/token/"})
     public Map<String, Object> token() {
         return Map.of(
             "access_token", SessionToken.issue(engine.tokenTtl()),

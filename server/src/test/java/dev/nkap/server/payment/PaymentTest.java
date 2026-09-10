@@ -11,7 +11,9 @@ import dev.nkap.core.payment.ReferenceId;
 import dev.nkap.provider.Capability;
 import dev.nkap.provider.PaymentIntent;
 import dev.nkap.provider.ProviderId;
+import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -106,22 +108,28 @@ class PaymentTest {
     }
 
     @Test
-    @DisplayName("hopping between SUBMITTED, PENDING and UNKNOWN re-arms the schedule but does not restart the window")
-    void hopping_between_non_terminal_states_does_not_restart_the_window() {
-        Payment payment = newPayment();
-        payment.applyTransition(PaymentState.SUBMITTED, PaymentTransition.Cause.SUBMIT_RESPONSE, "", "", "");
-        Instant becameUnresolved = payment.unresolvedSince();
-        assertThat(becameUnresolved).isNotNull();
+    @DisplayName("a hop between non-terminal states does not restart the window or the backoff, but does make the payment due now")
+    void a_hop_between_non_terminal_states_does_not_restart_the_schedule() {
+        PaymentIntent intent = new PaymentIntent(Capability.COLLECT, Money.of(5000, Currency.EUR),
+                "46733123453", "hello", "note", Map.of());
+        Instant createdAt = Instant.now().minus(Duration.ofHours(4));
+        Instant becameUnresolved = Instant.now().minus(Duration.ofHours(3));
+        Instant escalatedAt = Instant.now().minus(Duration.ofHours(1));
+        // A payment the reconciler has queried seven times and already escalated.
+        Payment payment = Payment.rehydrate(ReferenceId.newReference(), ProviderId.of("mtn"), "merchant-1", intent,
+                PaymentState.UNKNOWN, "", "", createdAt, createdAt, List.of(),
+                7, Instant.now().plus(Duration.ofMinutes(30)), escalatedAt, becameUnresolved);
 
-        payment.applyTransition(PaymentState.UNKNOWN, PaymentTransition.Cause.RECONCILER, "", "went quiet", "");
         payment.applyTransition(PaymentState.PENDING, PaymentTransition.Cause.RECONCILER, "PENDING", "", "");
-        payment.applyTransition(PaymentState.UNKNOWN, PaymentTransition.Cause.RECONCILER, "", "quiet again", "");
 
         assertThat(payment.unresolvedSince())
-                .as("the window is measured from the first unresolved moment, not each hop")
+                .as("the window still runs from the first unresolved moment")
                 .isEqualTo(becameUnresolved);
-        assertThat(payment.reconcileAttempts()).as("each hop still re-arms the schedule").isZero();
-        assertThat(payment.escalatedAt()).isNull();
+        assertThat(payment.reconcileAttempts())
+                .as("the backoff keeps climbing across a hop — it is not pinned back to base")
+                .isEqualTo(7);
+        assertThat(payment.escalatedAt()).as("a payment that has started moving again is chased once more").isNull();
+        assertThat(payment.reconcileDueAt()).as("a state change is worth looking at now").isEqualTo(payment.updatedAt());
     }
 
     @Test

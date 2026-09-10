@@ -3,6 +3,8 @@ package dev.nkap.core.payment;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.util.EnumSet;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -27,6 +29,36 @@ class PaymentStateTest {
         assertFalse(PaymentState.UNKNOWN.isTerminal());
         assertTrue(PaymentState.UNKNOWN.needsResolution());
         assertFalse(PaymentState.UNKNOWN.movesMoney());
+    }
+
+    @Test
+    @DisplayName("isUnresolved is every non-terminal state after CREATED, and only those: the states the reconciler chases")
+    void isUnresolvedClassifiesEveryState() {
+        assertFalse(PaymentState.CREATED.isUnresolved(),
+                "CREATED is not yet the operator's, or the submission is in flight");
+
+        for (PaymentState state : EnumSet.of(PaymentState.SUBMITTED, PaymentState.PENDING, PaymentState.UNKNOWN)) {
+            assertTrue(state.isUnresolved(), state + " has left CREATED and reached no verdict");
+        }
+
+        for (PaymentState state : PaymentState.values()) {
+            if (state.isTerminal()) {
+                assertFalse(state.isUnresolved(), state + " is terminal — there is nothing left to resolve");
+            }
+        }
+
+        // Over the whole enum, so a state added later cannot default into a bucket: it must
+        // be CREATED, one of the three above, or terminal, or this fails and the author has
+        // to classify it deliberately — in isUnresolved's contract and this test, and in
+        // PostgresReconciliationStore.UNRESOLVED_STATES and the V4 index predicate.
+        for (PaymentState state : PaymentState.values()) {
+            boolean classified = state == PaymentState.CREATED
+                    || state == PaymentState.SUBMITTED
+                    || state == PaymentState.PENDING
+                    || state == PaymentState.UNKNOWN
+                    || state.isTerminal();
+            assertTrue(classified, state + " is unclassified for the reconciler");
+        }
     }
 
     @Test

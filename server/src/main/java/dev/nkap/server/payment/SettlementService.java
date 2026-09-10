@@ -143,7 +143,12 @@ public class SettlementService {
             settle(payment);
         }
         payments.save(payment);
-        return ConfirmationOutcome.resolved(payment.state(), status.providerStatusCode());
+        // A terminal state is a verdict and the payment leaves the queue. A move to another
+        // non-terminal state — UNKNOWN -> PENDING — is progress, not a resolution: the
+        // reconciler must keep chasing it and must still escalate it if its window is spent.
+        return payment.state().isTerminal()
+                ? ConfirmationOutcome.resolved(payment.state(), status.providerStatusCode())
+                : ConfirmationOutcome.advanced(payment.state(), status.providerStatusCode());
     }
 
     /**

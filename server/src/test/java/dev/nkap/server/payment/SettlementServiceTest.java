@@ -70,8 +70,9 @@ class SettlementServiceTest {
         Payment payment = persisted(PaymentState.SUBMITTED);
         when(adapter.query(any())).thenReturn(status(PaymentState.SUCCEEDED, "SUCCESSFUL"));
 
-        settlement.confirm(MTN, payment.reference(), PaymentTransition.Cause.CALLBACK);
+        ConfirmationOutcome outcome = settlement.confirm(MTN, payment.reference(), PaymentTransition.Cause.CALLBACK);
 
+        assertThat(outcome.resolved()).as("a terminal state is a verdict — the reconciler leaves it alone").isTrue();
         assertThat(payment.state()).isEqualTo(PaymentState.SUCCEEDED);
         assertThat(payment.providerTransactionId()).isEqualTo("txn-99");
 
@@ -122,6 +123,22 @@ class SettlementServiceTest {
 
         assertThat(payment.state()).isEqualTo(PaymentState.SUBMITTED);
         assertThat(payment.history()).filteredOn(t -> t.cause() == PaymentTransition.Cause.CALLBACK).isEmpty();
+        assertThat(ledger.entries()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("a query that moves a payment to another non-terminal state is ADVANCED, not resolved — the reconciler keeps it")
+    void a_non_terminal_transition_is_advanced_not_resolved() throws Exception {
+        Payment payment = persisted(PaymentState.SUBMITTED);
+        when(adapter.query(any())).thenReturn(status(PaymentState.PENDING, "PENDING"));
+
+        ConfirmationOutcome outcome = settlement.confirm(MTN, payment.reference(), PaymentTransition.Cause.CALLBACK);
+
+        assertThat(payment.state()).isEqualTo(PaymentState.PENDING);
+        assertThat(outcome.kind()).isEqualTo(ConfirmationOutcome.Kind.ADVANCED);
+        assertThat(outcome.resolved())
+                .as("SUBMITTED -> PENDING is progress, not a verdict: still this gateway's to chase and to escalate")
+                .isFalse();
         assertThat(ledger.entries()).isEmpty();
     }
 

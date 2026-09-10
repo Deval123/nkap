@@ -37,14 +37,12 @@ public final class Payment {
     private String providerTransactionId = "";
 
     // The reconciler's schedule. Meaningful while the payment is unresolved — SUBMITTED,
-    // PENDING or UNKNOWN. Entering, or hopping within, that set makes the payment due for
-    // reconciliation immediately (reconcileDueAt = now, attempts = 0) and clears any
-    // earlier escalation, so a payment that keeps changing non-terminal state is picked up
-    // again. The reconciler advances attempts and reconcileDueAt itself; escalatedAt is
-    // stamped when the retry window is spent and a human is paged — a flag, not a state.
-    // unresolvedSince is when the payment BECAME unresolved: the escalation window is
-    // wall-clock time measured from it, so it is stamped only on the way in from CREATED,
-    // not on every hop between SUBMITTED, PENDING and UNKNOWN.
+    // PENDING or UNKNOWN. reconcileAttempts, reconcileDueAt and unresolvedSince are set once,
+    // when the payment first enters that set, and thereafter advanced only by the reconciler:
+    // the backoff and the escalation window both run from the first unresolved moment, not
+    // from each hop between the three states (see applyTransition for why). escalatedAt is
+    // stamped when the window is spent and a human is paged, and cleared only on that same
+    // way in — a hop does not un-escalate a payment. A flag, not a state.
     private int reconcileAttempts;
     private Instant reconcileDueAt;
     private Instant escalatedAt;
@@ -98,27 +96,34 @@ public final class Payment {
         PaymentState previous = this.state;
         this.state = previous.transitionTo(target);
         this.updatedAt = Instant.now();
-        if (this.state.isUnresolved()) {
-            // Entering, or hopping within, the states the reconciler chases. Re-arm the
-            // schedule so the next pass claims it: attempts back to zero, any escalation
-            // cleared, due now.
-            //
-            // Resetting reconcileAttempts on each hop is deliberate: a change of state is real
-            // news from the operator and re-querying sooner after one is appropriate. The known
-            // cost is that an operator alternating between two non-terminal answers keeps the
-            // backoff pinned at its base for the duration of the escalation window (~1,440 queries
-            // under default policy settings). That churn is bounded by the window itself, which is
-            // NOT reset on hops (see below).
+        if (this.state.isUnresolved() && !previous.isUnresolved()) {
+            // The payment has entered a fresh episode of being unresolved — from CREATED, or
+            // from a state it had briefly resolved out of. Everything the reconciler tracks
+            // starts here, and from here on is advanced only by the reconciler. A later hop
+            // between SUBMITTED, PENDING and UNKNOWN restarts none of it:
+            //   - the schedule (reconcileDueAt): due now, since there is nothing yet to
+            //     preserve. A hop must NOT move it back to now — the claim that produced the
+            //     hop already counted the attempt and pushed the next one out by a backoff
+            //     interval, and discarding that collapses the re-query cadence to the pass
+            //     interval (were an operator able to keep a payment hopping, roughly 2 880
+            //     times a day at the thirty-second default — the load backoff exists to
+            //     prevent). The attempt counter never drove the cadence; reconcileDueAt does.
+            //   - the attempt count, and with it the backoff interval: the longer a payment
+            //     has been unresolved the less sense a fast re-query of a struggling
+            //     operator makes, so a hop does not pin it back to base.
+            //   - the window start (unresolvedSince): one episode of not knowing gets one
+            //     window, however many non-terminal states it passes through. An operator
+            //     alternating two non-terminal answers would otherwise reset it every pass
+            //     and the payment would never be escalated.
+            //   - the escalation flag: cleared here, and only here. A hop leaves an escalated
+            //     payment escalated — it is still that human's problem whichever non-terminal
+            //     state it now wears — so the list a human reads does not flicker as the
+            //     operator changes its answer. The flag lifts only when a genuinely new
+            //     episode starts, which is the same moment a fresh window starts.
             this.reconcileAttempts = 0;
             this.reconcileDueAt = this.updatedAt;
             this.escalatedAt = null;
-            // The escalation window is measured from when the payment became unresolved,
-            // not from each hop between SUBMITTED, PENDING and UNKNOWN — an operator that
-            // alternates two non-terminal answers would otherwise reset it every pass and
-            // the payment would never be escalated. Stamp it only on the way in.
-            if (!previous.isUnresolved()) {
-                this.unresolvedSince = this.updatedAt;
-            }
+            this.unresolvedSince = this.updatedAt;
         }
         this.history.add(new PaymentTransition(previous, this.state, this.updatedAt, cause, operatorCode, note, rawResponse));
     }

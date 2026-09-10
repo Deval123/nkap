@@ -81,4 +81,17 @@ class PaymentStateTest {
         assertTrue(PaymentState.CREATED.canTransitionTo(PaymentState.PENDING));
         assertEquals(PaymentState.PENDING, PaymentState.CREATED.transitionTo(PaymentState.PENDING));
     }
+
+    @Test
+    @DisplayName("only non-terminal states that have left CREATED are unresolved: the reconciler chases exactly SUBMITTED, PENDING and UNKNOWN")
+    void isUnresolvedClassifiesEveryState() {
+        for (PaymentState state : PaymentState.values()) {
+            boolean expected = switch (state) {
+                case SUBMITTED, PENDING, UNKNOWN -> true;
+                case CREATED, SUCCEEDED, FAILED, EXPIRED -> false;
+            };
+            assertEquals(expected, state.isUnresolved(),
+                    () -> state + " must be explicitly classified as " + (expected ? "unresolved" : "not unresolved"));
+        }
+    }
 }

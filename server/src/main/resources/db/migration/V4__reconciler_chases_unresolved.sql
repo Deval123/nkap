@@ -25,6 +25,8 @@ ALTER TABLE payment RENAME COLUMN unknown_since TO unresolved_since;
 UPDATE payment SET unresolved_since = updated_at
  WHERE state IN ('SUBMITTED', 'PENDING') AND unresolved_since IS NULL;
 
+-- The index predicate must follow PaymentState.isUnresolved (and PostgresReconciliationStore.UNRESOLVED_STATES).
+-- If a new unresolved state is added, widen this predicate or the claim query stops being an index range scan.
 DROP INDEX payment_reconcile_due_idx;
 CREATE INDEX payment_reconcile_due_idx
     ON payment (reconcile_due_at)

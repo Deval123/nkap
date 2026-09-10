@@ -147,7 +147,9 @@ docker compose up --build -d      # builds the gateway and the simulator from so
 ```
 
 `examples/demo.sh` puts one payment through the failure this project exists for, and
-asserts every step:
+asserts every step. `POST /payments` is authenticated: `compose.yaml` provisions one
+obviously-named demo API key before the gateway starts, and the script sends it as
+`Authorization: Bearer`. The merchant is the key's, never a body field.
 
 1. the operator is scripted to accept the submission and then go **silent**;
 2. `POST /payments` returns **202** and the payment is `UNKNOWN` — not `FAILED`, because

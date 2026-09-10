@@ -8,6 +8,16 @@
 #
 # Nothing in this file is a secret. The MTN values are placeholders that point the
 # gateway at the simulator; a real deployment supplies its own through the environment.
+#
+# Callers are authenticated (issue #59): POST /payments needs an API key. Keys are
+# provisioned by a host-side command, never a route. The `key-init` service below runs
+# that command once, before the gateway starts, to create ONE obviously-named demo key
+# --- `nkap_demo-key-not-for-production` for merchant `acme` --- so the demo has a
+# credential. A real deployment provisions its own with:
+#
+#     docker compose run --rm gateway --nkap.apikey.create --nkap.apikey.merchant=<id>
+#
+# and reads the key off stdout once; it is stored only as a hash and cannot be recovered.
 
 name: nkap
 
@@ -38,6 +48,39 @@ services:
       timeout: 3s
       retries: 40
 
+  # One-shot: provision the demo API key, then exit. Runs the same jar as the gateway with
+  # the provisioning command (--nkap.apikey.create), which starts no web server. Idempotent
+  # — re-running `docker compose up` does not fail on the key already existing. The token is
+  # fixed and obviously a demo one; a real deployment never passes --nkap.apikey.token.
+  key-init:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NKAP_DB_URL: jdbc:postgresql://db:5432/nkap
+      NKAP_DB_USER: nkap
+      NKAP_DB_PASSWORD: nkap
+      # The provisioning command builds the full context, which wires an MTN adapter bean;
+      # these placeholders keep that construction happy. Nothing here calls the operator.
+      NKAP_PROVIDER_MTN_BASE_URL: http://simulator:8081
+      NKAP_PROVIDER_MTN_TARGET_ENVIRONMENT: sandbox
+      NKAP_PROVIDER_MTN_SUBSCRIPTION_KEY: placeholder-not-a-real-subscription-key
+      NKAP_PROVIDER_MTN_API_USER: placeholder-not-a-real-api-user
+      NKAP_PROVIDER_MTN_API_KEY: placeholder-not-a-real-api-key
+      NKAP_PROVIDER_MTN_CURRENCY: EUR
+      NKAP_PROVIDER_MTN_COUNTRY: demoland
+      # A one-shot command has no use for the reconciler's scheduler.
+      NKAP_RECONCILER_ENABLED: "false"
+    command:
+      - "--nkap.apikey.create"
+      - "--nkap.apikey.merchant=acme"
+      - "--nkap.apikey.label=demo"
+      - "--nkap.apikey.token=nkap_demo-key-not-for-production"
+    restart: "no"
+
   gateway:
     build:
       context: .
@@ -49,6 +92,8 @@ services:
         condition: service_healthy
       simulator:
         condition: service_healthy
+      key-init:
+        condition: service_completed_successfully
     ports:
       - "8080:8080"
     environment:

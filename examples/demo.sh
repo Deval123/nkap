@@ -14,6 +14,10 @@
 # with it gone, only the reconciler — the thing this project is built on — can resolve the
 # payment, so this run proves the reconciler and not a webhook.
 #
+# POST /payments is authenticated (issue #59). compose.yaml provisions one demo API key
+# before the gateway starts; this script sends it as `Authorization: Bearer`. The merchant
+# is the key's, not a body field — that is the whole point of that slice.
+#
 # Every step is asserted. The script exits non-zero the moment one does not hold — which
 # is what lets CI run it as a test. Run it from anywhere after `docker compose up`:
 #
@@ -24,6 +28,12 @@ set -euo pipefail
 
 GATEWAY="${GATEWAY:-http://localhost:8080}"
 SIMULATOR="${SIMULATOR:-http://localhost:8081}"
+
+# The demo API key. compose.yaml's `key-init` service provisions exactly this one, for
+# merchant `acme`, before the gateway starts. The name says what it is: a real deployment
+# provisions its own with `docker compose run --rm gateway --nkap.apikey.create ...` and
+# never uses a fixed token.
+DEMO_KEY="${DEMO_KEY:-nkap_demo-key-not-for-production}"
 
 # Run compose commands from the repository root, whatever directory we were invoked from.
 cd "$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -79,9 +89,9 @@ info "no callback — only the reconciler can resolve this"
 say "2. POST /payments — the network drops before the operator replies"
 response="$(curl -sS -w '\n%{http_code}' -X POST "$GATEWAY/payments" \
   -H 'Content-Type: application/json' \
+  -H "Authorization: Bearer $DEMO_KEY" \
   -H "Idempotency-Key: demo-$(date +%s)-$RANDOM" \
   -d '{
-        "merchantId": "acme",
         "operation": "COLLECT",
         "amount": 5000,
         "currency": "EUR",
@@ -104,7 +114,7 @@ info "reference: $reference"
 # --- 3. show the payment and the ledger ------------------------------------------
 
 say "3. GET /payments/$reference — and look at the ledger"
-state="$(curl -fsS "$GATEWAY/payments/$reference" | jq -r '.state')"
+state="$(curl -fsS -H "Authorization: Bearer $DEMO_KEY" "$GATEWAY/payments/$reference" | jq -r '.state')"
 [ "$state" = "UNKNOWN" ] || fail "stored state should be UNKNOWN, is '$state'"
 ok "the gateway holds the payment as UNKNOWN"
 
@@ -118,7 +128,7 @@ say "4. Waiting for the reconciler to re-query the operator and settle it"
 last=""
 resolved=""
 for _ in $(seq 1 40); do
-  payment="$(curl -fsS "$GATEWAY/payments/$reference")"
+  payment="$(curl -fsS -H "Authorization: Bearer $DEMO_KEY" "$GATEWAY/payments/$reference")"
   state="$(printf '%s' "$payment" | jq -r '.state')"
   if [ "$state" != "$last" ]; then
     info "state: $state"

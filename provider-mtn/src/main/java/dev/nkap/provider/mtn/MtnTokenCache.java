@@ -28,7 +28,11 @@ final class MtnTokenCache {
     /** Refresh this long before the token actually expires. Production MTN tokens live an hour. */
     static final Duration DEFAULT_REFRESH_MARGIN = Duration.ofSeconds(30);
 
+    /** MTN's token endpoint for Collections. Disbursements is a separate product with its own. */
+    static final String COLLECTION_TOKEN_PATH = "/collection/token/";
+
     private final MtnProfile profile;
+    private final String tokenPath;
     private final HttpClient http;
     private final Duration requestTimeout;
     private final ObjectMapper json;
@@ -39,11 +43,21 @@ final class MtnTokenCache {
     private CompletableFuture<Token> inFlight;
 
     MtnTokenCache(MtnProfile profile, HttpClient http, Duration requestTimeout, ObjectMapper json) {
-        this(profile, http, requestTimeout, json, DEFAULT_REFRESH_MARGIN);
+        this(profile, COLLECTION_TOKEN_PATH, http, requestTimeout, json, DEFAULT_REFRESH_MARGIN);
     }
 
     MtnTokenCache(MtnProfile profile, HttpClient http, Duration requestTimeout, ObjectMapper json, Duration refreshMargin) {
+        this(profile, COLLECTION_TOKEN_PATH, http, requestTimeout, json, refreshMargin);
+    }
+
+    MtnTokenCache(MtnProfile profile, String tokenPath, HttpClient http, Duration requestTimeout, ObjectMapper json) {
+        this(profile, tokenPath, http, requestTimeout, json, DEFAULT_REFRESH_MARGIN);
+    }
+
+    MtnTokenCache(MtnProfile profile, String tokenPath, HttpClient http, Duration requestTimeout, ObjectMapper json,
+                  Duration refreshMargin) {
         this.profile = profile;
+        this.tokenPath = tokenPath;
         this.http = http;
         this.requestTimeout = requestTimeout;
         this.json = json;
@@ -103,7 +117,7 @@ final class MtnTokenCache {
 
     /** Runs on the common pool; failures come back as an unchecked wrapper that {@link #refresh()} unwraps. */
     private Token fetch() {
-        HttpRequest request = HttpRequest.newBuilder(profile.endpoint("/collection/token/"))
+        HttpRequest request = HttpRequest.newBuilder(profile.endpoint(tokenPath))
                 .timeout(requestTimeout)
                 .header("Authorization", basicAuth(profile.apiUser(), profile.apiKey()))
                 .header("Ocp-Apim-Subscription-Key", profile.subscriptionKey())

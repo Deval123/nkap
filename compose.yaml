@@ -112,6 +112,13 @@ services:
       NKAP_PROVIDER_MTN_CURRENCY: EUR
       NKAP_PROVIDER_MTN_COUNTRY: demoland
 
+      # Disbursements is a separate MTN product with its own credentials (issue #62). Same
+      # placeholders, same simulator; set so a POST /payments with "operation":"DISBURSE"
+      # works against the demo stack. A deployment that only collects leaves these unset.
+      NKAP_PROVIDER_MTN_DISBURSEMENT_SUBSCRIPTION_KEY: placeholder-not-a-real-disbursement-subscription-key
+      NKAP_PROVIDER_MTN_DISBURSEMENT_API_USER: placeholder-not-a-real-disbursement-api-user
+      NKAP_PROVIDER_MTN_DISBURSEMENT_API_KEY: placeholder-not-a-real-disbursement-api-key
+
       # Demo-only cadence, set here rather than in application.yml. The defaults there were
       # chosen for a real deployment and their comments explain why; a fast loop makes the
       # demo watchable in one sitting without pretending the production values are wrong.

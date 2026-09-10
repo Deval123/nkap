@@ -45,12 +45,20 @@ class SettlementServiceTest {
     }
 
     private static PaymentIntent intent() {
-        return new PaymentIntent(Capability.COLLECT, Money.of(5000, Currency.EUR),
+        return intent(Capability.COLLECT);
+    }
+
+    private static PaymentIntent intent(Capability operation) {
+        return new PaymentIntent(operation, Money.of(5000, Currency.EUR),
                 "46733123453", "rent", "march", Map.of());
     }
 
     private Payment persisted(PaymentState state) {
-        Payment payment = Payment.create(ReferenceId.newReference(), MTN, "merchant-1", intent());
+        return persisted(state, Capability.COLLECT);
+    }
+
+    private Payment persisted(PaymentState state, Capability operation) {
+        Payment payment = Payment.create(ReferenceId.newReference(), MTN, "merchant-1", intent(operation));
         if (state == PaymentState.SUBMITTED) {
             payment.applyTransition(PaymentState.SUBMITTED, PaymentTransition.Cause.SUBMIT_RESPONSE, "", "", "");
         } else if (state != PaymentState.CREATED) {
@@ -83,6 +91,41 @@ class SettlementServiceTest {
             assertThat(signedAmount(entry, AccountId.providerFloat("mtn", Currency.EUR))).isEqualTo(5000L);
             assertThat(signedAmount(entry, AccountId.merchantPayable("merchant-1", Currency.EUR))).isEqualTo(-5000L);
         });
+    }
+
+    @Test
+    @DisplayName("a settled disbursement posts the ADR 0007 mirror: float credited, merchant payable debited, summing to zero")
+    void a_settled_disbursement_posts_the_adr_0007_mirror() throws Exception {
+        Payment payment = persisted(PaymentState.SUBMITTED, Capability.DISBURSE);
+        when(adapter.query(any())).thenReturn(status(PaymentState.SUCCEEDED, "SUCCESSFUL"));
+
+        settlement.confirm(MTN, payment.reference(), PaymentTransition.Cause.CALLBACK);
+
+        assertThat(payment.state()).isEqualTo(PaymentState.SUCCEEDED);
+        assertThat(ledger.entriesForReference(payment.reference().toString())).singleElement().satisfies(entry -> {
+            assertThat(entry.id()).isEqualTo("disbursement:" + payment.reference());
+            assertThat(entry.postings()).hasSize(2);
+            assertThat(entry.currency()).isEqualTo(Currency.EUR);
+            assertThat(entry.total()).isEqualTo(Money.of(5000, Currency.EUR));
+            // The mirror of a collection: the float goes DOWN (credit), the merchant is owed LESS (debit).
+            assertThat(signedAmount(entry, AccountId.providerFloat("mtn", Currency.EUR))).isEqualTo(-5000L);
+            assertThat(signedAmount(entry, AccountId.merchantPayable("merchant-1", Currency.EUR))).isEqualTo(5000L);
+            long sum = entry.postings().stream().mapToLong(p -> p.amount().amount()).sum();
+            assertThat(sum).as("the entry balances").isZero();
+        });
+    }
+
+    @Test
+    @DisplayName("a disbursement the operator refuses for insufficient funds is FAILED with the operator's code, and posts nothing")
+    void a_refused_disbursement_is_failed_and_posts_nothing() throws Exception {
+        Payment payment = persisted(PaymentState.SUBMITTED, Capability.DISBURSE);
+        when(adapter.query(any())).thenReturn(status(PaymentState.FAILED, "NOT_ENOUGH_FUNDS"));
+
+        settlement.confirm(MTN, payment.reference(), PaymentTransition.Cause.CALLBACK);
+
+        assertThat(payment.state()).isEqualTo(PaymentState.FAILED);
+        assertThat(payment.history()).last().satisfies(t -> assertThat(t.operatorCode()).isEqualTo("NOT_ENOUGH_FUNDS"));
+        assertThat(ledger.entries()).as("a failed disbursement writes nothing — no reserve, no prediction").isEmpty();
     }
 
     @Test

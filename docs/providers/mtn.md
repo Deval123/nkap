@@ -69,6 +69,29 @@ under test.
 | `GET /collection/v1_0/requesttopay/{ref}` | `200` with the payload above |
 | `GET` on a reference never submitted | `404` `{"code":"RESOURCE_NOT_FOUND"}` |
 
+## Disbursements
+
+Not observed against a real MTN — mapped from the documented shape and driven through the
+simulator (issue #62). Treated as **structurally identical to Collections** until a real
+call proves otherwise:
+
+- A **separate product**: its own subscription key, API user and key, and token endpoint
+  `POST /disbursement/token/`. `provider-mtn` has a whole `MtnDisbursementsAdapter` with its
+  own `MtnProfile` and token cache; `MtnAdapter` is one adapter over both. In the gateway
+  the credentials are `nkap.provider.mtn.disbursement.*`.
+- `POST /disbursement/v1_0/transfer` — `202` with an empty body, `X-Reference-Id` the
+  idempotency key, exactly like `requesttopay`. The body names the counterparty **`payee`**
+  where a collection says `payer`.
+- `GET /disbursement/v1_0/transfer/{ref}` — assumed to return the same
+  `{status, reason, financialTransactionId}` shape; `404` `RESOURCE_NOT_FOUND` for an
+  unknown reference, handled as `UNKNOWN` the same way.
+- The same status/error codes and the same conservatism: an unrecognised code is `UNKNOWN`.
+  A transfer refused for lack of funds is an ordinary `FAILED` with `NOT_ENOUGH_FUNDS` — the
+  gateway does not predict it or hold a reserve (see
+  [ADR 0007](../adr/0007-what-a-settled-disbursement-posts.md)).
+- The ledger effect is the mirror of a collection (ADR 0007); the fee rule is unchanged
+  (ADR 0006).
+
 ## Still unknown
 
 Left open deliberately rather than guessed. Each is worth a pull request adding a line here.
@@ -77,7 +100,10 @@ Left open deliberately rather than guessed. Each is worth a pull request adding 
 - What a `SUCCESSFUL` and a `FAILED` status actually contain, field by field.
 - Whether production returns codes absent from the documentation.
 - The shape and headers of a real callback, and whether it is ever the only notification.
-- Whether Disbursements differ beyond the IP allow-listing requirement.
+- **Whether a real Disbursements `transfer` and its status differ from what the *Disbursements*
+  section above assumes** — a different response field, a code Collections does not use, a
+  callback shaped differently. Mapped from documentation and the simulator only; a real call
+  is the thing to check it against, and this line moves up into that section when one is made.
 - **How an operator statement is obtained** — a portal download, a report API, an emailed
   file, an SFTP drop — and on what cadence. Nothing fetches one today; statement
   reconciliation is a host-side command (`--nkap.statement.import=<path>`) run against a

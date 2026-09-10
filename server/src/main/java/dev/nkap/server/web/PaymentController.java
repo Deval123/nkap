@@ -179,10 +179,10 @@ class PaymentController {
         try {
             operation = Capability.valueOf(request.operation().strip().toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException e) {
-            throw invalid("operation must be COLLECT, was '" + request.operation() + "'");
+            throw invalid("operation must be COLLECT or DISBURSE, was '" + request.operation() + "'");
         }
-        if (operation != Capability.COLLECT) {
-            throw invalid("this endpoint only creates COLLECT payments, not " + operation);
+        if (operation != Capability.COLLECT && operation != Capability.DISBURSE) {
+            throw invalid("this endpoint creates COLLECT or DISBURSE payments, not " + operation);
         }
 
         Currency currency;

@@ -6,9 +6,11 @@ import dev.nkap.core.payment.PaymentState;
  * What {@link SettlementService#confirm} did, for the caller that needs to react to it.
  *
  * <p>The callback endpoint discards this — a webhook is fire-and-forget. The reconciler
- * reads it: whether the payment is still {@code UNKNOWN} decides whether this pass counts
- * as a spent attempt, and {@link #lastOperatorAnswer()} is what the escalation log records
- * as the operator's final word before a human was paged.
+ * reads it: {@link #resolved()} tells it the payment reached a verdict and can be left
+ * alone; anything else — inconclusive, no answer, or {@link Kind#ADVANCED} to another
+ * non-terminal state — leaves the payment in the queue and eligible for escalation, and
+ * {@link #lastOperatorAnswer()} is what the escalation log records as the operator's final
+ * word before a human was paged.
  *
  * @param kind               what happened
  * @param state              the payment's state after the call, or {@code null} when the payment
@@ -22,6 +24,12 @@ public record ConfirmationOutcome(Kind kind, PaymentState state, String operator
         RESOLVED,
         /** The payment was already terminal before the query — nothing to do, and nothing wrong. */
         ALREADY_RESOLVED,
+        /**
+         * The query moved the payment to another <strong>non-terminal</strong> state —
+         * {@code UNKNOWN → PENDING}, say. Progress, but not a verdict: the payment is still
+         * this gateway's to chase, and still counts towards escalation.
+         */
+        ADVANCED,
         /** The query answered, but not conclusively: the payment is still {@code UNKNOWN}. */
         INCONCLUSIVE,
         /** The operator did not answer the confirming query. The payment is unchanged. */
@@ -71,5 +79,9 @@ public record ConfirmationOutcome(Kind kind, PaymentState state, String operator
 
     static ConfirmationOutcome resolved(PaymentState state, String operatorStatusCode) {
         return new ConfirmationOutcome(Kind.RESOLVED, state, operatorStatusCode);
+    }
+
+    static ConfirmationOutcome advanced(PaymentState state, String operatorStatusCode) {
+        return new ConfirmationOutcome(Kind.ADVANCED, state, operatorStatusCode);
     }
 }

@@ -41,7 +41,8 @@ public final class Payment {
     // when the payment first enters that set, and thereafter advanced only by the reconciler:
     // the backoff and the escalation window both run from the first unresolved moment, not
     // from each hop between the three states (see applyTransition for why). escalatedAt is
-    // stamped when the window is spent and a human is paged — a flag, not a state.
+    // stamped when the window is spent and a human is paged, and cleared only on that same
+    // way in — a hop does not un-escalate a payment. A flag, not a state.
     private int reconcileAttempts;
     private Instant reconcileDueAt;
     private Instant escalatedAt;
@@ -95,31 +96,34 @@ public final class Payment {
         PaymentState previous = this.state;
         this.state = previous.transitionTo(target);
         this.updatedAt = Instant.now();
-        if (this.state.isUnresolved()) {
-            // A state change is news — clear any escalation, since a payment that has
-            // started moving again may not need a human after all.
+        if (this.state.isUnresolved() && !previous.isUnresolved()) {
+            // The payment has entered a fresh episode of being unresolved — from CREATED, or
+            // from a state it had briefly resolved out of. Everything the reconciler tracks
+            // starts here, and from here on is advanced only by the reconciler. A later hop
+            // between SUBMITTED, PENDING and UNKNOWN restarts none of it:
+            //   - the schedule (reconcileDueAt): due now, since there is nothing yet to
+            //     preserve. A hop must NOT move it back to now — the claim that produced the
+            //     hop already counted the attempt and pushed the next one out by a backoff
+            //     interval, and discarding that collapses the re-query cadence to the pass
+            //     interval (were an operator able to keep a payment hopping, roughly 2 880
+            //     times a day at the thirty-second default — the load backoff exists to
+            //     prevent). The attempt counter never drove the cadence; reconcileDueAt does.
+            //   - the attempt count, and with it the backoff interval: the longer a payment
+            //     has been unresolved the less sense a fast re-query of a struggling
+            //     operator makes, so a hop does not pin it back to base.
+            //   - the window start (unresolvedSince): one episode of not knowing gets one
+            //     window, however many non-terminal states it passes through. An operator
+            //     alternating two non-terminal answers would otherwise reset it every pass
+            //     and the payment would never be escalated.
+            //   - the escalation flag: cleared here, and only here. A hop leaves an escalated
+            //     payment escalated — it is still that human's problem whichever non-terminal
+            //     state it now wears — so the list a human reads does not flicker as the
+            //     operator changes its answer. The flag lifts only when a genuinely new
+            //     episode starts, which is the same moment a fresh window starts.
+            this.reconcileAttempts = 0;
+            this.reconcileDueAt = this.updatedAt;
             this.escalatedAt = null;
-            if (!previous.isUnresolved()) {
-                // The schedule, the attempt count and the window start are set once, on the
-                // way in from CREATED, and thereafter advanced only by the reconciler. A hop
-                // between SUBMITTED, PENDING and UNKNOWN restarts none of them:
-                //   - the schedule (reconcileDueAt), because the claim that produced the hop
-                //     has already recorded this attempt and pushed the next one out by a
-                //     backoff interval. Move it back to now here and that interval is
-                //     discarded: the next re-query then lands one pass interval later, not
-                //     one backoff interval — roughly 2 880 times a day at the thirty-second
-                //     default, which is the load the backoff exists to prevent. The attempt
-                //     counter never drove the cadence; reconcileDueAt does.
-                //   - the window, because an operator alternating two non-terminal answers
-                //     would otherwise reset it every pass and the payment would never be
-                //     escalated;
-                //   - the attempt count, and with it the backoff interval, because the
-                //     longer a payment has been unresolved the less it makes sense to
-                //     re-query an operator that is plainly struggling.
-                this.reconcileAttempts = 0;
-                this.reconcileDueAt = this.updatedAt;
-                this.unresolvedSince = this.updatedAt;
-            }
+            this.unresolvedSince = this.updatedAt;
         }
         this.history.add(new PaymentTransition(previous, this.state, this.updatedAt, cause, operatorCode, note, rawResponse));
     }

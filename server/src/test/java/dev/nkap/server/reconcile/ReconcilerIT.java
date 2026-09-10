@@ -292,6 +292,76 @@ class ReconcilerIT {
                         Duration.ofMinutes(8), Duration.ofMinutes(16));
     }
 
+    @Test
+    @DisplayName("a payment past its window is escalated on the very pass that moves it between non-terminal states")
+    void a_hop_on_the_pass_that_exhausts_the_window_still_escalates() {
+        // window one second; the payment has been unresolved for an hour, so the pass that
+        // moves it UNKNOWN -> PENDING is also the pass that should escalate it. A hop is
+        // progress, not a resolution — it must not make the reconciler skip the escalation
+        // branch.
+        ReconcilerProperties properties = new ReconcilerProperties(
+                Duration.ofSeconds(30), 50,
+                Duration.ofSeconds(30), Duration.ofMinutes(10), Duration.ofSeconds(1));
+        Reconciler reconciler = reconcilerWith(properties, operatorAnswering(new ProviderStatus(
+                PaymentState.PENDING, "PENDING", "", null, "", "{\"status\":\"PENDING\"}")));
+
+        ReferenceId reference = anUnknownPaymentDueForReconciliation();
+        jdbc.update("UPDATE payment SET unresolved_since = now() - interval '1 hour' WHERE reference = ?",
+                reference.value());
+
+        reconciler.runOnce();
+
+        Map<String, Object> row = paymentRow(reference);
+        assertThat(row.get("escalated_at"))
+                .as("the window was already spent — moving UNKNOWN -> PENDING is not a resolution and must not skip escalation")
+                .isNotNull();
+        assertThat(row.get("state")).isEqualTo(PaymentState.PENDING.name());
+        assertThat(statesEverReached(reference))
+                .as("escalation is never a verdict — never FAILED")
+                .doesNotContain(PaymentState.FAILED.name());
+    }
+
+    @Test
+    @DisplayName("an escalated payment that a later callback moves between non-terminal states stays escalated, and is still not claimed")
+    void an_escalated_payment_that_hops_stays_escalated_and_is_not_claimed() throws Exception {
+        ReconcilerProperties properties = new ReconcilerProperties(
+                Duration.ofSeconds(30), 50, Duration.ofMinutes(10), Duration.ofMinutes(10), Duration.ofSeconds(1));
+        ProviderAdapter silentOperator = mock(ProviderAdapter.class);
+        when(silentOperator.query(any())).thenThrow(new ProviderUnavailableException("silent"));
+        Reconciler reconciler = reconcilerWith(properties, registryFor(silentOperator));
+
+        ReferenceId reference = anUnknownPaymentDueForReconciliation();
+        jdbc.update("UPDATE payment SET unresolved_since = now() - interval '1 hour' WHERE reference = ?",
+                reference.value());
+
+        reconciler.runOnce();                       // one silent query, then escalates
+        Instant escalatedAt = escalatedAt(reference);
+        assertThat(escalatedAt).as("the payment is escalated").isNotNull();
+
+        // A callback for the same escalated payment: the operator now answers PENDING, so
+        // the shared path moves it UNKNOWN -> PENDING.
+        AdapterRegistry callbackAdapters = operatorAnswering(new ProviderStatus(
+                PaymentState.PENDING, "PENDING", "", null, "", "{\"status\":\"PENDING\"}"));
+        new SettlementService(payments, callbackAdapters, ledger, txManager)
+                .confirm(MTN, reference, PaymentTransition.Cause.CALLBACK);
+
+        assertThat(payments.findByReference(reference).orElseThrow().state()).isEqualTo(PaymentState.PENDING);
+        assertThat(escalatedAt(reference))
+                .as("a hop does not un-escalate: one episode of not knowing, one escalation")
+                .isEqualTo(escalatedAt);
+
+        // Due again on paper — an escalated payment is still not the reconciler's to claim.
+        int attemptsBefore = attemptsOf(reference);
+        jdbc.update("UPDATE payment SET reconcile_due_at = now() - interval '1 hour' WHERE reference = ?",
+                reference.value());
+        reconciler.runOnce();
+
+        assertThat(attemptsOf(reference))
+                .as("escalated payments are not claimed, whichever non-terminal state they wear")
+                .isEqualTo(attemptsBefore);
+        assertThat(payments.findByReference(reference).orElseThrow().state()).isEqualTo(PaymentState.PENDING);
+    }
+
     // === 4. the one that matters most, written first =================================
 
     @Test
@@ -581,6 +651,12 @@ class ReconcilerIT {
     private static int attemptsOf(ReferenceId reference) {
         return jdbc.queryForObject("SELECT reconcile_attempts FROM payment WHERE reference = ?",
                 Integer.class, reference.value());
+    }
+
+    private static Instant escalatedAt(ReferenceId reference) {
+        OffsetDateTime at = jdbc.queryForObject("SELECT escalated_at FROM payment WHERE reference = ?",
+                OffsetDateTime.class, reference.value());
+        return at == null ? null : at.toInstant();
     }
 
     private static Instant unresolvedSince(ReferenceId reference) {

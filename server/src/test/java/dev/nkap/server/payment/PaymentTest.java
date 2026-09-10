@@ -108,7 +108,7 @@ class PaymentTest {
     }
 
     @Test
-    @DisplayName("a hop between non-terminal states restarts nothing: not the window, not the backoff, not the schedule")
+    @DisplayName("a hop between non-terminal states restarts nothing: not the window, the backoff, the schedule, or the escalation")
     void a_hop_between_non_terminal_states_does_not_restart_the_schedule() {
         PaymentIntent intent = new PaymentIntent(Capability.COLLECT, Money.of(5000, Currency.EUR),
                 "46733123453", "hello", "note", Map.of());
@@ -133,7 +133,9 @@ class PaymentTest {
         assertThat(payment.reconcileDueAt())
                 .as("the schedule the last claim wrote stands — a hop does not move the due time back to now")
                 .isEqualTo(nextAttemptDue);
-        assertThat(payment.escalatedAt()).as("a payment that has started moving again is chased once more").isNull();
+        assertThat(payment.escalatedAt())
+                .as("a hop does not un-escalate — one episode of not knowing gets one escalation")
+                .isEqualTo(escalatedAt);
     }
 
     @Test

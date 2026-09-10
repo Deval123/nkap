@@ -25,7 +25,10 @@ import dev.nkap.server.persistence.PostgresPaymentRepository;
 import dev.nkap.server.provider.AdapterRegistry;
 import dev.nkap.server.support.DockerAvailable;
 import dev.nkap.server.support.PostgresDatabase;
-import java.io.StringReader;
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.BeforeAll;
@@ -43,6 +46,11 @@ import org.springframework.transaction.PlatformTransactionManager;
  * settled payment the statement omits, and an amount that disagrees — it writes
  * <strong>nothing</strong> and reports. Correcting either on the strength of a file is the
  * same class of inference as calling a timeout a failure.
+ *
+ * <p>Every case here goes through {@link StatementImport} — the command — from a file on
+ * disk, which is the only way an import is reached. The report it returns is the same object
+ * the reconciliation produces; that these bodies did not change is the proof that only the
+ * entry point moved.
  */
 @ExtendWith(DockerAvailable.class)
 class StatementReconciliationIT {
@@ -55,6 +63,7 @@ class StatementReconciliationIT {
     private static PostgresPaymentRepository payments;
     private static PostgresStatementReconciliationStore store;
     private static StatementReconciliation reconciliation;
+    private static StatementImport statementImport;
     private static final CsvStatementParser parser = new CsvStatementParser();
 
     @BeforeAll
@@ -66,6 +75,7 @@ class StatementReconciliationIT {
         payments = new PostgresPaymentRepository(jdbc, new ObjectMapper());
         store = new PostgresStatementReconciliationStore(jdbc, txManager);
         reconciliation = new StatementReconciliation(ledger, store);
+        statementImport = new StatementImport(parser, reconciliation);
     }
 
     // === 4. a SUCCEEDED payment the statement omits: reported, and the ledger is untouched ===
@@ -77,8 +87,8 @@ class StatementReconciliationIT {
 
         List<LedgerEntry> ledgerBefore = ledger.entries();
 
-        // A statement that does not mention this payment at all — here, an empty one.
-        ReconciliationReport report = reconciliation.reconcile(MTN, "september-partial.csv", List.of());
+        // A statement that does not mention this payment at all — here, header only.
+        ReconciliationReport report = reconcileCsv(CsvStatementParser.HEADER + "\n", "september-partial.csv");
 
         assertThat(report.findings())
                 .as("the omitted settlement is reported")
@@ -254,6 +264,21 @@ class StatementReconciliationIT {
         assertThat(reloadedLines.get(1).operatorTransactionId()).isEqualTo("txn-orphan-persist");
     }
 
+    // === 2. the command's exit code says whether a human must look ===================
+
+    @Test
+    @DisplayName("an import whose report holds a discrepancy exits non-zero, so a scheduled run is noticed")
+    void the_command_exits_non_zero_when_the_report_has_a_discrepancy() {
+        // An orphan line always yields a SUSPENSE_POSTED anomaly, whatever else is in the
+        // shared database. (The clean -> 0 direction, and the kind-by-kind mapping, are
+        // StatementImportTest's — it controls the report.)
+        StatementImport.Result result = runImport(CsvStatementParser.HEADER + "\n"
+                + "txn-exit-orphan-" + System.nanoTime() + ",1000,0,EUR,2026-09-10T15:01:00Z,SETTLED\n", "orphan.csv");
+
+        assertThat(result.report().anomalies()).isNotEmpty();
+        assertThat(result.exitCode()).isEqualTo(StatementImport.EXIT_DISCREPANCIES);
+    }
+
     // === helpers ===================================================================
 
     private static long signed(LedgerEntry entry, AccountId account) {
@@ -264,7 +289,19 @@ class StatementReconciliationIT {
     }
 
     private static ReconciliationReport reconcileCsv(String csv, String source) {
-        return reconciliation.reconcile(MTN, source, parser.parse(new StringReader(csv)));
+        return runImport(csv, source).report();
+    }
+
+    /** Writes {@code csv} to a temp file and runs the import command over it, as the runner does. */
+    private static StatementImport.Result runImport(String csv, String source) {
+        try {
+            Path file = Files.createTempFile("statement-", ".csv");
+            file.toFile().deleteOnExit();
+            Files.writeString(file, csv);
+            return statementImport.run(file, MTN, source);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
     }
 
     private static PaymentIntent intent(Money amount) {

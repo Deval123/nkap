@@ -4,13 +4,19 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import dev.nkap.provider.ProviderId;
+import dev.nkap.server.statement.ReconciliationReport;
+import dev.nkap.server.statement.StatementImport;
 import dev.nkap.server.support.PostgresSpringBootIT;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -18,14 +24,14 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 
 /**
- * {@code POST /statements/imports} and {@code GET /statements/imports/{id}} end to end: a
- * real server and a real PostgreSQL. The reconciliation decisions themselves are held by
- * {@code StatementReconciliationIT}; this proves the file gets in, the report comes back,
- * and it can be read again afterwards.
+ * The HTTP surface of statement reconciliation is the <strong>read side only</strong>:
+ * {@code GET /statements/imports/{id}} returns a stored report, and there is no {@code POST}.
+ * Running an import writes to an append-only ledger from a file with nothing to confirm it,
+ * and this application authenticates nothing, so the import is a command
+ * ({@code --nkap.statement.import=<path>}), not a route. This test holds both halves of that:
+ * the read works, and the write route is absent.
  */
 class StatementApiIT extends PostgresSpringBootIT {
-
-    private static final MediaType TEXT_CSV = MediaType.valueOf("text/csv");
 
     @DynamicPropertySource
     static void mtnConfigThisTestNeverCalls(DynamicPropertyRegistry registry) {
@@ -46,45 +52,50 @@ class StatementApiIT extends PostgresSpringBootIT {
     @Autowired
     ObjectMapper json;
 
+    @Autowired
+    StatementImport statementImport;
+
     @Test
-    @DisplayName("an uploaded statement is reconciled, the report is returned, and GET reads the same report back")
-    void an_upload_returns_a_report_that_can_be_read_back() throws Exception {
-        String orphan = "api-orphan-" + System.nanoTime();
-        String csv = "operator_transaction_id,amount_minor,fee_minor,currency,occurred_at,status\n"
-                + orphan + ",2500,0,EUR,2026-09-10T14:00:00Z,SETTLED\n";
+    @DisplayName("there is no POST /statements/imports — an import is a command, not an anonymous write route")
+    void the_import_route_does_not_exist() {
+        HttpHeaders csv = new HttpHeaders();
+        csv.setContentType(MediaType.valueOf("text/csv"));
+        String body = "operator_transaction_id,amount_minor,fee_minor,currency,occurred_at,status\n"
+                + "x,1000,0,EUR,2026-09-10T14:00:00Z,SETTLED\n";
 
-        ResponseEntity<String> posted = http.exchange(
-                "/statements/imports?provider=mtn&source=api-test.csv", org.springframework.http.HttpMethod.POST,
-                new HttpEntity<>(csv, csvHeaders()), String.class);
+        ResponseEntity<String> collection = http.exchange(
+                "/statements/imports", HttpMethod.POST, new HttpEntity<>(body, csv), String.class);
+        ResponseEntity<String> item = http.exchange(
+                "/statements/imports/" + java.util.UUID.randomUUID(), HttpMethod.POST, new HttpEntity<>(body, csv), String.class);
 
-        assertThat(posted.getStatusCode()).isEqualTo(HttpStatus.OK);
-        JsonNode report = json.readTree(posted.getBody());
-        assertThat(report.get("sourceName").asText()).isEqualTo("api-test.csv");
-        assertThat(report.get("lineCount").asInt()).isEqualTo(1);
-        assertThat(report.get("findings")).anySatisfy(f ->
-                assertThat(f.get("kind").asText()).isEqualTo("SUSPENSE_POSTED"));
-        String importId = report.get("importId").asText();
+        assertThat(collection.getStatusCode())
+                .as("POST to the collection path has no handler")
+                .isIn(HttpStatus.NOT_FOUND, HttpStatus.METHOD_NOT_ALLOWED);
+        assertThat(item.getStatusCode())
+                .as("the item path is GET-only")
+                .isEqualTo(HttpStatus.METHOD_NOT_ALLOWED);
+    }
 
-        ResponseEntity<String> fetched = http.getForEntity("/statements/imports/" + importId, String.class);
+    @Test
+    @DisplayName("GET /statements/imports/{id} returns a report stored by a command run")
+    void a_stored_report_is_readable_over_http() throws Exception {
+        String orphan = "api-read-" + System.nanoTime();
+        Path file = Files.createTempFile("statement-", ".csv");
+        file.toFile().deleteOnExit();
+        Files.writeString(file, "operator_transaction_id,amount_minor,fee_minor,currency,occurred_at,status\n"
+                + orphan + ",2500,0,EUR,2026-09-10T14:00:00Z,SETTLED\n");
+
+        ReconciliationReport produced = statementImport.run(file, ProviderId.of("mtn"), "api-read-test.csv").report();
+
+        ResponseEntity<String> fetched = http.getForEntity("/statements/imports/" + produced.importId(), String.class);
         assertThat(fetched.getStatusCode()).isEqualTo(HttpStatus.OK);
         JsonNode reloaded = json.readTree(fetched.getBody());
-        assertThat(reloaded.get("importId").asText()).isEqualTo(importId);
+        assertThat(reloaded.get("importId").asText()).isEqualTo(produced.importId().toString());
+        assertThat(reloaded.get("sourceName").asText()).isEqualTo("api-read-test.csv");
         assertThat(reloaded.get("findings")).anySatisfy(f -> {
             assertThat(f.get("kind").asText()).isEqualTo("SUSPENSE_POSTED");
             assertThat(f.get("operatorTransactionId").asText()).isEqualTo(orphan);
         });
-    }
-
-    @Test
-    @DisplayName("a file that will not parse is 400 problem+json, not a 500 and not a silent empty report")
-    void a_malformed_file_is_a_400() throws Exception {
-        ResponseEntity<String> posted = http.exchange(
-                "/statements/imports?provider=mtn", org.springframework.http.HttpMethod.POST,
-                new HttpEntity<>("not,a,valid,header\n", csvHeaders()), String.class);
-
-        assertThat(posted.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
-        JsonNode problem = json.readTree(posted.getBody());
-        assertThat(problem.get("type").asText()).endsWith("malformed-statement");
     }
 
     @Test
@@ -94,11 +105,5 @@ class StatementApiIT extends PostgresSpringBootIT {
                 "/statements/imports/" + java.util.UUID.randomUUID(), String.class);
         assertThat(fetched.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
         assertThat(json.readTree(fetched.getBody()).get("type").asText()).endsWith("statement-import-not-found");
-    }
-
-    private static HttpHeaders csvHeaders() {
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(TEXT_CSV);
-        return headers;
     }
 }

@@ -102,6 +102,13 @@ public final class Payment {
             // Entering, or hopping within, the states the reconciler chases. Re-arm the
             // schedule so the next pass claims it: attempts back to zero, any escalation
             // cleared, due now.
+            //
+            // Resetting reconcileAttempts on each hop is deliberate: a change of state is real
+            // news from the operator and re-querying sooner after one is appropriate. The known
+            // cost is that an operator alternating between two non-terminal answers keeps the
+            // backoff pinned at its base for the duration of the escalation window (~1,440 queries
+            // under default policy settings). That churn is bounded by the window itself, which is
+            // NOT reset on hops (see below).
             this.reconcileAttempts = 0;
             this.reconcileDueAt = this.updatedAt;
             this.escalatedAt = null;

@@ -21,7 +21,13 @@ import org.springframework.transaction.support.TransactionTemplate;
  */
 public final class PostgresReconciliationStore implements ReconciliationStore {
 
-    /** The three unresolved states, as a SQL list literal, shared by the claim and the escalate. */
+    /**
+     * The unresolved states, as a SQL list literal, shared by the claim and the escalate.
+     * Matches {@link dev.nkap.core.payment.PaymentState#isUnresolved()}.
+     * <p>If states are added or modified here, the partial index predicate in
+     * {@code payment_reconcile_due_idx} (see {@code V4__reconciler_chases_unresolved.sql})
+     * must be widened to match, or claim queries will cease being index range scans.
+     */
     private static final String UNRESOLVED_STATES = "('SUBMITTED', 'PENDING', 'UNKNOWN')";
 
     private static final String CLAIM_DUE = """

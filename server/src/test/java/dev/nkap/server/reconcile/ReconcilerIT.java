@@ -247,6 +247,51 @@ class ReconcilerIT {
                 .doesNotContain(PaymentState.FAILED.name());
     }
 
+    // === a ping-ponging payment: backed off on schedule, and escalated (issue #54) ===
+
+    @Test
+    @DisplayName("a payment the operator keeps moving between non-terminal states is re-queried on the backoff schedule, not on every pass")
+    void a_hopping_payment_is_requeried_on_the_backoff_schedule_not_every_pass() {
+        // Backoff doubles from one minute and never caps inside this test; the window is a
+        // day, so nothing escalates and the only thing measured is the cadence. The
+        // operator always answers PENDING: the first pass moves the payment
+        // UNKNOWN -> PENDING, and that hop must not discard the schedule the claim just
+        // wrote.
+        ReconcilerProperties properties = new ReconcilerProperties(
+                Duration.ofSeconds(30), 50,
+                Duration.ofMinutes(1), Duration.ofHours(1), Duration.ofHours(24));
+        AdjustableClock clock = new AdjustableClock(Instant.now().truncatedTo(ChronoUnit.SECONDS));
+        Reconciler reconciler = reconcilerWith(properties, operatorAnswering(new ProviderStatus(
+                PaymentState.PENDING, "PENDING", "", null, "", "{\"status\":\"PENDING\"}")), clock);
+
+        ReferenceId reference = anUnknownPaymentDueForReconciliation();
+
+        // Drive simulated time forward in pass-interval steps for an hour. This pass claims
+        // whatever else the shared database has left due, so a claim of *this* payment is
+        // read from its own attempt counter going up, not from the batch size.
+        List<Instant> claimedAt = new ArrayList<>();
+        Instant start = clock.instant();
+        int lastAttempts = attemptsOf(reference);
+        for (Instant t = start; !t.isAfter(start.plus(Duration.ofHours(1))); t = t.plus(Duration.ofSeconds(30))) {
+            clock.set(t);
+            reconciler.runOnce();
+            int attempts = attemptsOf(reference);
+            if (attempts != lastAttempts) {
+                claimedAt.add(t);
+                lastAttempts = attempts;
+            }
+        }
+
+        List<Duration> gapsBetweenClaims = new ArrayList<>();
+        for (int i = 1; i < claimedAt.size(); i++) {
+            gapsBetweenClaims.add(Duration.between(claimedAt.get(i - 1), claimedAt.get(i)));
+        }
+        assertThat(gapsBetweenClaims)
+                .as("each re-query waits a full backoff interval, never the 30-second pass interval")
+                .containsExactly(Duration.ofMinutes(1), Duration.ofMinutes(2), Duration.ofMinutes(4),
+                        Duration.ofMinutes(8), Duration.ofMinutes(16));
+    }
+
     // === 4. the one that matters most, written first =================================
 
     @Test
@@ -531,6 +576,11 @@ class ReconcilerIT {
     private static Instant reconcileDueAt(ReferenceId reference) {
         return jdbc.queryForObject("SELECT reconcile_due_at FROM payment WHERE reference = ?",
                 OffsetDateTime.class, reference.value()).toInstant();
+    }
+
+    private static int attemptsOf(ReferenceId reference) {
+        return jdbc.queryForObject("SELECT reconcile_attempts FROM payment WHERE reference = ?",
+                Integer.class, reference.value());
     }
 
     private static Instant unresolvedSince(ReferenceId reference) {

@@ -80,7 +80,8 @@ Left open deliberately rather than guessed. Each is worth a pull request adding 
 - Whether Disbursements differ beyond the IP allow-listing requirement.
 - **How an operator statement is obtained** — a portal download, a report API, an emailed
   file, an SFTP drop — and on what cadence. Nothing fetches one today; statement
-  reconciliation takes an uploaded file.
+  reconciliation is a host-side command (`--nkap.statement.import=<path>`) run against a
+  file already on the machine, not a network endpoint.
 - **What a statement line contains, field by field.** Statement reconciliation was built
   against an *invented* provider-neutral model (`server`'s `statement` package): per line,
   an operator transaction id, a gross amount in minor units, a fee (may be absent), a

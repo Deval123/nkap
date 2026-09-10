@@ -75,6 +75,16 @@ several currencies are supported, conversion is not, because conversion needs a 
 date, a position account and a revaluation policy, and a first release that invents any of
 those is a ledger that lies.
 
+**The gateway authenticates nothing.** There is no login, no API key, no request signing.
+The callback endpoint is unauthenticated by necessity — the operator sends no credential —
+and safe because it only ever triggers a confirming query; every other endpoint is
+unauthenticated too, and the deployment is expected to sit behind whatever the operator of
+the system provides: a reverse proxy, a private network, an mTLS gateway. This is why the
+one action that writes to the ledger from a file — statement reconciliation — is a
+host-side command and not a route. Endpoint authentication is its own slice; until then, a
+reader deciding whether to expose this service should assume anyone who can reach it can
+call it.
+
 These exclusions are not modesty. They are what keeps the project legally simple enough for
 one person to run and small enough to finish.
 

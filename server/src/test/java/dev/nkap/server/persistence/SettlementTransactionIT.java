@@ -98,7 +98,7 @@ class SettlementTransactionIT {
         AdapterRegistry adapters = mock(AdapterRegistry.class);
         when(adapters.require(any())).thenReturn(adapter);
         try {
-            when(adapter.query(any())).thenReturn(new ProviderStatus(
+            when(adapter.query(any(), any())).thenReturn(new ProviderStatus(
                     PaymentState.SUCCEEDED, "SUCCESSFUL", "txn-1", null, "", "{\"status\":\"SUCCESSFUL\"}"));
         } catch (Exception impossible) {
             throw new AssertionError(impossible);
@@ -131,7 +131,7 @@ class SettlementTransactionIT {
         AdapterRegistry adapters = mock(AdapterRegistry.class);
         when(adapters.require(any())).thenReturn(adapter);
         try {
-            when(adapter.query(any())).thenReturn(new ProviderStatus(
+            when(adapter.query(any(), any())).thenReturn(new ProviderStatus(
                     PaymentState.SUCCEEDED, "SUCCESSFUL", "txn-1", null, "", "{\"status\":\"SUCCESSFUL\"}"));
         } catch (Exception impossible) {
             throw new AssertionError(impossible);

@@ -11,18 +11,17 @@ import dev.nkap.provider.Capability;
 import dev.nkap.provider.PaymentIntent;
 import dev.nkap.provider.ProviderId;
 import dev.nkap.provider.mtn.StubMtn.StubResponse;
+import java.lang.reflect.Constructor;
 import java.time.Duration;
-import java.util.HashMap;
 import java.util.Map;
-import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 /**
- * The MTN facade: one adapter, two products. Dispatch on the intent's operation for
- * {@code submit}; route {@code query} by the operation the gateway recorded for the
- * reference; and — the property this class is really here for — a Collections call and a
- * Disbursements call keep <strong>independent</strong> tokens: one never renews the other's.
+ * The MTN facade: one adapter, two products, routing on <strong>what it is given</strong>.
+ * {@code submit} on the intent's operation, {@code query} on the capability argument the
+ * caller passes (issue #67 — the contract carries it, ADR 0008, so the #62 lookup is gone).
+ * And a Collections call keeps a token independent of a Disbursements one.
  */
 class MtnAdapterTest {
 
@@ -36,30 +35,65 @@ class MtnAdapterTest {
         return new PaymentIntent(operation, Money.of(5000, eur), "46733123453", "n", "n", Map.of());
     }
 
+    private MtnAdapter facadeAt(StubMtn mtn, boolean withDisbursements) {
+        MtnCollectionsAdapter collections = new MtnCollectionsAdapter(profileAt(mtn.baseUrl()), Duration.ofSeconds(2));
+        MtnDisbursementsAdapter disbursements = withDisbursements
+                ? new MtnDisbursementsAdapter(profileAt(mtn.baseUrl()), Duration.ofSeconds(2))
+                : null;
+        return new MtnAdapter(collections, disbursements);
+    }
+
+    @Test
+    @DisplayName("the facade takes only the two product adapters — no reference lookup wired in any more")
+    void the_facade_takes_no_reference_lookup() {
+        Constructor<?>[] constructors = MtnAdapter.class.getConstructors();
+        assertThat(constructors).hasSize(1);
+        assertThat(constructors[0].getParameterTypes())
+                .as("(collections, disbursements) — the #62 Function<ReferenceId, Optional<Capability>> is gone")
+                .containsExactly(MtnCollectionsAdapter.class, MtnDisbursementsAdapter.class);
+    }
+
     @Test
     @DisplayName("capabilities are the union; with no disbursements product it is COLLECT alone")
     void capabilities_reflect_what_is_configured() throws Exception {
         try (StubMtn mtn = new StubMtn()) {
-            MtnCollectionsAdapter collections = new MtnCollectionsAdapter(profileAt(mtn.baseUrl()), Duration.ofSeconds(2));
-            MtnDisbursementsAdapter disbursements = new MtnDisbursementsAdapter(profileAt(mtn.baseUrl()), Duration.ofSeconds(2));
-
-            assertThat(new MtnAdapter(collections, disbursements, ref -> Optional.empty()).capabilities())
+            assertThat(facadeAt(mtn, true).capabilities())
                     .containsExactlyInAnyOrder(Capability.COLLECT, Capability.DISBURSE);
-            assertThat(new MtnAdapter(collections, null, ref -> Optional.empty()).capabilities())
-                    .containsExactly(Capability.COLLECT);
+            assertThat(facadeAt(mtn, false).capabilities()).containsExactly(Capability.COLLECT);
+            assertThat(facadeAt(mtn, false).id()).isEqualTo(ProviderId.of("mtn"));
         }
     }
 
     @Test
-    @DisplayName("a DISBURSE submit when disbursements is not configured fails with a clear message, not a NullPointerException")
+    @DisplayName("a DISBURSE call when disbursements is not configured fails with a clear message, not a NullPointerException")
     void an_unconfigured_disburse_is_a_clear_error() throws Exception {
         try (StubMtn mtn = new StubMtn()) {
-            MtnCollectionsAdapter collections = new MtnCollectionsAdapter(profileAt(mtn.baseUrl()), Duration.ofSeconds(2));
-            MtnAdapter facade = new MtnAdapter(collections, null, ref -> Optional.empty());
-
+            MtnAdapter facade = facadeAt(mtn, false);
             assertThatThrownBy(() -> facade.submit(intent(Capability.DISBURSE), ReferenceId.newReference()))
                     .isInstanceOf(IllegalStateException.class)
                     .hasMessageContaining("disbursement");
+            assertThatThrownBy(() -> facade.query(ReferenceId.newReference(), Capability.DISBURSE))
+                    .isInstanceOf(IllegalStateException.class);
+        }
+    }
+
+    @Test
+    @DisplayName("query routes on its capability argument: DISBURSE hits /disbursement/..., COLLECT hits /collection/...")
+    void query_routes_on_the_capability_argument() throws Exception {
+        try (StubMtn mtn = new StubMtn()) {
+            mtn.respondWith(request -> request.path().endsWith("/token/")
+                    ? new StubResponse(200, StubMtn.tokenJson("t", 3600))
+                    : new StubResponse(200, "{\"status\":\"SUCCESSFUL\"}"));
+            MtnAdapter facade = facadeAt(mtn, true);
+            ReferenceId ref = ReferenceId.newReference();
+
+            facade.query(ref, Capability.DISBURSE);
+            facade.query(ref, Capability.COLLECT);
+
+            // The same reference, two capabilities, two different product URLs — asserted on
+            // the outgoing path, not on any mock.
+            assertThat(mtn.countPath("/disbursement/v1_0/transfer/" + ref)).isEqualTo(1);
+            assertThat(mtn.countPath("/collection/v1_0/requesttopay/" + ref)).isEqualTo(1);
         }
     }
 
@@ -72,58 +106,18 @@ class MtnAdapterTest {
                 case "/collection/v1_0/requesttopay", "/disbursement/v1_0/transfer" -> new StubResponse(202, "");
                 default -> new StubResponse(200, "{\"status\":\"SUCCESSFUL\"}");
             });
-
-            MtnCollectionsAdapter collections = new MtnCollectionsAdapter(profileAt(mtn.baseUrl()), Duration.ofSeconds(2));
-            MtnDisbursementsAdapter disbursements = new MtnDisbursementsAdapter(profileAt(mtn.baseUrl()), Duration.ofSeconds(2));
-            ReferenceId disburseRef = ReferenceId.newReference();
-            Map<ReferenceId, Capability> product = new HashMap<>();
-            product.put(disburseRef, Capability.DISBURSE);
-            MtnAdapter facade = new MtnAdapter(collections, disbursements,
-                    ref -> Optional.ofNullable(product.get(ref)));
+            MtnAdapter facade = facadeAt(mtn, true);
 
             facade.submit(intent(Capability.COLLECT), ReferenceId.newReference());
-            facade.submit(intent(Capability.DISBURSE), disburseRef);
-            facade.submit(intent(Capability.COLLECT), ReferenceId.newReference());  // reuses the collection token
-            assertThat(facade.query(disburseRef).state()).isEqualTo(PaymentState.SUCCEEDED);  // reuses the disbursement token
+            facade.submit(intent(Capability.DISBURSE), ReferenceId.newReference());
+            facade.submit(intent(Capability.COLLECT), ReferenceId.newReference());   // reuses the collections token
+            assertThat(facade.query(ReferenceId.newReference(), Capability.DISBURSE).state())
+                    .isEqualTo(PaymentState.SUCCEEDED);                                // reuses the disbursements token
 
-            assertThat(mtn.countPath("/collection/token/"))
-                    .as("two collections calls, one collections token")
-                    .isEqualTo(1);
-            assertThat(mtn.countPath("/disbursement/token/"))
-                    .as("a disbursement submit + query, one disbursement token")
-                    .isEqualTo(1);
+            assertThat(mtn.countPath("/collection/token/")).as("two collections calls, one token").isEqualTo(1);
+            assertThat(mtn.countPath("/disbursement/token/")).as("a disbursements submit + query, one token").isEqualTo(1);
             assertThat(mtn.countPath("/collection/v1_0/requesttopay")).isEqualTo(2);
             assertThat(mtn.countPath("/disbursement/v1_0/transfer")).isEqualTo(1);
-        }
-    }
-
-    @Test
-    @DisplayName("query routes to the product the reference was recorded under")
-    void query_routes_by_recorded_operation() throws Exception {
-        try (StubMtn mtn = new StubMtn()) {
-            mtn.respondWith(request -> request.path().endsWith("/token/")
-                    ? new StubResponse(200, StubMtn.tokenJson("t", 3600))
-                    : new StubResponse(200, "{\"status\":\"PENDING\"}"));
-
-            MtnCollectionsAdapter collections = new MtnCollectionsAdapter(profileAt(mtn.baseUrl()), Duration.ofSeconds(2));
-            MtnDisbursementsAdapter disbursements = new MtnDisbursementsAdapter(profileAt(mtn.baseUrl()), Duration.ofSeconds(2));
-            ReferenceId ref = ReferenceId.newReference();
-            MtnAdapter facade = new MtnAdapter(collections, disbursements, r -> Optional.of(Capability.DISBURSE));
-
-            facade.query(ref);
-
-            assertThat(mtn.countPath("/disbursement/v1_0/transfer/" + ref)).isEqualTo(1);
-            assertThat(mtn.countPath("/collection/v1_0/requesttopay/" + ref)).isZero();
-        }
-    }
-
-    @Test
-    @DisplayName("the facade advertises the mtn id")
-    void identity() throws Exception {
-        try (StubMtn mtn = new StubMtn()) {
-            MtnCollectionsAdapter collections = new MtnCollectionsAdapter(profileAt(mtn.baseUrl()), Duration.ofSeconds(2));
-            assertThat(new MtnAdapter(collections, null, ref -> Optional.empty()).id())
-                    .isEqualTo(ProviderId.of("mtn"));
         }
     }
 }

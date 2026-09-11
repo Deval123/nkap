@@ -76,7 +76,7 @@ class SettlementServiceTest {
     @DisplayName("a confirmed success moves the payment to SUCCEEDED and posts exactly the two postings of ADR 0006")
     void a_confirmed_success_settles_with_two_postings() throws Exception {
         Payment payment = persisted(PaymentState.SUBMITTED);
-        when(adapter.query(any())).thenReturn(status(PaymentState.SUCCEEDED, "SUCCESSFUL"));
+        when(adapter.query(any(), any())).thenReturn(status(PaymentState.SUCCEEDED, "SUCCESSFUL"));
 
         ConfirmationOutcome outcome = settlement.confirm(MTN, payment.reference(), PaymentTransition.Cause.CALLBACK);
 
@@ -97,7 +97,7 @@ class SettlementServiceTest {
     @DisplayName("a settled disbursement posts the ADR 0007 mirror: float credited, merchant payable debited, summing to zero")
     void a_settled_disbursement_posts_the_adr_0007_mirror() throws Exception {
         Payment payment = persisted(PaymentState.SUBMITTED, Capability.DISBURSE);
-        when(adapter.query(any())).thenReturn(status(PaymentState.SUCCEEDED, "SUCCESSFUL"));
+        when(adapter.query(any(), any())).thenReturn(status(PaymentState.SUCCEEDED, "SUCCESSFUL"));
 
         settlement.confirm(MTN, payment.reference(), PaymentTransition.Cause.CALLBACK);
 
@@ -116,10 +116,32 @@ class SettlementServiceTest {
     }
 
     @Test
+    @DisplayName("the confirming query is asked under the payment's own operation, so the adapter never has to look it up")
+    void the_query_carries_the_payments_own_capability() throws Exception {
+        // Issue #67 / ADR 0008: query takes the capability because the caller already holds
+        // it. This is the assertion that holds the lookup out of the adapter for good — if
+        // it ever stops being the payment's own operation that travels, the MTN facade is
+        // back to consulting gateway state to translate.
+        Payment collection = persisted(PaymentState.SUBMITTED, Capability.COLLECT);
+        Payment disbursement = persisted(PaymentState.SUBMITTED, Capability.DISBURSE);
+        when(adapter.query(any(), any())).thenReturn(status(PaymentState.SUCCEEDED, "SUCCESSFUL"));
+
+        settlement.confirm(MTN, collection.reference(), PaymentTransition.Cause.CALLBACK);
+        settlement.confirm(MTN, disbursement.reference(), PaymentTransition.Cause.CALLBACK);
+
+        verify(adapter).query(collection.reference(), Capability.COLLECT);
+        verify(adapter).query(disbursement.reference(), Capability.DISBURSE);
+        // ...and never the other way round: a captured-any assertion would pass even if both
+        // queries went out under one capability.
+        verify(adapter, never()).query(collection.reference(), Capability.DISBURSE);
+        verify(adapter, never()).query(disbursement.reference(), Capability.COLLECT);
+    }
+
+    @Test
     @DisplayName("a disbursement the operator refuses for insufficient funds is FAILED with the operator's code, and posts nothing")
     void a_refused_disbursement_is_failed_and_posts_nothing() throws Exception {
         Payment payment = persisted(PaymentState.SUBMITTED, Capability.DISBURSE);
-        when(adapter.query(any())).thenReturn(status(PaymentState.FAILED, "NOT_ENOUGH_FUNDS"));
+        when(adapter.query(any(), any())).thenReturn(status(PaymentState.FAILED, "NOT_ENOUGH_FUNDS"));
 
         settlement.confirm(MTN, payment.reference(), PaymentTransition.Cause.CALLBACK);
 
@@ -132,7 +154,7 @@ class SettlementServiceTest {
     @DisplayName("a duplicate callback produces one transition and one ledger entry, not two")
     void a_duplicate_callback_settles_once() throws Exception {
         Payment payment = persisted(PaymentState.SUBMITTED);
-        when(adapter.query(any())).thenReturn(status(PaymentState.SUCCEEDED, "SUCCESSFUL"));
+        when(adapter.query(any(), any())).thenReturn(status(PaymentState.SUCCEEDED, "SUCCESSFUL"));
 
         settlement.confirm(MTN, payment.reference(), PaymentTransition.Cause.CALLBACK);
         settlement.confirm(MTN, payment.reference(), PaymentTransition.Cause.CALLBACK);
@@ -145,7 +167,7 @@ class SettlementServiceTest {
     @DisplayName("a callback for a CREATED payment records CREATED -> SUBMITTED first, then the confirmed state")
     void a_callback_before_the_submit_response_records_both_legs() throws Exception {
         Payment payment = persisted(PaymentState.CREATED);
-        when(adapter.query(any())).thenReturn(status(PaymentState.SUCCEEDED, "SUCCESSFUL"));
+        when(adapter.query(any(), any())).thenReturn(status(PaymentState.SUCCEEDED, "SUCCESSFUL"));
 
         settlement.confirm(MTN, payment.reference(), PaymentTransition.Cause.CALLBACK);
 
@@ -160,7 +182,7 @@ class SettlementServiceTest {
     @DisplayName("a callback whose confirming query does not answer changes nothing and writes no entry")
     void an_unanswered_confirming_query_changes_nothing() throws Exception {
         Payment payment = persisted(PaymentState.SUBMITTED);
-        when(adapter.query(any())).thenThrow(new ProviderUnavailableException("read timed out"));
+        when(adapter.query(any(), any())).thenThrow(new ProviderUnavailableException("read timed out"));
 
         settlement.confirm(MTN, payment.reference(), PaymentTransition.Cause.CALLBACK);
 
@@ -173,7 +195,7 @@ class SettlementServiceTest {
     @DisplayName("a query that moves a payment to another non-terminal state is ADVANCED, not resolved — the reconciler keeps it")
     void a_non_terminal_transition_is_advanced_not_resolved() throws Exception {
         Payment payment = persisted(PaymentState.SUBMITTED);
-        when(adapter.query(any())).thenReturn(status(PaymentState.PENDING, "PENDING"));
+        when(adapter.query(any(), any())).thenReturn(status(PaymentState.PENDING, "PENDING"));
 
         ConfirmationOutcome outcome = settlement.confirm(MTN, payment.reference(), PaymentTransition.Cause.CALLBACK);
 
@@ -189,7 +211,7 @@ class SettlementServiceTest {
     @DisplayName("a callback whose query answers UNKNOWN leaves a SUBMITTED payment SUBMITTED")
     void an_inconclusive_query_does_not_overwrite_what_we_knew() throws Exception {
         Payment payment = persisted(PaymentState.SUBMITTED);
-        when(adapter.query(any())).thenReturn(status(PaymentState.UNKNOWN, "RESOURCE_NOT_FOUND"));
+        when(adapter.query(any(), any())).thenReturn(status(PaymentState.UNKNOWN, "RESOURCE_NOT_FOUND"));
 
         settlement.confirm(MTN, payment.reference(), PaymentTransition.Cause.CALLBACK);
 
@@ -207,7 +229,7 @@ class SettlementServiceTest {
         settlement.confirm(MTN, payment.reference(), PaymentTransition.Cause.CALLBACK);
 
         assertThat(payment.state()).isEqualTo(PaymentState.FAILED);
-        verify(adapter, never()).query(any());
+        verify(adapter, never()).query(any(), any());
         assertThat(ledger.entries()).isEmpty();
     }
 
@@ -215,7 +237,7 @@ class SettlementServiceTest {
     @DisplayName("a confirmed failure moves the payment to FAILED and posts nothing")
     void a_confirmed_failure_posts_nothing() throws Exception {
         Payment payment = persisted(PaymentState.SUBMITTED);
-        when(adapter.query(any())).thenReturn(status(PaymentState.FAILED, "NOT_ENOUGH_FUNDS"));
+        when(adapter.query(any(), any())).thenReturn(status(PaymentState.FAILED, "NOT_ENOUGH_FUNDS"));
 
         settlement.confirm(MTN, payment.reference(), PaymentTransition.Cause.CALLBACK);
 

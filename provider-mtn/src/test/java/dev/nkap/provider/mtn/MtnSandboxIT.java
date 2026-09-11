@@ -69,7 +69,7 @@ class MtnSandboxIT {
         SubmitResult submitted = adapter.submit(intent, reference);
         System.out.println("submit  " + reference + " -> " + submitted);
 
-        ProviderStatus status = adapter.query(reference);
+        ProviderStatus status = adapter.query(reference, Capability.COLLECT);
         System.out.println("query   " + reference + " -> " + status.state()
                 + " (" + status.providerStatusCode() + ")");
 

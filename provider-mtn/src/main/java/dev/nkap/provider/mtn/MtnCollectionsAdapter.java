@@ -123,8 +123,12 @@ public final class MtnCollectionsAdapter implements ProviderAdapter {
     }
 
     @Override
-    public ProviderStatus query(ReferenceId reference) throws ProviderUnavailableException {
+    public ProviderStatus query(ReferenceId reference, Capability capability) throws ProviderUnavailableException {
         Objects.requireNonNull(reference, "reference");
+        if (capability != Capability.COLLECT) {
+            throw new IllegalArgumentException(
+                    "the MTN collections adapter only answers COLLECT queries, not " + capability);
+        }
         HttpRequest.Builder request = HttpRequest.newBuilder(
                         profile.endpoint("/collection/v1_0/requesttopay/" + reference))
                 .timeout(requestTimeout)
@@ -186,7 +190,7 @@ public final class MtnCollectionsAdapter implements ProviderAdapter {
     }
 
     @Override
-    public Money balance(Currency currency) throws ProviderUnavailableException {
+    public Money balance(Capability capability, Currency currency) throws ProviderUnavailableException {
         throw new UnsupportedOperationException(
                 "balance is out of scope for the collections adapter; capabilities() does not advertise BALANCE");
     }

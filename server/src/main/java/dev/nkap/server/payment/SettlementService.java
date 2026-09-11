@@ -96,7 +96,10 @@ public class SettlementService {
 
         ProviderStatus status;
         try {
-            status = adapters.require(providerId).query(reference);
+            // The capability travels with the reference (ADR 0008): the payment records its
+            // operation and this method has the payment in hand, so the adapter is not left
+            // to look it up.
+            status = adapters.require(providerId).query(reference, peek.intent().operation());
         } catch (ProviderUnavailableException noAnswer) {
             log.info("{} for {}: the confirming query did not answer, changing nothing: {}",
                     cause, reference, noAnswer.getMessage());

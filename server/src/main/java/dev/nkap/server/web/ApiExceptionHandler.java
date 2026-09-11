@@ -1,5 +1,6 @@
 package dev.nkap.server.web;
 
+import dev.nkap.provider.ProviderUnavailableException;
 import dev.nkap.server.provider.NoAdapterConfiguredException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -9,6 +10,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MissingRequestHeaderException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
@@ -46,6 +48,12 @@ class ApiExceptionHandler {
                 e.getMessage(), ProblemTypes.INVALID_REQUEST);
     }
 
+    @ExceptionHandler(MissingServletRequestParameterException.class)
+    ProblemDetail onMissingParameter(MissingServletRequestParameterException e) {
+        return problem(HttpStatus.BAD_REQUEST, "A required query parameter is missing",
+                e.getParameterName() + " is required.", ProblemTypes.INVALID_REQUEST);
+    }
+
     @ExceptionHandler(HttpMessageNotReadableException.class)
     ProblemDetail onUnreadableBody(HttpMessageNotReadableException e) {
         // The cause can quote fragments of the submitted body — an MSISDN, say — and its
@@ -55,6 +63,18 @@ class ApiExceptionHandler {
         return problem(HttpStatus.BAD_REQUEST, "The request body could not be read",
                 "Send a JSON object with an integer amount in minor units.",
                 ProblemTypes.MALFORMED_REQUEST);
+    }
+
+    @ExceptionHandler(ProviderUnavailableException.class)
+    ProblemDetail onOperatorDidNotAnswer(ProviderUnavailableException e) {
+        // One place for every live operator read (GET /balance, GET /account-holders/{msisdn})
+        // to answer this: not known, not failed, and never a bare 500 — the read-side
+        // equivalent of a submission that does not answer being a 202, not an error.
+        log.info("a live operator read did not answer: {}", e.getMessage());
+        return problem(HttpStatus.SERVICE_UNAVAILABLE, "The operator did not answer",
+                "This reads live from the operator, and it did not answer. That is not a "
+                        + "failed read -- it is not known, and the same request can be retried.",
+                ProblemTypes.OPERATOR_DID_NOT_ANSWER);
     }
 
     @ExceptionHandler(NoAdapterConfiguredException.class)

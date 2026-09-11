@@ -52,6 +52,13 @@ public final class ProblemTypes {
     /** The caller is authenticated but the key is not an admin key, and this resource is operator-wide. */
     public static final URI ADMIN_REQUIRED = URI.create(BASE + "admin-key-required");
 
+    /**
+     * A live operator read ({@code GET /balance}, {@code GET /account-holders/{msisdn}})
+     * did not answer. Not known, not failed — the same "I do not know" a submission that
+     * does not answer carries, given its own status and type instead of a bare 500.
+     */
+    public static final URI OPERATOR_DID_NOT_ANSWER = URI.create(BASE + "operator-did-not-answer");
+
     private ProblemTypes() {
     }
 }

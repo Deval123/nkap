@@ -16,8 +16,13 @@ import dev.nkap.provider.ProviderAdapter;
 import dev.nkap.provider.ProviderId;
 import dev.nkap.provider.ProviderUnavailableException;
 import dev.nkap.provider.SubmitResult;
+import dev.nkap.server.outbox.InMemoryOutbox;
+import dev.nkap.server.outbox.OutboxEvent;
+import dev.nkap.server.outbox.OutboxNotifier;
 import dev.nkap.server.provider.AdapterRegistry;
 import dev.nkap.server.support.LogCapture;
+import dev.nkap.server.webhook.InMemoryWebhookEndpointStore;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.Map;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -35,7 +40,10 @@ class PaymentServiceTest {
     private final PaymentRepository payments = new InMemoryPaymentRepository();
     private final ProviderAdapter adapter = mock(ProviderAdapter.class);
     private final AdapterRegistry adapters = mock(AdapterRegistry.class);
-    private final PaymentService service = new PaymentService(payments, adapters, new DirectTransactionManager());
+    private final InMemoryOutbox outbox = new InMemoryOutbox();
+    private final InMemoryWebhookEndpointStore endpoints = new InMemoryWebhookEndpointStore();
+    private final PaymentService service = new PaymentService(payments, adapters,
+            new OutboxNotifier(outbox, endpoints, new ObjectMapper()), new DirectTransactionManager());
 
     private static PaymentIntent intent() {
         return new PaymentIntent(Capability.Operation.COLLECT, Money.of(5000, Currency.EUR),
@@ -119,6 +127,36 @@ class PaymentServiceTest {
                     .as("every line createAndSubmit emits carries the reference, not just the ones that mention it")
                     .containsEntry("reference", payment.reference().toString()));
         }
+    }
+
+    @Test
+    @DisplayName("an outright rejection is recorded FAILED and writes an outbox event for a merchant with an endpoint")
+    void a_rejection_is_failed_and_notifies() throws Exception {
+        endpoints.provision("merchant-1", "https://merchant.example/hooks");
+        when(adapters.require(MTN)).thenReturn(adapter);
+        when(adapter.submit(any(), any()))
+                .thenReturn(new SubmitResult.Rejected("INVALID_MSISDN", "not a valid payer", "{}"));
+
+        Payment payment = service.createAndSubmit(MTN, "merchant-1", intent());
+
+        assertThat(payment.state()).isEqualTo(PaymentState.FAILED);
+        assertThat(outbox.events()).singleElement().satisfies((OutboxEvent event) -> {
+            assertThat(event.eventType()).isEqualTo("payment.failed");
+            assertThat(event.merchantId()).isEqualTo("merchant-1");
+            assertThat(event.payload()).contains(payment.reference().toString(), "INVALID_MSISDN");
+        });
+    }
+
+    @Test
+    @DisplayName("an outright rejection writes no outbox event for a merchant with no registered endpoint")
+    void a_rejection_without_an_endpoint_writes_nothing() throws Exception {
+        when(adapters.require(MTN)).thenReturn(adapter);
+        when(adapter.submit(any(), any()))
+                .thenReturn(new SubmitResult.Rejected("INVALID_MSISDN", "not a valid payer", "{}"));
+
+        service.createAndSubmit(MTN, "merchant-1", intent());
+
+        assertThat(outbox.events()).isEmpty();
     }
 
     @Test

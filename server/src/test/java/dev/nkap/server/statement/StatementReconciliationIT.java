@@ -17,6 +17,8 @@ import dev.nkap.provider.PaymentIntent;
 import dev.nkap.provider.ProviderAdapter;
 import dev.nkap.provider.ProviderId;
 import dev.nkap.provider.ProviderStatus;
+import dev.nkap.server.outbox.InMemoryOutbox;
+import dev.nkap.server.outbox.OutboxNotifier;
 import dev.nkap.server.payment.Payment;
 import dev.nkap.server.payment.PaymentTransition;
 import dev.nkap.server.payment.SettlementService;
@@ -25,6 +27,7 @@ import dev.nkap.server.persistence.PostgresPaymentRepository;
 import dev.nkap.server.provider.AdapterRegistry;
 import dev.nkap.server.support.DockerAvailable;
 import dev.nkap.server.support.PostgresDatabase;
+import dev.nkap.server.webhook.InMemoryWebhookEndpointStore;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
@@ -325,7 +328,8 @@ class StatementReconciliationIT {
         } catch (Exception impossible) {
             throw new AssertionError(impossible);
         }
-        new SettlementService(payments, adapters, ledger, txManager)
+        new SettlementService(payments, adapters, ledger,
+                new OutboxNotifier(new InMemoryOutbox(), new InMemoryWebhookEndpointStore(), new ObjectMapper()), txManager)
                 .confirm(MTN, reference, PaymentTransition.Cause.CALLBACK);
         return reference;
     }

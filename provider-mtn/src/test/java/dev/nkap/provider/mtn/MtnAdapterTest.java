@@ -31,7 +31,7 @@ class MtnAdapterTest {
         return new MtnProfile(base, "sandbox", "sub", "user", "key", eur, "sandbox");
     }
 
-    private PaymentIntent intent(Capability operation) {
+    private PaymentIntent intent(Capability.Operation operation) {
         return new PaymentIntent(operation, Money.of(5000, eur), "46733123453", "n", "n", Map.of());
     }
 
@@ -58,8 +58,8 @@ class MtnAdapterTest {
     void capabilities_reflect_what_is_configured() throws Exception {
         try (StubMtn mtn = new StubMtn()) {
             assertThat(facadeAt(mtn, true).capabilities())
-                    .containsExactlyInAnyOrder(Capability.COLLECT, Capability.DISBURSE);
-            assertThat(facadeAt(mtn, false).capabilities()).containsExactly(Capability.COLLECT);
+                    .containsExactlyInAnyOrder(Capability.Operation.COLLECT, Capability.Operation.DISBURSE);
+            assertThat(facadeAt(mtn, false).capabilities()).containsExactly(Capability.Operation.COLLECT);
             assertThat(facadeAt(mtn, false).id()).isEqualTo(ProviderId.of("mtn"));
         }
     }
@@ -69,10 +69,10 @@ class MtnAdapterTest {
     void an_unconfigured_disburse_is_a_clear_error() throws Exception {
         try (StubMtn mtn = new StubMtn()) {
             MtnAdapter facade = facadeAt(mtn, false);
-            assertThatThrownBy(() -> facade.submit(intent(Capability.DISBURSE), ReferenceId.newReference()))
+            assertThatThrownBy(() -> facade.submit(intent(Capability.Operation.DISBURSE), ReferenceId.newReference()))
                     .isInstanceOf(IllegalStateException.class)
                     .hasMessageContaining("disbursement");
-            assertThatThrownBy(() -> facade.query(ReferenceId.newReference(), Capability.DISBURSE))
+            assertThatThrownBy(() -> facade.query(ReferenceId.newReference(), Capability.Operation.DISBURSE))
                     .isInstanceOf(IllegalStateException.class);
         }
     }
@@ -87,8 +87,8 @@ class MtnAdapterTest {
             MtnAdapter facade = facadeAt(mtn, true);
             ReferenceId ref = ReferenceId.newReference();
 
-            facade.query(ref, Capability.DISBURSE);
-            facade.query(ref, Capability.COLLECT);
+            facade.query(ref, Capability.Operation.DISBURSE);
+            facade.query(ref, Capability.Operation.COLLECT);
 
             // The same reference, two capabilities, two different product URLs — asserted on
             // the outgoing path, not on any mock.
@@ -108,10 +108,10 @@ class MtnAdapterTest {
             });
             MtnAdapter facade = facadeAt(mtn, true);
 
-            facade.submit(intent(Capability.COLLECT), ReferenceId.newReference());
-            facade.submit(intent(Capability.DISBURSE), ReferenceId.newReference());
-            facade.submit(intent(Capability.COLLECT), ReferenceId.newReference());   // reuses the collections token
-            assertThat(facade.query(ReferenceId.newReference(), Capability.DISBURSE).state())
+            facade.submit(intent(Capability.Operation.COLLECT), ReferenceId.newReference());
+            facade.submit(intent(Capability.Operation.DISBURSE), ReferenceId.newReference());
+            facade.submit(intent(Capability.Operation.COLLECT), ReferenceId.newReference());   // reuses the collections token
+            assertThat(facade.query(ReferenceId.newReference(), Capability.Operation.DISBURSE).state())
                     .isEqualTo(PaymentState.SUCCEEDED);                                // reuses the disbursements token
 
             assertThat(mtn.countPath("/collection/token/")).as("two collections calls, one token").isEqualTo(1);

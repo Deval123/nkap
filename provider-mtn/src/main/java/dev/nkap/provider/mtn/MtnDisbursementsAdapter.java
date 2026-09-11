@@ -81,14 +81,14 @@ public final class MtnDisbursementsAdapter implements ProviderAdapter {
 
     @Override
     public Set<Capability> capabilities() {
-        return Set.of(Capability.DISBURSE);
+        return Set.of(Capability.Operation.DISBURSE);
     }
 
     @Override
     public SubmitResult submit(PaymentIntent intent, ReferenceId reference) throws ProviderUnavailableException {
         Objects.requireNonNull(intent, "intent");
         Objects.requireNonNull(reference, "reference");
-        if (intent.operation() != Capability.DISBURSE) {
+        if (intent.operation() != Capability.Operation.DISBURSE) {
             throw new IllegalArgumentException(
                     "the MTN disbursements adapter only performs DISBURSE, not " + intent.operation());
         }
@@ -127,9 +127,9 @@ public final class MtnDisbursementsAdapter implements ProviderAdapter {
     }
 
     @Override
-    public ProviderStatus query(ReferenceId reference, Capability capability) throws ProviderUnavailableException {
+    public ProviderStatus query(ReferenceId reference, Capability.Operation capability) throws ProviderUnavailableException {
         Objects.requireNonNull(reference, "reference");
-        if (capability != Capability.DISBURSE) {
+        if (capability != Capability.Operation.DISBURSE) {
             throw new IllegalArgumentException(
                     "the MTN disbursements adapter only answers DISBURSE queries, not " + capability);
         }
@@ -191,7 +191,7 @@ public final class MtnDisbursementsAdapter implements ProviderAdapter {
     }
 
     @Override
-    public Money balance(Capability capability, Currency currency) throws ProviderUnavailableException {
+    public Money balance(Capability.Operation capability, Currency currency) throws ProviderUnavailableException {
         throw new UnsupportedOperationException(
                 "balance is out of scope for the disbursements adapter; capabilities() does not advertise BALANCE");
     }

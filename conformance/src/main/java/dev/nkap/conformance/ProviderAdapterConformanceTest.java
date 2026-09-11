@@ -3,6 +3,7 @@ package dev.nkap.conformance;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.nkap.core.payment.PaymentState;
 import dev.nkap.core.payment.ReferenceId;
@@ -30,16 +31,14 @@ import org.junit.jupiter.api.Test;
  * <p><strong>Not here, on purpose: routing by capability.</strong> Issue #67 considered a
  * rule that a reference submitted under one capability is answered under that capability.
  * It is a real rule and MTN now genuinely has two products to confuse, but it is not
- * extractable yet, for two reasons that are worth stating so the next contributor does not
- * rediscover them. First, {@link Capability} mixes operations ({@code COLLECT},
- * {@code DISBURSE}) with features ({@code BALANCE}, {@code STATEMENT}), so the kit cannot
- * say "for each capability the adapter declares" without hardcoding which of them can be
- * submitted — a second home for a distinction that belongs in {@code provider-api}.
- * Second, and decisive: the simulator keeps one reference store across both products, so a
- * reference submitted on the collections path is answered on the disbursements path too.
- * The rule would pass whether or not an adapter routed correctly, and a green test that
- * cannot fail is worse than an absent one. Partitioning the simulator per product is what
- * unblocks it.
+ * extractable yet. At the time, saying "for each capability the adapter declares" meant
+ * hardcoding which members were submittable, because {@link Capability} mixed operations
+ * with features — issue #70 closed that gap; {@link ProviderAdapter#operations()} is exactly
+ * that iteration, with nothing to hardcode. What still blocks the rule is the simulator: it
+ * keeps one reference store across both products, so a reference submitted on the
+ * collections path is answered on the disbursements path too. The rule would pass whether or
+ * not an adapter routed correctly, and a green test that cannot fail is worse than an absent
+ * one. Partitioning the simulator per product is what unblocks it.
  */
 public abstract class ProviderAdapterConformanceTest {
 
@@ -61,12 +60,23 @@ public abstract class ProviderAdapterConformanceTest {
     }
 
     /**
-     * The capability the rules exercise: the one {@link ConformanceHarness#anIntent()}
+     * The operation the rules exercise: the one {@link ConformanceHarness#anIntent()}
      * submits under. It is passed to {@code query} because the contract now carries it
-     * (ADR 0008) — a reference is answered under the capability it was submitted under.
+     * (ADR 0008) — a reference is answered under the operation it was submitted under.
      */
-    private Capability capabilityUnderTest() {
+    private Capability.Operation operationUnderTest() {
         return harness.anIntent().operation();
+    }
+
+    @Test
+    @DisplayName("operations() declares the operation the harness submits under — asked by type, not by a switch on members")
+    void operations_declares_what_the_harness_submits_under() {
+        ProviderAdapter adapter = harness.adapter();
+
+        assertTrue(adapter.capabilities().containsAll(adapter.operations()),
+                "every declared operation is also a declared capability");
+        assertTrue(adapter.operations().contains(operationUnderTest()),
+                "the operation the harness submits under is among the declared operations");
     }
 
     @Test
@@ -81,7 +91,7 @@ public abstract class ProviderAdapterConformanceTest {
         assertInstanceOf(SubmitResult.Acknowledged.class, first, "first submission");
         assertInstanceOf(SubmitResult.Acknowledged.class, again,
                 "the same reference again is acknowledged, not rejected and not an error");
-        assertSame(PaymentState.SUCCEEDED, adapter.query(reference, capabilityUnderTest()).state(),
+        assertSame(PaymentState.SUCCEEDED, adapter.query(reference, operationUnderTest()).state(),
                 "the reused reference resolves to a single outcome");
     }
 
@@ -97,7 +107,7 @@ public abstract class ProviderAdapterConformanceTest {
                 () -> adapter.submit(harness.anIntent(), reference));
 
         // The payment may still exist at the operator: a later query can resolve it.
-        assertSame(PaymentState.SUCCEEDED, adapter.query(reference, capabilityUnderTest()).state());
+        assertSame(PaymentState.SUCCEEDED, adapter.query(reference, operationUnderTest()).state());
     }
 
     @Test
@@ -121,8 +131,8 @@ public abstract class ProviderAdapterConformanceTest {
         ReferenceId reference = ReferenceId.newReference();
         adapter.submit(harness.anIntent(), reference);
 
-        ProviderStatus firstAnswer = adapter.query(reference, capabilityUnderTest());
-        ProviderStatus secondAnswer = adapter.query(reference, capabilityUnderTest());
+        ProviderStatus firstAnswer = adapter.query(reference, operationUnderTest());
+        ProviderStatus secondAnswer = adapter.query(reference, operationUnderTest());
 
         // The rule this kit can check is the adapter's: it reports what it is told on each
         // query, faithfully, and decides nothing. That the second answer cannot reopen the
@@ -148,7 +158,7 @@ public abstract class ProviderAdapterConformanceTest {
         // not a timed loop: the wait is the harness's business, the count is the kit's.
         Thread.sleep(harness.credentialLifetime().plusMillis(500).toMillis());
         for (int query = 1; query <= 3; query++) {
-            assertSame(PaymentState.SUCCEEDED, adapter.query(reference, capabilityUnderTest()).state(),
+            assertSame(PaymentState.SUCCEEDED, adapter.query(reference, operationUnderTest()).state(),
                     "query " + query + " after the credential expired");
         }
     }

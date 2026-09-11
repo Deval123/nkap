@@ -45,7 +45,7 @@ final class MtnConformanceHarness implements ConformanceHarness {
 
     @Override
     public PaymentIntent anIntent() {
-        return new PaymentIntent(Capability.COLLECT, Money.of(5000, Currency.EUR),
+        return new PaymentIntent(Capability.Operation.COLLECT, Money.of(5000, Currency.EUR),
                 "46733123453", "nkap conformance", "nkap conformance", Map.of());
     }
 

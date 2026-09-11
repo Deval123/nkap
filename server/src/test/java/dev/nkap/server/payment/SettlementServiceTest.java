@@ -45,19 +45,19 @@ class SettlementServiceTest {
     }
 
     private static PaymentIntent intent() {
-        return intent(Capability.COLLECT);
+        return intent(Capability.Operation.COLLECT);
     }
 
-    private static PaymentIntent intent(Capability operation) {
+    private static PaymentIntent intent(Capability.Operation operation) {
         return new PaymentIntent(operation, Money.of(5000, Currency.EUR),
                 "46733123453", "rent", "march", Map.of());
     }
 
     private Payment persisted(PaymentState state) {
-        return persisted(state, Capability.COLLECT);
+        return persisted(state, Capability.Operation.COLLECT);
     }
 
-    private Payment persisted(PaymentState state, Capability operation) {
+    private Payment persisted(PaymentState state, Capability.Operation operation) {
         Payment payment = Payment.create(ReferenceId.newReference(), MTN, "merchant-1", intent(operation));
         if (state == PaymentState.SUBMITTED) {
             payment.applyTransition(PaymentState.SUBMITTED, PaymentTransition.Cause.SUBMIT_RESPONSE, "", "", "");
@@ -96,7 +96,7 @@ class SettlementServiceTest {
     @Test
     @DisplayName("a settled disbursement posts the ADR 0007 mirror: float credited, merchant payable debited, summing to zero")
     void a_settled_disbursement_posts_the_adr_0007_mirror() throws Exception {
-        Payment payment = persisted(PaymentState.SUBMITTED, Capability.DISBURSE);
+        Payment payment = persisted(PaymentState.SUBMITTED, Capability.Operation.DISBURSE);
         when(adapter.query(any(), any())).thenReturn(status(PaymentState.SUCCEEDED, "SUCCESSFUL"));
 
         settlement.confirm(MTN, payment.reference(), PaymentTransition.Cause.CALLBACK);
@@ -122,25 +122,25 @@ class SettlementServiceTest {
         // it. This is the assertion that holds the lookup out of the adapter for good — if
         // it ever stops being the payment's own operation that travels, the MTN facade is
         // back to consulting gateway state to translate.
-        Payment collection = persisted(PaymentState.SUBMITTED, Capability.COLLECT);
-        Payment disbursement = persisted(PaymentState.SUBMITTED, Capability.DISBURSE);
+        Payment collection = persisted(PaymentState.SUBMITTED, Capability.Operation.COLLECT);
+        Payment disbursement = persisted(PaymentState.SUBMITTED, Capability.Operation.DISBURSE);
         when(adapter.query(any(), any())).thenReturn(status(PaymentState.SUCCEEDED, "SUCCESSFUL"));
 
         settlement.confirm(MTN, collection.reference(), PaymentTransition.Cause.CALLBACK);
         settlement.confirm(MTN, disbursement.reference(), PaymentTransition.Cause.CALLBACK);
 
-        verify(adapter).query(collection.reference(), Capability.COLLECT);
-        verify(adapter).query(disbursement.reference(), Capability.DISBURSE);
+        verify(adapter).query(collection.reference(), Capability.Operation.COLLECT);
+        verify(adapter).query(disbursement.reference(), Capability.Operation.DISBURSE);
         // ...and never the other way round: a captured-any assertion would pass even if both
         // queries went out under one capability.
-        verify(adapter, never()).query(collection.reference(), Capability.DISBURSE);
-        verify(adapter, never()).query(disbursement.reference(), Capability.COLLECT);
+        verify(adapter, never()).query(collection.reference(), Capability.Operation.DISBURSE);
+        verify(adapter, never()).query(disbursement.reference(), Capability.Operation.COLLECT);
     }
 
     @Test
     @DisplayName("a disbursement the operator refuses for insufficient funds is FAILED with the operator's code, and posts nothing")
     void a_refused_disbursement_is_failed_and_posts_nothing() throws Exception {
-        Payment payment = persisted(PaymentState.SUBMITTED, Capability.DISBURSE);
+        Payment payment = persisted(PaymentState.SUBMITTED, Capability.Operation.DISBURSE);
         when(adapter.query(any(), any())).thenReturn(status(PaymentState.FAILED, "NOT_ENOUGH_FUNDS"));
 
         settlement.confirm(MTN, payment.reference(), PaymentTransition.Cause.CALLBACK);

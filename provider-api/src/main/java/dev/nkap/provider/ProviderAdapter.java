@@ -5,6 +5,7 @@ import dev.nkap.core.money.Money;
 import dev.nkap.core.payment.ReferenceId;
 
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * The whole contract a new provider has to satisfy.
@@ -30,6 +31,23 @@ public interface ProviderAdapter {
     Set<Capability> capabilities();
 
     /**
+     * The subset of {@link #capabilities()} an intent can actually be submitted under.
+     *
+     * <p>Derived from {@link #capabilities()} by type — {@code instanceof
+     * Capability.Operation} — never by naming members. An adapter that later declares a
+     * fifth capability needs no change here: whatever it is called, a {@link Capability.Feature}
+     * cannot satisfy this filter and a {@link Capability.Operation} always will. This is how
+     * a caller (the conformance kit among them) asks which declared capabilities an intent
+     * can be submitted for without a {@code switch} listing members.
+     */
+    default Set<Capability.Operation> operations() {
+        return capabilities().stream()
+                .filter(Capability.Operation.class::isInstance)
+                .map(Capability.Operation.class::cast)
+                .collect(Collectors.toUnmodifiableSet());
+    }
+
+    /**
      * Hands the request to the provider using {@code reference} as the idempotency key.
      *
      * <p>The same reference must be reused on every retry of the same intent — that is
@@ -42,13 +60,13 @@ public interface ProviderAdapter {
     /**
      * Asks the provider what became of a reference. The authority on the outcome.
      *
-     * <p>{@code capability} is the operation the reference was submitted under —
-     * {@code COLLECT} or {@code DISBURSE}. An operator that runs one product per operation
-     * (MTN: Collections and Disbursements have different base paths) needs it to know which
-     * one to ask; an operator with a single status endpoint may ignore it. The caller has
-     * it — the payment records its operation — so it is passed, not looked up. See ADR 0008.
+     * <p>{@code capability} is the operation the reference was submitted under. An operator
+     * that runs one product per operation (MTN: Collections and Disbursements have different
+     * base paths) needs it to know which one to ask; an operator with a single status endpoint
+     * may ignore it. The caller has it — the payment records its operation — so it is passed,
+     * not looked up. See ADR 0008.
      */
-    ProviderStatus query(ReferenceId reference, Capability capability) throws ProviderUnavailableException;
+    ProviderStatus query(ReferenceId reference, Capability.Operation capability) throws ProviderUnavailableException;
 
     /**
      * Authenticates and interprets an incoming webhook.
@@ -66,11 +84,11 @@ public interface ProviderAdapter {
      * The balance Nkap holds at the provider for one product, for reconciliation against the
      * float account.
      *
-     * <p>{@code capability} names the product — {@code COLLECT} or {@code DISBURSE} — for the
-     * same reason {@link #query} takes one: MTN holds a separate balance per product. An
-     * operator with a single balance may ignore it. Carried on the contract now, though no
-     * caller uses it yet, so the account-balance slice does not have to churn this signature
-     * a second time for the reason {@code query} just did.
+     * <p>{@code capability} names the product, for the same reason {@link #query} takes one:
+     * MTN holds a separate balance per product. An operator with a single balance may ignore
+     * it. Carried on the contract now, though no caller uses it yet, so the account-balance
+     * slice does not have to churn this signature a second time for the reason {@code query}
+     * just did.
      */
-    Money balance(Capability capability, Currency currency) throws ProviderUnavailableException;
+    Money balance(Capability.Operation capability, Currency currency) throws ProviderUnavailableException;
 }

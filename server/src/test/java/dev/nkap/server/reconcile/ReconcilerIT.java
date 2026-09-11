@@ -610,7 +610,7 @@ class ReconcilerIT {
     }
 
     private static PaymentIntent intent() {
-        return new PaymentIntent(Capability.COLLECT, Money.of(5_000, Currency.EUR),
+        return new PaymentIntent(Capability.Operation.COLLECT, Money.of(5_000, Currency.EUR),
                 "46733123453", "rent", "march", Map.of());
     }
 

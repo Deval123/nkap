@@ -173,7 +173,7 @@ public class SettlementService {
         Currency currency = gross.currency();
         AccountId providerFloat = AccountId.providerFloat(payment.provider().toString(), currency);
         AccountId merchantPayable = AccountId.merchantPayable(payment.merchantId(), currency);
-        boolean disbursement = payment.intent().operation() == Capability.DISBURSE;
+        boolean disbursement = payment.intent().operation() == Capability.Operation.DISBURSE;
 
         Posting floatPosting = disbursement
                 ? Posting.credit(providerFloat, gross)   // ADR 0007: money left the float
@@ -205,7 +205,7 @@ public class SettlementService {
 
     /** {@code collection:<ref>} or {@code disbursement:<ref>} — derived from the reference, so a re-settle is refused by the ledger. */
     private static String entryId(Payment payment) {
-        String prefix = payment.intent().operation() == Capability.DISBURSE ? "disbursement:" : "collection:";
+        String prefix = payment.intent().operation() == Capability.Operation.DISBURSE ? "disbursement:" : "collection:";
         return prefix + payment.reference();
     }
 

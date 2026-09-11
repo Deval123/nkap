@@ -133,8 +133,13 @@ services:
       NKAP_RECONCILER_BACKOFF_BASE: PT3S
       NKAP_RECONCILER_BACKOFF_MAX: PT10S
       NKAP_RECONCILER_WINDOW: PT2M
+    # Health and metrics answer on their own port (9464, application.yml), and this file
+    # never publishes it — only 8080, the API, is mapped to the host below. The check
+    # still reaches it: this runs inside the container, on the compose network, where the
+    # unpublished port is exactly as reachable as the published one. If you move the
+    # health check back to 8080 by habit, it breaks — the good kind of failure.
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8080/actuator/health"]
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:9464/actuator/health"]
       interval: 3s
       timeout: 3s
       retries: 40

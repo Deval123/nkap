@@ -26,6 +26,7 @@ import dev.nkap.server.persistence.PostgresPaymentRepository;
 import dev.nkap.server.provider.AdapterRegistry;
 import dev.nkap.server.support.DockerAvailable;
 import dev.nkap.server.support.PostgresDatabase;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -580,7 +581,7 @@ class ReconcilerIT {
         ReconciliationPolicy policy = new ReconciliationPolicy(properties);
         ReconciliationStore store = new PostgresReconciliationStore(jdbc, txManager, policy);
         SettlementService settlement = new SettlementService(payments, adapters, ledger, txManager);
-        return new Reconciler(store, settlement, policy, properties, clock);
+        return new Reconciler(store, settlement, policy, properties, clock, new SimpleMeterRegistry());
     }
 
     private static AdapterRegistry operatorThatIsSilent() {

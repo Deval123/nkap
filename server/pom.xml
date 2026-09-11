@@ -30,13 +30,22 @@
       <artifactId>spring-boot-starter-web</artifactId>
     </dependency>
     <!--
-      Actuator is here for one endpoint: /actuator/health, which the compose file's
-      health check polls so the stack starts in order. Only `health` is exposed (see
-      application.yml). Metrics are a separate roadmap line and are not turned on here.
+      Actuator started as one endpoint, /actuator/health, which the compose file's health
+      check polls so the stack starts in order. Issue #75 adds a second, deliberately: see
+      application.yml for exactly what `management.endpoints.web.exposure.include` names —
+      that property, not this dependency, is what controls the surface.
     -->
     <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-actuator</artifactId>
+    </dependency>
+    <!--
+      The registry /actuator/prometheus exports from — text-format metrics a Prometheus
+      server scrapes directly. No separate collector, no push gateway.
+    -->
+    <dependency>
+      <groupId>io.micrometer</groupId>
+      <artifactId>micrometer-registry-prometheus</artifactId>
     </dependency>
 
     <!-- The state lives in PostgreSQL: plain SQL through JdbcTemplate, Flyway for the schema. -->

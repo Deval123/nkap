@@ -4,11 +4,15 @@ import dev.nkap.server.payment.ConfirmationOutcome;
 import dev.nkap.server.payment.PaymentTransition;
 import dev.nkap.server.payment.SettlementService;
 import dev.nkap.server.reconcile.ReconciliationStore.Claim;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
+import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.scheduling.annotation.Scheduled;
 
 /**
@@ -29,7 +33,10 @@ import org.springframework.scheduling.annotation.Scheduled;
  * automatic retries stop. It does <strong>not</strong> move to {@code FAILED}. Giving up
  * waiting is not the operator saying the payment failed, and this system never makes that
  * inference. An escalated payment is still non-terminal and a later callback or a later
- * manual query can still resolve it.
+ * manual query can still resolve it. Every escalation also increments
+ * {@code nkap.payment.escalated}, a counter tagged only {@code provider} — the second of
+ * the two alerting rules the plan asked to ship (issue #75; see
+ * {@code docs/prometheus-alerts.yml}).
  *
  * <p>The operator call sits outside the claim transaction, for the reason written twice
  * elsewhere in this codebase: an operator that does not answer must not hold a database
@@ -37,6 +44,12 @@ import org.springframework.scheduling.annotation.Scheduled;
  * commits; the call happens with no lock held; {@code confirm} then re-takes the row to
  * write any result. Because the claim pushes the next-due time forward before it commits,
  * a second reconciler instance neither races on the row nor re-claims it once released.
+ *
+ * <p>Each pass generates its own id and carries it as a structured log field
+ * ({@code MDC}) for the pass's whole duration — including, since {@code confirm} runs on
+ * this same thread, every log line {@link SettlementService} emits while resolving one of
+ * this pass's claims. "Which pass wrote this" is the question asked right after "what
+ * happened to this payment" (issue #75).
  *
  * <p>Built and scheduled by {@link ReconcilerConfiguration}, which is switched off by
  * {@code nkap.reconciler.enabled=false} — the integration tests that are not about the
@@ -51,14 +64,16 @@ public class Reconciler {
     private final ReconciliationPolicy policy;
     private final ReconcilerProperties properties;
     private final Clock clock;
+    private final MeterRegistry meterRegistry;
 
     public Reconciler(ReconciliationStore store, SettlementService settlement, ReconciliationPolicy policy,
-                      ReconcilerProperties properties, Clock clock) {
+                      ReconcilerProperties properties, Clock clock, MeterRegistry meterRegistry) {
         this.store = store;
         this.settlement = settlement;
         this.policy = policy;
         this.properties = properties;
         this.clock = clock;
+        this.meterRegistry = meterRegistry;
     }
 
     @Scheduled(fixedDelayString = "${nkap.reconciler.interval}")
@@ -78,19 +93,32 @@ public class Reconciler {
      * scheduled caller's logs and for the tests.
      */
     public int runOnce() {
-        Instant now = clock.instant();
-        List<Claim> claims = store.claimDue(properties.batchSize(), now);
-        for (Claim claim : claims) {
-            ConfirmationOutcome outcome =
-                    settlement.confirm(claim.provider(), claim.reference(), PaymentTransition.Cause.RECONCILER);
-            if (outcome.resolved()) {
-                continue;
+        String passId = UUID.randomUUID().toString();
+        try (var ignored = MDC.putCloseable("reconcilerPass", passId)) {
+            Instant now = clock.instant();
+            List<Claim> claims = store.claimDue(properties.batchSize(), now);
+            log.debug("reconciler pass {} claimed {} payment(s)", passId, claims.size());
+            for (Claim claim : claims) {
+                ConfirmationOutcome outcome =
+                        settlement.confirm(claim.provider(), claim.reference(), PaymentTransition.Cause.RECONCILER);
+                if (outcome.resolved()) {
+                    continue;
+                }
+                if (policy.windowExhausted(claim.unresolvedSince(), now) && store.markEscalated(claim.reference(), now)) {
+                    log.warn("payment {} escalated to a human after {} reconciler attempt(s); operator's last answer: {}",
+                            claim.reference(), claim.attempts(), outcome.lastOperatorAnswer());
+                    escalated(claim.provider().toString());
+                }
             }
-            if (policy.windowExhausted(claim.unresolvedSince(), now) && store.markEscalated(claim.reference(), now)) {
-                log.warn("payment {} escalated to a human after {} reconciler attempt(s); operator's last answer: {}",
-                        claim.reference(), claim.attempts(), outcome.lastOperatorAnswer());
-            }
+            return claims.size();
         }
-        return claims.size();
+    }
+
+    private void escalated(String provider) {
+        Counter.builder("nkap.payment.escalated")
+                .description("Payments the reconciler gave up retrying automatically. Still open, not FAILED -- needs a human.")
+                .tag("provider", provider)
+                .register(meterRegistry)
+                .increment();
     }
 }

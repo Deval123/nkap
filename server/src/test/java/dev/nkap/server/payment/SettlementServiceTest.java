@@ -21,6 +21,7 @@ import dev.nkap.provider.ProviderAdapter;
 import dev.nkap.provider.ProviderId;
 import dev.nkap.provider.ProviderStatus;
 import dev.nkap.provider.ProviderUnavailableException;
+import dev.nkap.server.support.LogCapture;
 import java.util.Map;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -70,6 +71,23 @@ class SettlementServiceTest {
 
     private static ProviderStatus status(PaymentState state, String code) {
         return new ProviderStatus(state, code, state == PaymentState.SUCCEEDED ? "txn-99" : "", null, "", "{\"status\":\"" + code + "\"}");
+    }
+
+    @Test
+    @DisplayName("the payment's reference is a structured field on confirm's and settle's log lines, not just inside the sentence")
+    void the_reference_is_a_structured_field_on_settlement_logs() throws Exception {
+        Payment payment = persisted(PaymentState.SUBMITTED);
+        when(adapter.query(any(), any())).thenReturn(status(PaymentState.SUCCEEDED, "SUCCESSFUL"));
+
+        try (LogCapture logs = new LogCapture(SettlementService.class)) {
+            settlement.confirm(MTN, payment.reference(), PaymentTransition.Cause.CALLBACK);
+
+            // settle() logs "settled ..." through the same logger, on the same thread as
+            // confirm() — one MDC scope, opened once in confirm(), covers both.
+            assertThat(logs.events()).isNotEmpty();
+            assertThat(logs.events()).allSatisfy(event -> assertThat(event.getMDCPropertyMap())
+                    .containsEntry("reference", payment.reference().toString()));
+        }
     }
 
     @Test

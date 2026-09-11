@@ -11,6 +11,7 @@ import dev.nkap.server.provider.AdapterRegistry;
 import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -36,6 +37,11 @@ import org.springframework.transaction.support.TransactionTemplate;
  * truth. The submit <strong>call</strong> stays outside the transaction — an operator that
  * does not answer would otherwise hold a database transaction open for the whole timeout.
  * The transaction opens when the answer is in hand.
+ *
+ * <p>Every log line this method or the ones it calls emit carries the reference as a
+ * structured field ({@code MDC}), not only inside the sentence — the same field
+ * {@code SettlementService} and the reconciler attach, so one payment's story across all
+ * three can be filtered on it rather than grepped for (issue #75).
  */
 @Service
 public class PaymentService {
@@ -63,28 +69,33 @@ public class PaymentService {
         ProviderAdapter adapter = adapters.require(providerId);
 
         ReferenceId reference = ReferenceId.newReference();
-        Payment created = Payment.create(reference, providerId, merchantId, intent);
-        payments.save(created);
+        // The reference as a structured field, not just interpolated into each sentence
+        // below: everything this call logs, and everything SettlementService or the
+        // reconciler log later about the same payment, can be filtered on it (issue #75).
+        try (var ignored = MDC.putCloseable("reference", reference.toString())) {
+            Payment created = Payment.create(reference, providerId, merchantId, intent);
+            payments.save(created);
 
-        SubmitOutcome outcome = callOperator(adapter, intent, reference);
+            SubmitOutcome outcome = callOperator(adapter, intent, reference);
 
-        tx.executeWithoutResult(status -> {
-            Payment current = payments.findByReferenceForUpdate(reference).orElseThrow();
-            if (current.state() != PaymentState.CREATED) {
-                // A callback confirmed this payment while the submit call was in flight.
-                // The response is stale — the callback path already recorded the
-                // transitions, and forcing CREATED -> SUBMITTED now would be illegal.
-                outcome.providerReference().ifPresent(current::recordProviderReference);
-                log.info("submit response for {} is stale: a callback already advanced it to {}",
-                        reference, current.state());
+            tx.executeWithoutResult(status -> {
+                Payment current = payments.findByReferenceForUpdate(reference).orElseThrow();
+                if (current.state() != PaymentState.CREATED) {
+                    // A callback confirmed this payment while the submit call was in flight.
+                    // The response is stale — the callback path already recorded the
+                    // transitions, and forcing CREATED -> SUBMITTED now would be illegal.
+                    outcome.providerReference().ifPresent(current::recordProviderReference);
+                    log.info("submit response for {} is stale: a callback already advanced it to {}",
+                            reference, current.state());
+                    payments.save(current);
+                    return;
+                }
+                applyOutcome(outcome, current, reference);
                 payments.save(current);
-                return;
-            }
-            applyOutcome(outcome, current, reference);
-            payments.save(current);
-        });
+            });
 
-        return payments.findByReference(reference).orElseThrow();
+            return payments.findByReference(reference).orElseThrow();
+        }
     }
 
     private SubmitOutcome callOperator(ProviderAdapter adapter, PaymentIntent intent, ReferenceId reference) {

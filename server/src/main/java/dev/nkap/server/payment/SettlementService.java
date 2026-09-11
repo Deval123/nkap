@@ -19,6 +19,7 @@ import java.util.List;
 import java.util.Locale;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -58,6 +59,11 @@ import org.springframework.transaction.support.TransactionTemplate;
  * the whole timeout. The transaction opens once the answer is in hand, takes the payment's
  * row with {@code SELECT … FOR UPDATE}, and closes when the writes are done — which is also
  * what serialises two callbacks for one reference.
+ *
+ * <p>Every log line {@link #confirm} emits, directly or through {@link #applyConfirmed} and
+ * {@link #settle}, carries the reference as a structured field ({@code MDC}), the same field
+ * {@code PaymentService} and the reconciler attach — one payment's story, filterable across
+ * all three (issue #75).
  */
 @Service
 public class SettlementService {
@@ -89,24 +95,29 @@ public class SettlementService {
         if (peek == null) {
             return ConfirmationOutcome.notHeld();
         }
-        if (peek.state().isTerminal()) {
-            log.debug("{} for {} ignored: payment is already {}", cause, reference, peek.state());
-            return ConfirmationOutcome.alreadyResolved(peek.state());
-        }
+        // The reference as a structured field for everything below, including
+        // applyConfirmed and settle — both run on this thread, so the field is on their
+        // log lines too, without either needing its own MDC scope (issue #75).
+        try (var ignored = MDC.putCloseable("reference", reference.toString())) {
+            if (peek.state().isTerminal()) {
+                log.debug("{} for {} ignored: payment is already {}", cause, reference, peek.state());
+                return ConfirmationOutcome.alreadyResolved(peek.state());
+            }
 
-        ProviderStatus status;
-        try {
-            // The capability travels with the reference (ADR 0008): the payment records its
-            // operation and this method has the payment in hand, so the adapter is not left
-            // to look it up.
-            status = adapters.require(providerId).query(reference, peek.intent().operation());
-        } catch (ProviderUnavailableException noAnswer) {
-            log.info("{} for {}: the confirming query did not answer, changing nothing: {}",
-                    cause, reference, noAnswer.getMessage());
-            return ConfirmationOutcome.noAnswer();
-        }
+            ProviderStatus status;
+            try {
+                // The capability travels with the reference (ADR 0008): the payment records
+                // its operation and this method has the payment in hand, so the adapter is
+                // not left to look it up.
+                status = adapters.require(providerId).query(reference, peek.intent().operation());
+            } catch (ProviderUnavailableException noAnswer) {
+                log.info("{} for {}: the confirming query did not answer, changing nothing: {}",
+                        cause, reference, noAnswer.getMessage());
+                return ConfirmationOutcome.noAnswer();
+            }
 
-        return tx.execute(txStatus -> applyConfirmed(reference, status, cause));
+            return tx.execute(txStatus -> applyConfirmed(reference, status, cause));
+        }
     }
 
     /** The read-decide-write, in one transaction, on the row locked with {@code FOR UPDATE}. */

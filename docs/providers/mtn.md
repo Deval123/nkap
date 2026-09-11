@@ -92,6 +92,29 @@ call proves otherwise:
 - The ledger effect is the mirror of a collection (ADR 0007); the fee rule is unchanged
   (ADR 0006).
 
+## Account balance and account-holder validation
+
+Not observed against a real MTN — mapped from the documented shape, driven through the
+simulator (issue #72). Available under both products, at their own base paths, the same
+way a balance and a status query are:
+
+- `GET /collection/v1_0/account/balance` and `GET /disbursement/v1_0/account/balance` —
+  assumed to return `{"availableBalance": "<decimal>", "currency": "<code>"}`, the decimal a
+  major-unit string the same shape `requesttopay`'s own `amount` field uses, just the other
+  direction. The adapter converts it to an exact count of minor units or refuses — see
+  `MtnCollectionsAdapter.minorUnitsFromMtnAmount`; it never rounds. A response naming a
+  currency other than the one asked for is refused, not coerced.
+- `GET /collection/v1_0/accountholder/msisdn/{msisdn}/active` and the `/disbursement/v1_0/`
+  equivalent — assumed to return `{"result": <true|false>}`. Whether MTN actually sends a
+  JSON boolean or a `"true"`/`"false"` string is unconfirmed, so the adapter reads either;
+  anything else is `UNKNOWN`, the same conservatism `MtnStatusMap` applies to a payment
+  status. Whether the account-holder answer genuinely differs by product, or one product's
+  answer would do for both, is also unconfirmed — each product asks its own path because
+  each product is a separate set of credentials, not because the two are known to disagree.
+- Both are `GET`s that call the operator on every request. Neither has a reference or a
+  timeline, so the simulator answers them from declared configuration (`AccountBehaviour`),
+  not a `Scenario` — see ADR 0002's scope.
+
 ## Still unknown
 
 Left open deliberately rather than guessed. Each is worth a pull request adding a line here.
@@ -104,6 +127,17 @@ Left open deliberately rather than guessed. Each is worth a pull request adding 
   section above assumes** — a different response field, a code Collections does not use, a
   callback shaped differently. Mapped from documentation and the simulator only; a real call
   is the thing to check it against, and this line moves up into that section when one is made.
+- **The exact shape of a real Account Balance response.** Field name, decimal format,
+  whether a currency mismatch can even occur or is only a defensive check against a fact
+  that never happens. Mapped from documentation only — see *Account balance and
+  account-holder validation* above.
+- **The exact shape of a real Account Holder response**, including whether `result` is a
+  JSON boolean or a string, and any code or field this adapter would currently map to
+  `UNKNOWN` for lack of a recognised shape.
+- **Whether Collections and Disbursements genuinely answer an account-holder check the
+  same way**, or whether one product's endpoint is the one that actually matters and the
+  other is untested surface. Both are called today because both are configured products;
+  neither has been proven against a real MTN account.
 - **How an operator statement is obtained** — a portal download, a report API, an emailed
   file, an SFTP drop — and on what cadence. Nothing fetches one today; statement
   reconciliation is a host-side command (`--nkap.statement.import=<path>`) run against a

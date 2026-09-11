@@ -10,6 +10,7 @@ import dev.nkap.core.payment.PaymentState;
 import dev.nkap.core.payment.ReferenceId;
 import dev.nkap.provider.CallbackEvent;
 import dev.nkap.provider.Capability;
+import dev.nkap.provider.HolderStatus;
 import dev.nkap.provider.PaymentIntent;
 import dev.nkap.provider.ProviderAdapter;
 import dev.nkap.provider.ProviderId;
@@ -20,6 +21,7 @@ import dev.nkap.provider.SubmitResult;
 import dev.nkap.provider.UntrustedCallbackException;
 import java.io.IOException;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -70,7 +72,7 @@ public final class MtnCollectionsAdapter implements ProviderAdapter {
 
     @Override
     public Set<Capability> capabilities() {
-        return Set.of(Capability.Operation.COLLECT);
+        return Set.of(Capability.Operation.COLLECT, Capability.Feature.BALANCE, Capability.Feature.HOLDER_VALIDATION);
     }
 
     @Override
@@ -191,8 +193,56 @@ public final class MtnCollectionsAdapter implements ProviderAdapter {
 
     @Override
     public Money balance(Capability.Operation capability, Currency currency) throws ProviderUnavailableException {
-        throw new UnsupportedOperationException(
-                "balance is out of scope for the collections adapter; capabilities() does not advertise BALANCE");
+        Objects.requireNonNull(capability, "capability");
+        Objects.requireNonNull(currency, "currency");
+        if (capability != Capability.Operation.COLLECT) {
+            throw new IllegalArgumentException(
+                    "the MTN collections adapter only reports a COLLECT balance, not " + capability);
+        }
+        if (currency != profile.currency()) {
+            throw new IllegalArgumentException("balance was asked in " + currency
+                    + " but this MTN profile settles in " + profile.currency());
+        }
+
+        HttpRequest.Builder request = HttpRequest.newBuilder(profile.endpoint("/collection/v1_0/account/balance"))
+                .timeout(requestTimeout)
+                .header("Ocp-Apim-Subscription-Key", profile.subscriptionKey())
+                .header("X-Target-Environment", profile.targetEnvironment())
+                .GET();
+
+        HttpResponse<String> response = sendAuthenticated(request);
+        int code = response.statusCode();
+        String body = response.body();
+        if (code != 200) {
+            throw new ProviderUnavailableException("MTN balance returned HTTP " + code + ": " + brief(body));
+        }
+        return balanceFrom(json, body, currency);
+    }
+
+    @Override
+    public HolderStatus validateHolder(Capability.Operation capability, String msisdn) throws ProviderUnavailableException {
+        Objects.requireNonNull(capability, "capability");
+        Objects.requireNonNull(msisdn, "msisdn");
+        if (capability != Capability.Operation.COLLECT) {
+            throw new IllegalArgumentException(
+                    "the MTN collections adapter only validates a holder for COLLECT, not " + capability);
+        }
+
+        HttpRequest.Builder request = HttpRequest.newBuilder(
+                        profile.endpoint("/collection/v1_0/accountholder/msisdn/" + msisdn + "/active"))
+                .timeout(requestTimeout)
+                .header("Ocp-Apim-Subscription-Key", profile.subscriptionKey())
+                .header("X-Target-Environment", profile.targetEnvironment())
+                .GET();
+
+        HttpResponse<String> response = sendAuthenticated(request);
+        int code = response.statusCode();
+        String body = response.body();
+        if (code != 200) {
+            throw new ProviderUnavailableException(
+                    "MTN account holder check returned HTTP " + code + ": " + brief(body));
+        }
+        return holderStatusFrom(json, body);
     }
 
     // --- HTTP ---------------------------------------------------------------------------
@@ -267,6 +317,33 @@ public final class MtnCollectionsAdapter implements ProviderAdapter {
         return new ProviderStatus(state, code, transactionId, null, reason, body);
     }
 
+    /**
+     * MTN's {@code availableBalance}/{@code currency} pair (documented, not observed — see
+     * "Still unknown" in {@code docs/providers/mtn.md}), refused rather than coerced if the
+     * reported currency is not {@code expectedCurrency}: that is not the balance that was
+     * asked for. Shared with {@link MtnDisbursementsAdapter}, like {@link #mtnAmount}.
+     */
+    static Money balanceFrom(ObjectMapper json, String body, Currency expectedCurrency)
+            throws ProviderUnavailableException {
+        if (body == null || body.isBlank()) {
+            throw new ProviderUnavailableException("MTN balance returned 200 with an empty body");
+        }
+        JsonNode node;
+        try {
+            node = json.readTree(body);
+        } catch (IOException e) {
+            throw new ProviderUnavailableException("MTN balance body was not JSON: " + brief(body), e);
+        }
+        String reportedCurrency = node.path("currency").asText("");
+        if (!expectedCurrency.name().equals(reportedCurrency)) {
+            throw new ProviderUnavailableException("MTN reported a balance in "
+                    + (reportedCurrency.isBlank() ? "<no currency>" : reportedCurrency) + " but " + expectedCurrency
+                    + " was asked for — refusing to treat it as that balance");
+        }
+        long minorUnits = minorUnitsFromMtnAmount(node.path("availableBalance").asText(""), expectedCurrency);
+        return Money.of(minorUnits, expectedCurrency);
+    }
+
     private SubmitResult.Rejected rejected(HttpResponse<String> response) {
         String body = response.body();
         String code = codeIn(body);
@@ -293,6 +370,70 @@ public final class MtnCollectionsAdapter implements ProviderAdapter {
     static String mtnAmount(Money money) {
         // MTN's amount is a decimal string in the major currency unit; Money is minor units.
         return BigDecimal.valueOf(money.amount(), money.currency().minorUnits()).toPlainString();
+    }
+
+    /**
+     * The inverse of {@link #mtnAmount}, and the trap the plan for issue #72 named: MTN's
+     * decimal string, in the major unit, converted to an exact count of minor units for
+     * {@code currency} — never rounded. {@link RoundingMode#UNNECESSARY} is the whole
+     * mechanism: it succeeds silently when the extra decimal places carry no information (a
+     * trailing zero — {@code "1000.00"} for XAF, which has none, is exactly 1000), and it
+     * throws the moment rounding would actually be needed (a nonzero digit past the
+     * currency's own precision — {@code "50.105"} for EUR cannot become 5010 or 5011 without
+     * a guess). A rounded balance is how a reconciliation drifts by a few cents a day and
+     * nobody can say when it started; refusing it here is cheaper than finding that drift.
+     */
+    static long minorUnitsFromMtnAmount(String decimal, Currency currency) throws ProviderUnavailableException {
+        if (decimal == null || decimal.isBlank()) {
+            throw new ProviderUnavailableException("MTN balance carried no amount");
+        }
+        BigDecimal parsed;
+        try {
+            parsed = new BigDecimal(decimal);
+        } catch (NumberFormatException e) {
+            throw new ProviderUnavailableException("MTN balance amount '" + decimal + "' is not a decimal number", e);
+        }
+        try {
+            return parsed.setScale(currency.minorUnits(), RoundingMode.UNNECESSARY).unscaledValue().longValueExact();
+        } catch (ArithmeticException e) {
+            throw new ProviderUnavailableException("MTN balance amount '" + decimal
+                    + "' has more decimal places than " + currency + " allows (" + currency.minorUnits()
+                    + ") — refusing to round it", e);
+        }
+    }
+
+    /**
+     * MTN's account-holder answer (documented, not observed — see "Still unknown" in
+     * {@code docs/providers/mtn.md}): a {@code result} field this method reads as either a
+     * JSON boolean or a {@code "true"}/{@code "false"} string, since which one real MTN sends
+     * is unconfirmed. Anything else — absent, some other text, an unparseable body — is
+     * {@link ProviderUnavailableException}, never {@link HolderStatus#INACTIVE}: a code this
+     * adapter does not recognise says nothing about the account, the same conservatism
+     * {@link MtnStatusMap} applies to a payment status.
+     */
+    static HolderStatus holderStatusFrom(ObjectMapper json, String body) throws ProviderUnavailableException {
+        if (body == null || body.isBlank()) {
+            throw new ProviderUnavailableException("MTN account holder check returned 200 with an empty body");
+        }
+        JsonNode node;
+        try {
+            node = json.readTree(body);
+        } catch (IOException e) {
+            throw new ProviderUnavailableException("MTN account holder body was not JSON: " + brief(body), e);
+        }
+        JsonNode result = node.path("result");
+        if (result.isBoolean()) {
+            return result.asBoolean() ? HolderStatus.ACTIVE : HolderStatus.INACTIVE;
+        }
+        String text = result.asText("");
+        if ("true".equalsIgnoreCase(text)) {
+            return HolderStatus.ACTIVE;
+        }
+        if ("false".equalsIgnoreCase(text)) {
+            return HolderStatus.INACTIVE;
+        }
+        throw new ProviderUnavailableException(
+                "MTN account holder result was not a recognisable true/false: " + brief(body));
     }
 
     private static String firstNonBlank(String... values) {

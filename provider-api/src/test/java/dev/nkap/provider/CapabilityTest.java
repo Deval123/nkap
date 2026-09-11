@@ -64,6 +64,11 @@ class CapabilityTest {
             public Money balance(Capability.Operation capability, Currency currency) {
                 throw new UnsupportedOperationException("not needed for this test");
             }
+
+            @Override
+            public HolderStatus validateHolder(Capability.Operation capability, String msisdn) {
+                throw new UnsupportedOperationException("not needed for this test");
+            }
         };
 
         assertEquals(Set.of(Capability.Operation.COLLECT), mixed.operations());

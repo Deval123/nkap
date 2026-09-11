@@ -86,9 +86,31 @@ public interface ProviderAdapter {
      *
      * <p>{@code capability} names the product, for the same reason {@link #query} takes one:
      * MTN holds a separate balance per product. An operator with a single balance may ignore
-     * it. Carried on the contract now, though no caller uses it yet, so the account-balance
-     * slice does not have to churn this signature a second time for the reason {@code query}
-     * just did.
+     * it.
+     *
+     * <p>Three refusals, not a best effort. An operator that does not answer throws
+     * {@link ProviderUnavailableException} rather than reporting zero — a wrong number is
+     * worse than no number, because something will subtract it. An amount the operator
+     * reports with more precision than {@code currency} allows is an error, not a rounding:
+     * silently rounding a balance is how a reconciliation drifts by a few cents a day and
+     * nobody can say when it started. And an operator that answers in a currency other than
+     * {@code currency} is refused, not coerced — that is not the balance that was asked for.
      */
     Money balance(Capability.Operation capability, Currency currency) throws ProviderUnavailableException;
+
+    /**
+     * Whether the account behind {@code msisdn} is active at the provider — MTN's
+     * account-holder check, for instance, before a merchant pays a number that may not be a
+     * real mobile money account.
+     *
+     * <p>{@code capability} names the product, for the same reason {@link #balance} and
+     * {@link #query} take one.
+     *
+     * <p>An operator that does not answer — timeout, an unreadable response, anything this
+     * adapter cannot trust — throws {@link ProviderUnavailableException}, never returns
+     * {@link HolderStatus#INACTIVE}. Treating "I do not know" as "not active" is the same
+     * mistake as treating a payment timeout as a failure, aimed at a person instead of a
+     * payment: it ends with a merchant refusing to pay someone who was there all along.
+     */
+    HolderStatus validateHolder(Capability.Operation capability, String msisdn) throws ProviderUnavailableException;
 }

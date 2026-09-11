@@ -54,12 +54,15 @@ class MtnAdapterTest {
     }
 
     @Test
-    @DisplayName("capabilities are the union; with no disbursements product it is COLLECT alone")
+    @DisplayName("capabilities are the union of what each configured product declares — not a hardcoded pair")
     void capabilities_reflect_what_is_configured() throws Exception {
         try (StubMtn mtn = new StubMtn()) {
-            assertThat(facadeAt(mtn, true).capabilities())
-                    .containsExactlyInAnyOrder(Capability.Operation.COLLECT, Capability.Operation.DISBURSE);
-            assertThat(facadeAt(mtn, false).capabilities()).containsExactly(Capability.Operation.COLLECT);
+            assertThat(facadeAt(mtn, true).capabilities()).containsExactlyInAnyOrder(
+                    Capability.Operation.COLLECT, Capability.Operation.DISBURSE,
+                    Capability.Feature.BALANCE, Capability.Feature.HOLDER_VALIDATION);
+            // Collections alone still offers both features — they are not DISBURSE-only.
+            assertThat(facadeAt(mtn, false).capabilities()).containsExactlyInAnyOrder(
+                    Capability.Operation.COLLECT, Capability.Feature.BALANCE, Capability.Feature.HOLDER_VALIDATION);
             assertThat(facadeAt(mtn, false).id()).isEqualTo(ProviderId.of("mtn"));
         }
     }
@@ -74,6 +77,17 @@ class MtnAdapterTest {
                     .hasMessageContaining("disbursement");
             assertThatThrownBy(() -> facade.query(ReferenceId.newReference(), Capability.Operation.DISBURSE))
                     .isInstanceOf(IllegalStateException.class);
+            // capabilities() still lists BALANCE and HOLDER_VALIDATION (Collections offers
+            // both), but asking for DISBURSE's own refuses the same way query() does: the
+            // product is what is missing, not the feature. This is the "declaring and
+            // supporting must be the same thing" rule at the one place MTN can actually not
+            // declare something (issue #72).
+            assertThatThrownBy(() -> facade.balance(Capability.Operation.DISBURSE, Currency.EUR))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("disbursement");
+            assertThatThrownBy(() -> facade.validateHolder(Capability.Operation.DISBURSE, "46733123453"))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("disbursement");
         }
     }
 

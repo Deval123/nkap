@@ -10,6 +10,7 @@ import dev.nkap.core.payment.PaymentState;
 import dev.nkap.core.payment.ReferenceId;
 import dev.nkap.provider.CallbackEvent;
 import dev.nkap.provider.Capability;
+import dev.nkap.provider.HolderStatus;
 import dev.nkap.provider.PaymentIntent;
 import dev.nkap.provider.ProviderAdapter;
 import dev.nkap.provider.ProviderId;
@@ -81,7 +82,7 @@ public final class MtnDisbursementsAdapter implements ProviderAdapter {
 
     @Override
     public Set<Capability> capabilities() {
-        return Set.of(Capability.Operation.DISBURSE);
+        return Set.of(Capability.Operation.DISBURSE, Capability.Feature.BALANCE, Capability.Feature.HOLDER_VALIDATION);
     }
 
     @Override
@@ -192,8 +193,56 @@ public final class MtnDisbursementsAdapter implements ProviderAdapter {
 
     @Override
     public Money balance(Capability.Operation capability, Currency currency) throws ProviderUnavailableException {
-        throw new UnsupportedOperationException(
-                "balance is out of scope for the disbursements adapter; capabilities() does not advertise BALANCE");
+        Objects.requireNonNull(capability, "capability");
+        Objects.requireNonNull(currency, "currency");
+        if (capability != Capability.Operation.DISBURSE) {
+            throw new IllegalArgumentException(
+                    "the MTN disbursements adapter only reports a DISBURSE balance, not " + capability);
+        }
+        if (currency != profile.currency()) {
+            throw new IllegalArgumentException("balance was asked in " + currency
+                    + " but this MTN profile settles in " + profile.currency());
+        }
+
+        HttpRequest.Builder request = HttpRequest.newBuilder(profile.endpoint("/disbursement/v1_0/account/balance"))
+                .timeout(requestTimeout)
+                .header("Ocp-Apim-Subscription-Key", profile.subscriptionKey())
+                .header("X-Target-Environment", profile.targetEnvironment())
+                .GET();
+
+        HttpResponse<String> response = sendAuthenticated(request);
+        int code = response.statusCode();
+        String body = response.body();
+        if (code != 200) {
+            throw new ProviderUnavailableException("MTN disbursement balance returned HTTP " + code + ": " + brief(body));
+        }
+        return MtnCollectionsAdapter.balanceFrom(json, body, currency);
+    }
+
+    @Override
+    public HolderStatus validateHolder(Capability.Operation capability, String msisdn) throws ProviderUnavailableException {
+        Objects.requireNonNull(capability, "capability");
+        Objects.requireNonNull(msisdn, "msisdn");
+        if (capability != Capability.Operation.DISBURSE) {
+            throw new IllegalArgumentException(
+                    "the MTN disbursements adapter only validates a holder for DISBURSE, not " + capability);
+        }
+
+        HttpRequest.Builder request = HttpRequest.newBuilder(
+                        profile.endpoint("/disbursement/v1_0/accountholder/msisdn/" + msisdn + "/active"))
+                .timeout(requestTimeout)
+                .header("Ocp-Apim-Subscription-Key", profile.subscriptionKey())
+                .header("X-Target-Environment", profile.targetEnvironment())
+                .GET();
+
+        HttpResponse<String> response = sendAuthenticated(request);
+        int code = response.statusCode();
+        String body = response.body();
+        if (code != 200) {
+            throw new ProviderUnavailableException(
+                    "MTN disbursement account holder check returned HTTP " + code + ": " + brief(body));
+        }
+        return MtnCollectionsAdapter.holderStatusFrom(json, body);
     }
 
     // --- HTTP ------------------------------------------------------------------------

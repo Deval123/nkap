@@ -5,6 +5,7 @@ import dev.nkap.core.money.Money;
 import dev.nkap.core.payment.ReferenceId;
 import dev.nkap.provider.CallbackEvent;
 import dev.nkap.provider.Capability;
+import dev.nkap.provider.HolderStatus;
 import dev.nkap.provider.PaymentIntent;
 import dev.nkap.provider.ProviderAdapter;
 import dev.nkap.provider.ProviderId;
@@ -13,6 +14,7 @@ import dev.nkap.provider.ProviderUnavailableException;
 import dev.nkap.provider.RawCallback;
 import dev.nkap.provider.SubmitResult;
 import dev.nkap.provider.UntrustedCallbackException;
+import java.util.LinkedHashSet;
 import java.util.Objects;
 import java.util.Set;
 
@@ -64,11 +66,24 @@ public final class MtnAdapter implements ProviderAdapter {
         return ID;
     }
 
+    /**
+     * The union of what each configured product declares — not a hardcoded pair. Collections
+     * and Disbursements each already say which operation and which features (balance,
+     * holder validation) they support; the facade does not repeat that knowledge, it just
+     * adds the sets together. A product that is not configured contributes nothing, so
+     * {@code capabilities()} stops naming {@code DISBURSE} when {@code disbursements} is
+     * {@code null} — {@code BALANCE} and {@code HOLDER_VALIDATION} stay declared (Collections
+     * still offers both), and {@link #productAdapter} is what then refuses a call asking for
+     * either of those under {@code DISBURSE}, the same way it already refuses {@code query}.
+     */
     @Override
     public Set<Capability> capabilities() {
-        return disbursements == null
-                ? Set.of(Capability.Operation.COLLECT)
-                : Set.of(Capability.Operation.COLLECT, Capability.Operation.DISBURSE);
+        if (disbursements == null) {
+            return collections.capabilities();
+        }
+        Set<Capability> union = new LinkedHashSet<>(collections.capabilities());
+        union.addAll(disbursements.capabilities());
+        return Set.copyOf(union);
     }
 
     @Override
@@ -92,8 +107,16 @@ public final class MtnAdapter implements ProviderAdapter {
 
     @Override
     public Money balance(Capability.Operation capability, Currency currency) throws ProviderUnavailableException {
-        throw new UnsupportedOperationException(
-                "balance is out of scope for MTN; capabilities() does not advertise BALANCE");
+        Objects.requireNonNull(capability, "capability");
+        Objects.requireNonNull(currency, "currency");
+        return productAdapter(capability).balance(capability, currency);
+    }
+
+    @Override
+    public HolderStatus validateHolder(Capability.Operation capability, String msisdn) throws ProviderUnavailableException {
+        Objects.requireNonNull(capability, "capability");
+        Objects.requireNonNull(msisdn, "msisdn");
+        return productAdapter(capability).validateHolder(capability, msisdn);
     }
 
     /**

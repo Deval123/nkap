@@ -23,17 +23,27 @@ spring:
       enabled: true
 
 management:
+  server:
+    # A separate port, and this file never publishes it — compose.yaml does not map it to
+    # the host, and a real deployment reaches it only from inside its own network. Health
+    # and metrics were justified as "unauthenticated by convention" when health was the
+    # only thing here; that convention assumes a management port a scraper reaches on an
+    # internal network, not the same port that serves the public API. Now that this port
+    # also carries payments-by-state, reconciler passes and escalations, operator latency,
+    # and the suspense balance in a real currency, putting it behind the API's own
+    # published port would hand that business volume to anyone who can reach the gateway.
+    # 9464 is the OpenTelemetry Prometheus exporter's conventional default — not load-
+    # bearing here, just a recognisable, unlikely-to-collide choice.
+    port: 9464
   endpoints:
     web:
       exposure:
         # Exactly two, named, not a wildcard: health, for the compose file's health check,
         # and prometheus, for issue #75's gauges and counters. Everything else Actuator can
         # expose (env, beans, heapdump, mappings...) stays off — a wildcard here is how a
-        # metrics endpoint accidentally becomes an environment-variable leak. There is no
-        # separate auth gate on either: CallerAuthInterceptor already excludes /actuator/**
-        # wholesale (see AuthWebConfig), on the strength of this being exactly two
-        # low-risk, unauthenticated-by-convention reads — a liveness probe and a metrics
-        # scrape, the way a Prometheus server or a health check is set up to call them.
+        # metrics endpoint accidentally becomes an environment-variable leak. Both are
+        # reachable only on the management port above; there is no separate auth gate on
+        # either endpoint itself.
         include:
           - health
           - prometheus

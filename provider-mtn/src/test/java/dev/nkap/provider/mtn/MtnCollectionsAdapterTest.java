@@ -64,7 +64,7 @@ class MtnCollectionsAdapterTest {
     }
 
     private PaymentIntent collectIntent() {
-        return new PaymentIntent(Capability.COLLECT, Money.of(5000, Currency.EUR),
+        return new PaymentIntent(Capability.Operation.COLLECT, Money.of(5000, Currency.EUR),
                 "46733123453", "nkap test", "nkap test", Map.of());
     }
 
@@ -78,7 +78,7 @@ class MtnCollectionsAdapterTest {
         assertThat(submitted).isInstanceOfSatisfying(SubmitResult.Acknowledged.class,
                 acknowledged -> assertThat(acknowledged.state()).isEqualTo(PaymentState.SUBMITTED));
 
-        ProviderStatus status = mtn.query(reference, Capability.COLLECT);
+        ProviderStatus status = mtn.query(reference, Capability.Operation.COLLECT);
         assertThat(status.state()).isEqualTo(PaymentState.SUCCEEDED);
         assertThat(status.providerStatusCode()).isEqualTo("SUCCESSFUL");
     }
@@ -92,13 +92,13 @@ class MtnCollectionsAdapterTest {
         ReferenceId reference = ReferenceId.newReference();
         mtn.submit(collectIntent(), reference);
 
-        assertThat(mtn.query(reference, Capability.COLLECT).state()).isEqualTo(PaymentState.UNKNOWN);
+        assertThat(mtn.query(reference, Capability.Operation.COLLECT).state()).isEqualTo(PaymentState.UNKNOWN);
     }
 
     @Test
     @DisplayName("a query on a reference the operator has never seen is UNKNOWN, not a failure")
     void a_query_on_an_unknown_reference_is_unknown() throws Exception {
-        ProviderStatus status = adapter().query(ReferenceId.newReference(), Capability.COLLECT);
+        ProviderStatus status = adapter().query(ReferenceId.newReference(), Capability.Operation.COLLECT);
 
         assertThat(status.state()).isEqualTo(PaymentState.UNKNOWN);
     }
@@ -118,13 +118,13 @@ class MtnCollectionsAdapterTest {
         MtnCollectionsAdapter mtn = adapter();
 
         assertThat(mtn.id()).isEqualTo(ProviderId.of("mtn"));
-        assertThat(mtn.capabilities()).containsExactly(Capability.COLLECT);
+        assertThat(mtn.capabilities()).containsExactly(Capability.Operation.COLLECT);
     }
 
     @Test
     @DisplayName("a payment whose currency is not the profile's is refused before any call")
     void a_currency_mismatch_is_refused() {
-        PaymentIntent wrongCurrency = new PaymentIntent(Capability.COLLECT, Money.of(1000, Currency.XOF),
+        PaymentIntent wrongCurrency = new PaymentIntent(Capability.Operation.COLLECT, Money.of(1000, Currency.XOF),
                 "46733123453", "", "", Map.of());
 
         assertThatThrownBy(() -> adapter().submit(wrongCurrency, ReferenceId.newReference()))
@@ -149,7 +149,7 @@ class MtnCollectionsAdapterTest {
     @Test
     @DisplayName("balance is not offered by the collections adapter")
     void balance_is_unsupported() {
-        assertThatThrownBy(() -> adapter().balance(Capability.COLLECT, Currency.EUR))
+        assertThatThrownBy(() -> adapter().balance(Capability.Operation.COLLECT, Currency.EUR))
                 .isInstanceOf(UnsupportedOperationException.class);
     }
 }

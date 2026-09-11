@@ -305,7 +305,7 @@ class StatementReconciliationIT {
     }
 
     private static PaymentIntent intent(Money amount) {
-        return new PaymentIntent(Capability.COLLECT, amount, "46733123453", "rent", "march", Map.of());
+        return new PaymentIntent(Capability.Operation.COLLECT, amount, "46733123453", "rent", "march", Map.of());
     }
 
     /** Persists a payment and drives it to SUCCEEDED through the real settlement path: one gross entry, one SUCCEEDED transition. */

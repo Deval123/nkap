@@ -29,7 +29,7 @@ class MtnQueryTest {
     }
 
     private PaymentIntent intent() {
-        return new PaymentIntent(Capability.COLLECT, Money.of(5000, Currency.EUR), "46733123453", "", "", Map.of());
+        return new PaymentIntent(Capability.Operation.COLLECT, Money.of(5000, Currency.EUR), "46733123453", "", "", Map.of());
     }
 
     private static StubResponse token() {
@@ -47,7 +47,7 @@ class MtnQueryTest {
                          "amount":"50.00","currency":"EUR"}"""));
             MtnCollectionsAdapter adapter = new MtnCollectionsAdapter(profileAt(mtn.baseUrl()), Duration.ofSeconds(3));
 
-            ProviderStatus status = adapter.query(ReferenceId.newReference(), Capability.COLLECT);
+            ProviderStatus status = adapter.query(ReferenceId.newReference(), Capability.Operation.COLLECT);
 
             assertThat(status.state()).isEqualTo(PaymentState.SUCCEEDED);
             assertThat(status.transactionId()).contains("1510430965");
@@ -65,7 +65,7 @@ class MtnQueryTest {
                          "payer":{"partyIdType":"MSISDN","partyId":"46733123453"},"status":"PENDING"}"""));
             MtnCollectionsAdapter adapter = new MtnCollectionsAdapter(profileAt(mtn.baseUrl()), Duration.ofSeconds(3));
 
-            ProviderStatus status = adapter.query(ReferenceId.newReference(), Capability.COLLECT);
+            ProviderStatus status = adapter.query(ReferenceId.newReference(), Capability.Operation.COLLECT);
 
             assertThat(status.state()).isEqualTo(PaymentState.PENDING);
             assertThat(status.transactionId()).isEmpty();

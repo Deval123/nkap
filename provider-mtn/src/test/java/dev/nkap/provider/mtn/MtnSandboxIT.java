@@ -61,7 +61,7 @@ class MtnSandboxIT {
 
         MtnCollectionsAdapter adapter = new MtnCollectionsAdapter(profile);
         ReferenceId reference = ReferenceId.newReference();
-        PaymentIntent intent = new PaymentIntent(Capability.COLLECT,
+        PaymentIntent intent = new PaymentIntent(Capability.Operation.COLLECT,
                 Money.of(100, profile.currency()),
                 env.getOrDefault("MSISDN", "46733123453"),
                 "nkap manual sandbox test", "nkap manual sandbox test", Map.of());
@@ -69,7 +69,7 @@ class MtnSandboxIT {
         SubmitResult submitted = adapter.submit(intent, reference);
         System.out.println("submit  " + reference + " -> " + submitted);
 
-        ProviderStatus status = adapter.query(reference, Capability.COLLECT);
+        ProviderStatus status = adapter.query(reference, Capability.Operation.COLLECT);
         System.out.println("query   " + reference + " -> " + status.state()
                 + " (" + status.providerStatusCode() + ")");
 

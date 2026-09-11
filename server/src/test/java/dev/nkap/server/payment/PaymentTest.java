@@ -21,7 +21,7 @@ import org.junit.jupiter.api.Test;
 class PaymentTest {
 
     private static Payment newPayment() {
-        PaymentIntent intent = new PaymentIntent(Capability.COLLECT, Money.of(5000, Currency.EUR),
+        PaymentIntent intent = new PaymentIntent(Capability.Operation.COLLECT, Money.of(5000, Currency.EUR),
                 "46733123453", "hello", "note", Map.of());
         return Payment.create(ReferenceId.newReference(), ProviderId.of("mtn"), "merchant-1", intent);
     }
@@ -110,7 +110,7 @@ class PaymentTest {
     @Test
     @DisplayName("a hop between non-terminal states restarts nothing: not the window, the backoff, the schedule, or the escalation")
     void a_hop_between_non_terminal_states_does_not_restart_the_schedule() {
-        PaymentIntent intent = new PaymentIntent(Capability.COLLECT, Money.of(5000, Currency.EUR),
+        PaymentIntent intent = new PaymentIntent(Capability.Operation.COLLECT, Money.of(5000, Currency.EUR),
                 "46733123453", "hello", "note", Map.of());
         Instant createdAt = Instant.now().minus(Duration.ofHours(4));
         Instant becameUnresolved = Instant.now().minus(Duration.ofHours(3));

@@ -28,7 +28,7 @@ class MtnRetryTest {
     }
 
     private PaymentIntent intent() {
-        return new PaymentIntent(Capability.COLLECT, Money.of(5000, Currency.EUR), "46733123453", "", "", Map.of());
+        return new PaymentIntent(Capability.Operation.COLLECT, Money.of(5000, Currency.EUR), "46733123453", "", "", Map.of());
     }
 
     @Test

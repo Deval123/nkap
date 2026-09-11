@@ -13,7 +13,6 @@ import dev.nkap.provider.ProviderUnavailableException;
 import dev.nkap.provider.RawCallback;
 import dev.nkap.provider.SubmitResult;
 import dev.nkap.provider.UntrustedCallbackException;
-import java.util.EnumSet;
 import java.util.Objects;
 import java.util.Set;
 
@@ -68,8 +67,8 @@ public final class MtnAdapter implements ProviderAdapter {
     @Override
     public Set<Capability> capabilities() {
         return disbursements == null
-                ? EnumSet.of(Capability.COLLECT)
-                : EnumSet.of(Capability.COLLECT, Capability.DISBURSE);
+                ? Set.of(Capability.Operation.COLLECT)
+                : Set.of(Capability.Operation.COLLECT, Capability.Operation.DISBURSE);
     }
 
     @Override
@@ -79,7 +78,8 @@ public final class MtnAdapter implements ProviderAdapter {
     }
 
     @Override
-    public ProviderStatus query(ReferenceId reference, Capability capability) throws ProviderUnavailableException {
+    public ProviderStatus query(ReferenceId reference, Capability.Operation capability)
+            throws ProviderUnavailableException {
         Objects.requireNonNull(reference, "reference");
         Objects.requireNonNull(capability, "capability");
         return productAdapter(capability).query(reference, capability);
@@ -91,12 +91,17 @@ public final class MtnAdapter implements ProviderAdapter {
     }
 
     @Override
-    public Money balance(Capability capability, Currency currency) throws ProviderUnavailableException {
+    public Money balance(Capability.Operation capability, Currency currency) throws ProviderUnavailableException {
         throw new UnsupportedOperationException(
                 "balance is out of scope for MTN; capabilities() does not advertise BALANCE");
     }
 
-    private ProviderAdapter productAdapter(Capability operation) {
+    /**
+     * Exhaustive over {@link Capability.Operation}'s two members, so there is nothing left
+     * for a {@code default} to catch — the type already refused anything else before this
+     * method was called.
+     */
+    private ProviderAdapter productAdapter(Capability.Operation operation) {
         return switch (operation) {
             case COLLECT -> collections;
             case DISBURSE -> {
@@ -107,7 +112,6 @@ public final class MtnAdapter implements ProviderAdapter {
                 }
                 yield disbursements;
             }
-            default -> throw new IllegalArgumentException(operation + " is not a payment operation MTN serves");
         };
     }
 }

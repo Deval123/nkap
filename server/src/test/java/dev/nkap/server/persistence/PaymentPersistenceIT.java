@@ -49,7 +49,7 @@ class PaymentPersistenceIT {
     }
 
     private static PaymentIntent intent() {
-        return new PaymentIntent(Capability.COLLECT, Money.of(5_000, Currency.EUR),
+        return new PaymentIntent(Capability.Operation.COLLECT, Money.of(5_000, Currency.EUR),
                 "46733123453", "rent", "march", Map.of());
     }
 
@@ -77,7 +77,7 @@ class PaymentPersistenceIT {
         assertThat(read.state()).isEqualTo(PaymentState.SUCCEEDED);
         assertThat(read.providerReference()).isEqualTo("op-ref");
         assertThat(read.providerTransactionId()).isEqualTo("txn-1");
-        assertThat(read.intent().operation()).isEqualTo(Capability.COLLECT);
+        assertThat(read.intent().operation()).isEqualTo(Capability.Operation.COLLECT);
         assertThat(read.intent().amount()).isEqualTo(Money.of(5_000, Currency.EUR));
         assertThat(read.intent().counterpartyMsisdn()).isEqualTo("46733123453");
         // Instant.now() carries nanoseconds; timestamptz keeps microseconds and rounds to the

@@ -70,14 +70,14 @@ public final class MtnCollectionsAdapter implements ProviderAdapter {
 
     @Override
     public Set<Capability> capabilities() {
-        return Set.of(Capability.COLLECT);
+        return Set.of(Capability.Operation.COLLECT);
     }
 
     @Override
     public SubmitResult submit(PaymentIntent intent, ReferenceId reference) throws ProviderUnavailableException {
         Objects.requireNonNull(intent, "intent");
         Objects.requireNonNull(reference, "reference");
-        if (intent.operation() != Capability.COLLECT) {
+        if (intent.operation() != Capability.Operation.COLLECT) {
             throw new IllegalArgumentException(
                     "the MTN collections adapter only performs COLLECT, not " + intent.operation());
         }
@@ -123,9 +123,9 @@ public final class MtnCollectionsAdapter implements ProviderAdapter {
     }
 
     @Override
-    public ProviderStatus query(ReferenceId reference, Capability capability) throws ProviderUnavailableException {
+    public ProviderStatus query(ReferenceId reference, Capability.Operation capability) throws ProviderUnavailableException {
         Objects.requireNonNull(reference, "reference");
-        if (capability != Capability.COLLECT) {
+        if (capability != Capability.Operation.COLLECT) {
             throw new IllegalArgumentException(
                     "the MTN collections adapter only answers COLLECT queries, not " + capability);
         }
@@ -190,7 +190,7 @@ public final class MtnCollectionsAdapter implements ProviderAdapter {
     }
 
     @Override
-    public Money balance(Capability capability, Currency currency) throws ProviderUnavailableException {
+    public Money balance(Capability.Operation capability, Currency currency) throws ProviderUnavailableException {
         throw new UnsupportedOperationException(
                 "balance is out of scope for the collections adapter; capabilities() does not advertise BALANCE");
     }

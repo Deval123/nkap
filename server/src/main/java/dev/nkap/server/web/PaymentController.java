@@ -175,14 +175,14 @@ class PaymentController {
             throw invalid("amount is required");
         }
 
-        Capability operation;
+        // Capability.Operation has exactly COLLECT and DISBURSE, so this parse is the whole
+        // check: no separate "and is it actually one this endpoint accepts" step is needed
+        // the way it was when the parse read the wider Capability (issue #70).
+        Capability.Operation operation;
         try {
-            operation = Capability.valueOf(request.operation().strip().toUpperCase(Locale.ROOT));
+            operation = Capability.Operation.valueOf(request.operation().strip().toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException e) {
             throw invalid("operation must be COLLECT or DISBURSE, was '" + request.operation() + "'");
-        }
-        if (operation != Capability.COLLECT && operation != Capability.DISBURSE) {
-            throw invalid("this endpoint creates COLLECT or DISBURSE payments, not " + operation);
         }
 
         Currency currency;

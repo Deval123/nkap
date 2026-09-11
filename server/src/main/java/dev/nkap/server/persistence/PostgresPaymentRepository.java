@@ -151,7 +151,7 @@ public final class PostgresPaymentRepository implements PaymentRepository {
                 TRANSITION_MAPPER, reference.value());
 
         PaymentIntent intent = new PaymentIntent(
-                Capability.valueOf(row.operation),
+                Capability.Operation.valueOf(row.operation),
                 Money.of(row.amountMinor, Currency.valueOf(row.currency)),
                 row.counterpartyMsisdn,
                 row.payerMessage,

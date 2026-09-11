@@ -56,7 +56,7 @@ class MtnDisbursementsAdapterTest {
     }
 
     private PaymentIntent disburseIntent() {
-        return new PaymentIntent(Capability.DISBURSE, Money.of(5000, Currency.EUR),
+        return new PaymentIntent(Capability.Operation.DISBURSE, Money.of(5000, Currency.EUR),
                 "46733123453", "nkap test", "nkap test", Map.of());
     }
 
@@ -70,7 +70,7 @@ class MtnDisbursementsAdapterTest {
         assertThat(submitted).isInstanceOfSatisfying(SubmitResult.Acknowledged.class,
                 acknowledged -> assertThat(acknowledged.state()).isEqualTo(PaymentState.SUBMITTED));
 
-        ProviderStatus status = mtn.query(reference, Capability.DISBURSE);
+        ProviderStatus status = mtn.query(reference, Capability.Operation.DISBURSE);
         assertThat(status.state()).isEqualTo(PaymentState.SUCCEEDED);
         assertThat(status.providerStatusCode()).isEqualTo("SUCCESSFUL");
     }
@@ -84,7 +84,7 @@ class MtnDisbursementsAdapterTest {
         ReferenceId reference = ReferenceId.newReference();
         mtn.submit(disburseIntent(), reference);
 
-        ProviderStatus status = mtn.query(reference, Capability.DISBURSE);
+        ProviderStatus status = mtn.query(reference, Capability.Operation.DISBURSE);
         assertThat(status.state()).isEqualTo(PaymentState.FAILED);
         assertThat(status.providerStatusCode()).isEqualTo("NOT_ENOUGH_FUNDS");
     }
@@ -98,13 +98,13 @@ class MtnDisbursementsAdapterTest {
         ReferenceId reference = ReferenceId.newReference();
         mtn.submit(disburseIntent(), reference);
 
-        assertThat(mtn.query(reference, Capability.DISBURSE).state()).isEqualTo(PaymentState.UNKNOWN);
+        assertThat(mtn.query(reference, Capability.Operation.DISBURSE).state()).isEqualTo(PaymentState.UNKNOWN);
     }
 
     @Test
     @DisplayName("a query on a reference the operator has never seen is UNKNOWN, not a failure")
     void a_query_on_an_unknown_reference_is_unknown() throws Exception {
-        assertThat(adapter().query(ReferenceId.newReference(), Capability.DISBURSE).state()).isEqualTo(PaymentState.UNKNOWN);
+        assertThat(adapter().query(ReferenceId.newReference(), Capability.Operation.DISBURSE).state()).isEqualTo(PaymentState.UNKNOWN);
     }
 
     @Test
@@ -112,13 +112,13 @@ class MtnDisbursementsAdapterTest {
     void identity_and_capabilities() {
         MtnDisbursementsAdapter mtn = adapter();
         assertThat(mtn.id()).isEqualTo(ProviderId.of("mtn"));
-        assertThat(mtn.capabilities()).containsExactly(Capability.DISBURSE);
+        assertThat(mtn.capabilities()).containsExactly(Capability.Operation.DISBURSE);
     }
 
     @Test
     @DisplayName("a COLLECT intent is refused by the disbursements adapter before any call")
     void a_collect_intent_is_refused() {
-        PaymentIntent collect = new PaymentIntent(Capability.COLLECT, Money.of(1000, Currency.EUR),
+        PaymentIntent collect = new PaymentIntent(Capability.Operation.COLLECT, Money.of(1000, Currency.EUR),
                 "46733123453", "", "", Map.of());
         assertThatThrownBy(() -> adapter().submit(collect, ReferenceId.newReference()))
                 .isInstanceOf(IllegalArgumentException.class)

@@ -88,6 +88,38 @@ nkap:
     # time. It is a deadline for a human to look, not a verdict: the payment stays UNKNOWN
     # either way, and a later callback or query can still resolve it.
     window: 24h
+  webhooks:
+    # The outbox relay and its scheduler (issue #77). Off means events pile up, signed and
+    # ready, but never sent — only for a deployment that runs the relay as a separate
+    # process, or a test.
+    enabled: true
+    # How often a pass runs. Same trade-off as the reconciler's interval: too short turns
+    # the relay into a load generator against receivers that are simply slow; too long and
+    # a merchant waiting on a webhook waits longer than it had to.
+    interval: 10s
+    # The most events one pass claims. A bound, so a backlog after a receiver outage drains
+    # at a steady rate instead of opening thousands of connections at once.
+    batch-size: 100
+    # The delay before the first retry, doubling each attempt after that.
+    backoff-base: 30s
+    # The ceiling on a single interval, so backoff does not stretch to days.
+    backoff-max: 30m
+    # The attempt past which an event is dead-lettered rather than retried again. Unlike
+    # the reconciler's window, this is a count, not wall-clock time: an unreachable
+    # receiver is a merchant-side outage, not a payment left unresolved, and what stops
+    # retrying is found on the merchant's console (or replayed via the admin API), not
+    # paged to a human the way an escalation is.
+    max-attempts: 10
+    # How long one delivery attempt may take before it counts as a failure. Bounded so a
+    # receiver that never answers costs one slow attempt, not a stuck relay pass — the
+    # same reason the MTN adapters bound their own request timeout.
+    request-timeout: 5s
+    # How far a signed request's timestamp may drift from "now" before a receiver
+    # following the verification recipe in docs/webhooks.md must refuse it. This gateway
+    # only signs — it never reads this tolerance itself — but it is configured here,
+    # alongside everything else about a delivery, and documented for whoever implements
+    # the receiving side.
+    signature-tolerance: 5m
   provider:
     # The provider a POST /payments is routed to. Routing by country arrives with
     # multi-country support; for now there is one.

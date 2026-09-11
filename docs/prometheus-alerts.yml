@@ -1,0 +1,52 @@
+# Two alerting rules, because thirty metrics and no guidance is a list, not an operations
+# handover (issue #75). Drop this file into a Prometheus server's rule_files, or paste the
+# two rules into an existing rule group — nothing here depends on how Nkap itself is scraped
+# beyond the metric names, which come from GET /actuator/prometheus.
+#
+# The rest of this project's metrics — payments by state, reconciler passes, operator
+# latency and failures, ledger entries written — are real and worth graphing, but the
+# roadmap is explicit that this gauge is the one alert that justifies the whole line: a
+# suspense balance that does not return to zero means the operator confirmed money moved
+# that Nkap could not attribute, and today that fact sits in a table nobody queries. Build
+# that alert first and let the rest follow it, here as it did in the code.
+groups:
+  - name: nkap
+    rules:
+      # nkap_suspense_balance is computed live on every scrape (see
+      # SuspenseBalanceMetrics) — it is never a cached value going stale unnoticed. A
+      # query failure reports NaN, not zero, specifically so it cannot masquerade as a
+      # healthy account: by ordinary IEEE 754 comparison rules NaN is never equal to
+      # zero, so "!= 0" below catches a computation failure the same way it catches a
+      # genuinely non-zero balance. That is a deliberate property of the gauge, not an
+      # accident of this expression — see the class javadoc. What this rule does not
+      # cover is the scrape failing entirely (the target going unreachable); that is
+      # what Prometheus's own `up` metric, or `absent_over_time`, is for.
+      - alert: NkapSuspenseBalanceNotZero
+        expr: nkap_suspense_balance != 0
+        for: 15m
+        labels:
+          severity: page
+        annotations:
+          summary: "Nkap suspense balance for {{ $labels.provider }}/{{ $labels.currency }} is not zero"
+          description: >-
+            The operator confirmed money moved that Nkap could not attribute to a
+            payment, and it has stayed unresolved for at least 15 minutes. Find the
+            statement import that posted it (GET /statements/imports/{id}) and the
+            suspense entry it recorded; resolving it is a reversing ledger entry once
+            the money is attributed to the right payment or merchant.
+
+      # nkap_payment_escalated_total increments exactly where Reconciler logs the
+      # escalation WARN, once per payment the reconciler gives up retrying
+      # automatically. "increase(...) > 0" fires on the event, not on how many are
+      # currently open, so a quiet window with zero escalations stays quiet.
+      - alert: NkapPaymentEscalated
+        expr: increase(nkap_payment_escalated_total[15m]) > 0
+        labels:
+          severity: page
+        annotations:
+          summary: "Nkap escalated a payment to a human ({{ $labels.provider }})"
+          description: >-
+            The reconciler exhausted a payment's retry window without a conclusive
+            answer from the operator. The payment is not FAILED — it is still open,
+            and a later callback or manual query can still resolve it — but the
+            automatic retries have stopped and it needs a human to look.

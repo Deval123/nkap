@@ -17,6 +17,7 @@ import dev.nkap.provider.ProviderId;
 import dev.nkap.provider.ProviderUnavailableException;
 import dev.nkap.provider.SubmitResult;
 import dev.nkap.server.provider.AdapterRegistry;
+import dev.nkap.server.support.LogCapture;
 import java.util.Map;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -102,6 +103,22 @@ class PaymentServiceTest {
         assertThat(payment.providerReference()).isEqualTo("op-ref");
         assertThat(payment.history()).extracting(t -> t.cause().name())
                 .containsExactly("CALLBACK", "CALLBACK");
+    }
+
+    @Test
+    @DisplayName("the payment's reference is a structured field on the submission's log lines, not just inside the sentence")
+    void the_reference_is_a_structured_field_on_submission_logs() throws Exception {
+        when(adapters.require(MTN)).thenReturn(adapter);
+        when(adapter.submit(any(), any())).thenThrow(new ProviderUnavailableException("read timed out"));
+
+        try (LogCapture logs = new LogCapture(PaymentService.class)) {
+            Payment payment = service.createAndSubmit(MTN, "merchant-1", intent());
+
+            assertThat(logs.events()).isNotEmpty();
+            assertThat(logs.events()).allSatisfy(event -> assertThat(event.getMDCPropertyMap())
+                    .as("every line createAndSubmit emits carries the reference, not just the ones that mention it")
+                    .containsEntry("reference", payment.reference().toString()));
+        }
     }
 
     @Test

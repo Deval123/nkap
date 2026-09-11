@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 
 import dev.nkap.server.payment.SettlementService;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
@@ -26,6 +28,7 @@ class ReconcilerWiringTest {
             .withBean(JdbcTemplate.class, () -> mock(JdbcTemplate.class))
             .withBean(PlatformTransactionManager.class, () -> mock(PlatformTransactionManager.class))
             .withBean(SettlementService.class, () -> mock(SettlementService.class))
+            .withBean(MeterRegistry.class, SimpleMeterRegistry::new)
             .withPropertyValues(
                     "nkap.reconciler.interval=30s",
                     "nkap.reconciler.batch-size=100",

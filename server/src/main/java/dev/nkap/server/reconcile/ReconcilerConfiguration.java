@@ -1,6 +1,7 @@
 package dev.nkap.server.reconcile;
 
 import dev.nkap.server.payment.SettlementService;
+import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Clock;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -45,7 +46,7 @@ class ReconcilerConfiguration {
 
     @Bean
     Reconciler reconciler(ReconciliationStore store, SettlementService settlement, ReconciliationPolicy policy,
-                          ReconcilerProperties properties, Clock clock) {
-        return new Reconciler(store, settlement, policy, properties, clock);
+                          ReconcilerProperties properties, Clock clock, MeterRegistry meterRegistry) {
+        return new Reconciler(store, settlement, policy, properties, clock, meterRegistry);
     }
 }

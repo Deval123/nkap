@@ -17,6 +17,7 @@ import java.util.Set;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.stereotype.Service;
 
 /**
@@ -48,6 +49,10 @@ import org.springframework.stereotype.Service;
  * its lines and its findings are written together at the end. The report is not wrapped in one
  * transaction with the ledger writes on purpose — a duplicate on the fifth line must not roll
  * back the four entries and the record of the first four.
+ *
+ * <p>Every log line one {@link #reconcile} call emits carries that run's import id as a
+ * structured field ({@code MDC}) — "which import wrote this" is answerable the same way
+ * "which reconciler pass wrote this" is (issue #75).
  */
 @Service
 public class StatementReconciliation {
@@ -75,41 +80,47 @@ public class StatementReconciliation {
         List<ReconciliationReport.Finding> findings = new ArrayList<>();
         Set<String> transactionIdsSeen = new LinkedHashSet<>();
 
-        for (StatementLine line : lines) {
-            if (line.status() != StatementLine.Status.SETTLED) {
-                // A failed attempt on the statement moves no money and matches no settled
-                // payment. Nothing to write, nothing to report.
-                continue;
+        // The import id as a structured field on every line this run logs — "which import
+        // wrote this" is the question asked right after "what happened to this payment",
+        // and it needs its own identifier for the same reason a reconciler pass does
+        // (issue #75).
+        try (var ignored = MDC.putCloseable("importId", importId.toString())) {
+            for (StatementLine line : lines) {
+                if (line.status() != StatementLine.Status.SETTLED) {
+                    // A failed attempt on the statement moves no money and matches no settled
+                    // payment. Nothing to write, nothing to report.
+                    continue;
+                }
+                transactionIdsSeen.add(line.operatorTransactionId());
+                Optional<SettledPayment> match =
+                        store.findSettledByOperatorTransactionId(provider, line.operatorTransactionId());
+                if (match.isEmpty()) {
+                    findings.add(postToSuspense(provider, line));
+                    continue;
+                }
+                findings.add(reconcileMatched(provider, line, match.get()));
             }
-            transactionIdsSeen.add(line.operatorTransactionId());
-            Optional<SettledPayment> match =
-                    store.findSettledByOperatorTransactionId(provider, line.operatorTransactionId());
-            if (match.isEmpty()) {
-                findings.add(postToSuspense(provider, line));
-                continue;
-            }
-            findings.add(reconcileMatched(provider, line, match.get()));
-        }
 
-        for (SettledPayment settled : store.settledPayments(provider)) {
-            if (!transactionIdsSeen.contains(settled.operatorTransactionId())) {
-                findings.add(ReconciliationReport.Finding.missingFromStatement(
-                        settled.reference(),
-                        "recorded SUCCEEDED (" + settled.amount() + ", operator txn " + settled.operatorTransactionId()
-                                + ") but no line in " + sourceName + " mentions it — nothing written"));
+            for (SettledPayment settled : store.settledPayments(provider)) {
+                if (!transactionIdsSeen.contains(settled.operatorTransactionId())) {
+                    findings.add(ReconciliationReport.Finding.missingFromStatement(
+                            settled.reference(),
+                            "recorded SUCCEEDED (" + settled.amount() + ", operator txn " + settled.operatorTransactionId()
+                                    + ") but no line in " + sourceName + " mentions it — nothing written"));
+                }
             }
-        }
 
-        ReconciliationReport report = new ReconciliationReport(
-                importId, provider, sourceName, importedAt, lines.size(), findings);
-        store.record(report, lines);
-        log.info("statement import {} ({}, {} line(s)): {} fee, {} suspense, {} missing, {} mismatch",
-                importId, sourceName, lines.size(),
-                report.count(ReconciliationReport.Finding.Kind.FEE_POSTED),
-                report.count(ReconciliationReport.Finding.Kind.SUSPENSE_POSTED),
-                report.count(ReconciliationReport.Finding.Kind.MISSING_FROM_STATEMENT),
-                report.count(ReconciliationReport.Finding.Kind.AMOUNT_MISMATCH));
-        return report;
+            ReconciliationReport report = new ReconciliationReport(
+                    importId, provider, sourceName, importedAt, lines.size(), findings);
+            store.record(report, lines);
+            log.info("statement import {} ({}, {} line(s)): {} fee, {} suspense, {} missing, {} mismatch",
+                    importId, sourceName, lines.size(),
+                    report.count(ReconciliationReport.Finding.Kind.FEE_POSTED),
+                    report.count(ReconciliationReport.Finding.Kind.SUSPENSE_POSTED),
+                    report.count(ReconciliationReport.Finding.Kind.MISSING_FROM_STATEMENT),
+                    report.count(ReconciliationReport.Finding.Kind.AMOUNT_MISMATCH));
+            return report;
+        }
     }
 
     private ReconciliationReport.Finding reconcileMatched(ProviderId provider, StatementLine line, SettledPayment settled) {

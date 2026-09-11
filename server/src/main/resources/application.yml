@@ -26,9 +26,29 @@ management:
   endpoints:
     web:
       exposure:
-        # Only the health check the compose file polls. Nothing else is exposed — metrics
-        # and the rest of Actuator are a separate roadmap line.
-        include: health
+        # Exactly two, named, not a wildcard: health, for the compose file's health check,
+        # and prometheus, for issue #75's gauges and counters. Everything else Actuator can
+        # expose (env, beans, heapdump, mappings...) stays off — a wildcard here is how a
+        # metrics endpoint accidentally becomes an environment-variable leak. There is no
+        # separate auth gate on either: CallerAuthInterceptor already excludes /actuator/**
+        # wholesale (see AuthWebConfig), on the strength of this being exactly two
+        # low-risk, unauthenticated-by-convention reads — a liveness probe and a metrics
+        # scrape, the way a Prometheus server or a health check is set up to call them.
+        include:
+          - health
+          - prometheus
+  prometheus:
+    metrics:
+      export:
+        # Required, not optional: @ConditionalOnEnabledMetricsExport does not treat "a
+        # registry is on the classpath" as "export it", and its fallback,
+        # management.defaults.metrics.export.enabled, does not turn this specific registry
+        # on either — confirmed against the actual condition evaluation report, not
+        # assumed, after the endpoint stayed absent with only the dependency and the
+        # exposure list above set. Without this line, PrometheusMetricsExportAutoConfiguration
+        # never creates the PrometheusMeterRegistry the /actuator/prometheus endpoint (and
+        # every gauge and counter in dev.nkap.server.metrics) needs.
+        enabled: true
 
 nkap:
   reconciler:

@@ -6,6 +6,8 @@ import dev.nkap.core.ledger.Ledger;
 import dev.nkap.server.payment.PaymentRepository;
 import dev.nkap.server.auth.ApiKeyStore;
 import dev.nkap.server.auth.PostgresApiKeyStore;
+import dev.nkap.server.outbox.Outbox;
+import dev.nkap.server.outbox.PostgresOutbox;
 import dev.nkap.server.persistence.PostgresIdempotencyStore;
 import dev.nkap.server.persistence.PostgresLedger;
 import dev.nkap.server.persistence.PostgresPaymentRepository;
@@ -13,6 +15,8 @@ import dev.nkap.server.statement.CsvStatementParser;
 import dev.nkap.server.statement.PostgresStatementReconciliationStore;
 import dev.nkap.server.statement.StatementParser;
 import dev.nkap.server.statement.StatementReconciliationStore;
+import dev.nkap.server.webhook.PostgresWebhookEndpointStore;
+import dev.nkap.server.webhook.WebhookEndpointStore;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -53,6 +57,16 @@ class StoresConfiguration {
     @Bean
     ApiKeyStore apiKeyStore(JdbcTemplate jdbc) {
         return new PostgresApiKeyStore(jdbc);
+    }
+
+    @Bean
+    Outbox outbox(JdbcTemplate jdbc, PlatformTransactionManager txManager) {
+        return new PostgresOutbox(jdbc, txManager);
+    }
+
+    @Bean
+    WebhookEndpointStore webhookEndpointStore(JdbcTemplate jdbc) {
+        return new PostgresWebhookEndpointStore(jdbc);
     }
 
     @Bean

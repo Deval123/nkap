@@ -24,5 +24,10 @@ public abstract class PostgresSpringBootIT {
         // reschedule a payment an assertion is looking at. ReconcilerIT drives runOnce()
         // directly and does not use this base.
         registry.add("nkap.reconciler.enabled", () -> "false");
+        // Same reasoning, for the outbox relay: a scheduled pass firing mid-test could
+        // deliver or dead-letter an event an assertion is still looking at, or open
+        // connections to a receiver a test has already closed. OutboxRelayIT drives
+        // runOnce() directly and does not use this base.
+        registry.add("nkap.webhooks.enabled", () -> "false");
     }
 }

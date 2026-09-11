@@ -59,6 +59,12 @@ public final class ProblemTypes {
      */
     public static final URI OPERATOR_DID_NOT_ANSWER = URI.create(BASE + "operator-did-not-answer");
 
+    /** No outbox event exists for the id in the path. */
+    public static final URI EVENT_NOT_FOUND = URI.create(BASE + "event-not-found");
+
+    /** A replay was asked for an event whose merchant has no registered webhook endpoint. */
+    public static final URI NO_WEBHOOK_ENDPOINT = URI.create(BASE + "no-webhook-endpoint");
+
     private ProblemTypes() {
     }
 }

@@ -45,6 +45,7 @@ public class ScenarioEngine {
     private volatile List<ScenarioRule> rules = List.of();
     private volatile TokenBehaviour token = new TokenBehaviour(null);
     private volatile String callbackUrl;
+    private volatile AccountBehaviour account = AccountBehaviour.defaultBehaviour();
     private final Map<String, ReferenceState> states = new ConcurrentHashMap<>();
 
     /**
@@ -98,24 +99,44 @@ public class ScenarioEngine {
         return callbackUrl;
     }
 
+    /**
+     * What {@code GET .../account/balance} and {@code GET .../accountholder/.../active}
+     * answer — declared configuration, like the token, not per-reference state.
+     */
+    public AccountBehaviour account() {
+        return account;
+    }
+
     // --- control plane ---------------------------------------------------------
 
     /**
-     * Replaces the whole declared configuration in one call: the token lifetime,
-     * the fallback callback URL and the rule list. In-flight payments keep the
-     * scenario they resolved to.
+     * Replaces the token lifetime, the fallback callback URL and the rule list, leaving the
+     * declared {@link AccountBehaviour} untouched. Kept for the many callers that predate
+     * issue #72 and have no reason to know about account behaviour at all.
      */
     public void replaceConfiguration(TokenBehaviour token, String callbackUrl, List<ScenarioRule> rules) {
+        replaceConfiguration(token, callbackUrl, rules, this.account);
+    }
+
+    /**
+     * Replaces the whole declared configuration in one call: the token lifetime, the
+     * fallback callback URL, the rule list, and the account balance / holder-validation
+     * answers. In-flight payments keep the scenario they resolved to.
+     */
+    public void replaceConfiguration(TokenBehaviour token, String callbackUrl, List<ScenarioRule> rules,
+                                     AccountBehaviour account) {
         this.token = token != null ? token : new TokenBehaviour(null);
         this.callbackUrl = (callbackUrl == null || callbackUrl.isBlank()) ? null : callbackUrl;
         this.rules = List.copyOf(rules);
+        this.account = account != null ? account : AccountBehaviour.defaultBehaviour();
     }
 
-    /** Back to the happy path only, with a one-hour token and no callback URL. */
+    /** Back to the happy path only, with a one-hour token, no callback URL, and the default account answers. */
     public void resetConfiguration() {
         this.token = new TokenBehaviour(null);
         this.callbackUrl = null;
         this.rules = List.of();
+        this.account = AccountBehaviour.defaultBehaviour();
     }
 
     public List<ScenarioRule> rules() {

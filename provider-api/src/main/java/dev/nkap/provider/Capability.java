@@ -34,6 +34,9 @@ public sealed interface Capability {
         BALANCE,
 
         /** Produce a statement for a period, which the reconciler compares to the ledger. */
-        STATEMENT
+        STATEMENT,
+
+        /** Whether the account behind an MSISDN is active at the provider. */
+        HOLDER_VALIDATION
     }
 }

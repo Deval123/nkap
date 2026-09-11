@@ -112,7 +112,8 @@ class MtnDisbursementsAdapterTest {
     void identity_and_capabilities() {
         MtnDisbursementsAdapter mtn = adapter();
         assertThat(mtn.id()).isEqualTo(ProviderId.of("mtn"));
-        assertThat(mtn.capabilities()).containsExactly(Capability.Operation.DISBURSE);
+        assertThat(mtn.capabilities()).containsExactlyInAnyOrder(
+                Capability.Operation.DISBURSE, Capability.Feature.BALANCE, Capability.Feature.HOLDER_VALIDATION);
     }
 
     @Test

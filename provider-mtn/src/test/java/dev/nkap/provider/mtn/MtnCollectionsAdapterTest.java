@@ -26,7 +26,8 @@ import org.junit.jupiter.api.Test;
 /**
  * What is genuinely MTN's, driven through the simulator: the happy path and the query
  * payload shape, the 404 → {@code UNKNOWN} handling, an unrecognised operator code, a 5xx,
- * the profile currency check, the callback body shape, and the unsupported capability.
+ * the profile currency check and the callback body shape. Balance and account-holder
+ * validation have their own files, {@link MtnBalanceTest} and {@link MtnHolderValidationTest}.
  *
  * <p>The rules that are <em>every</em> adapter's — a duplicate submission, a timeout, an
  * outright refusal, a flapping status, credential renewal, an untrusted callback — moved to
@@ -118,7 +119,8 @@ class MtnCollectionsAdapterTest {
         MtnCollectionsAdapter mtn = adapter();
 
         assertThat(mtn.id()).isEqualTo(ProviderId.of("mtn"));
-        assertThat(mtn.capabilities()).containsExactly(Capability.Operation.COLLECT);
+        assertThat(mtn.capabilities()).containsExactlyInAnyOrder(
+                Capability.Operation.COLLECT, Capability.Feature.BALANCE, Capability.Feature.HOLDER_VALIDATION);
     }
 
     @Test
@@ -144,12 +146,5 @@ class MtnCollectionsAdapterTest {
 
         assertThat(event.reference()).isEqualTo(reference);
         assertThat(event.status().state()).isEqualTo(PaymentState.SUCCEEDED);
-    }
-
-    @Test
-    @DisplayName("balance is not offered by the collections adapter")
-    void balance_is_unsupported() {
-        assertThatThrownBy(() -> adapter().balance(Capability.Operation.COLLECT, Currency.EUR))
-                .isInstanceOf(UnsupportedOperationException.class);
     }
 }

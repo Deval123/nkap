@@ -1,10 +1,12 @@
 package dev.nkap.conformance;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import dev.nkap.core.money.Currency;
 import dev.nkap.core.payment.PaymentState;
 import dev.nkap.core.payment.ReferenceId;
 import dev.nkap.provider.Capability;
@@ -13,6 +15,7 @@ import dev.nkap.provider.ProviderStatus;
 import dev.nkap.provider.ProviderUnavailableException;
 import dev.nkap.provider.SubmitResult;
 import dev.nkap.provider.UntrustedCallbackException;
+import java.util.Set;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -77,6 +80,48 @@ public abstract class ProviderAdapterConformanceTest {
                 "every declared operation is also a declared capability");
         assertTrue(adapter.operations().contains(operationUnderTest()),
                 "the operation the harness submits under is among the declared operations");
+    }
+
+    /**
+     * Declaring a feature and supporting it must be the same thing (issue #72): a capability
+     * this adapter's own {@link ProviderAdapter#capabilities()} lists must be answered, and
+     * one it does not list must be refused — never attempted and never guessed at. Both
+     * directions are worth asserting in one rule, because either can fail independently: an
+     * adapter that declares {@code BALANCE} but still throws is as much a bug as one that
+     * does not declare it and answers anyway.
+     *
+     * <p>This is deliberately hardcoded to {@code BALANCE} and {@code HOLDER_VALIDATION} —
+     * the two {@link Capability.Feature} members with a method on the contract to call — and
+     * not written generically over every {@link Capability.Feature}. {@code STATEMENT} has no
+     * such method (statement reconciliation is a host-side command, not an adapter call), so
+     * there is nothing to tie it to without a second way to express "this feature means this
+     * method" — a marker interface, a lookup table — which is exactly the kind of second
+     * mechanism issue #70 spent a slice removing. Two explicit branches cost less than that.
+     */
+    @Test
+    @DisplayName("declaring BALANCE or HOLDER_VALIDATION means answering it; not declaring either means refusing, never guessing")
+    void feature_declaration_and_support_agree() throws Exception {
+        ProviderAdapter adapter = harness.adapter();
+        Capability.Operation operation = operationUnderTest();
+        Currency currency = harness.anIntent().amount().currency();
+        String msisdn = harness.anIntent().counterpartyMsisdn();
+        Set<Capability> declared = adapter.capabilities();
+
+        if (declared.contains(Capability.Feature.BALANCE)) {
+            assertDoesNotThrow(() -> adapter.balance(operation, currency),
+                    "BALANCE is declared, so balance() must answer, not refuse");
+        } else {
+            assertThrows(UnsupportedOperationException.class, () -> adapter.balance(operation, currency),
+                    "BALANCE is not declared, so balance() must refuse, not guess");
+        }
+
+        if (declared.contains(Capability.Feature.HOLDER_VALIDATION)) {
+            assertDoesNotThrow(() -> adapter.validateHolder(operation, msisdn),
+                    "HOLDER_VALIDATION is declared, so validateHolder() must answer, not refuse");
+        } else {
+            assertThrows(UnsupportedOperationException.class, () -> adapter.validateHolder(operation, msisdn),
+                    "HOLDER_VALIDATION is not declared, so validateHolder() must refuse, not guess");
+        }
     }
 
     @Test

@@ -26,6 +26,20 @@ import org.junit.jupiter.api.Test;
  * a harness (a code the adapter does not recognise mapping to {@code UNKNOWN}, which needs
  * an operator code a harness cannot express until issue #26) are left out entirely rather
  * than made optional.
+ *
+ * <p><strong>Not here, on purpose: routing by capability.</strong> Issue #67 considered a
+ * rule that a reference submitted under one capability is answered under that capability.
+ * It is a real rule and MTN now genuinely has two products to confuse, but it is not
+ * extractable yet, for two reasons that are worth stating so the next contributor does not
+ * rediscover them. First, {@link Capability} mixes operations ({@code COLLECT},
+ * {@code DISBURSE}) with features ({@code BALANCE}, {@code STATEMENT}), so the kit cannot
+ * say "for each capability the adapter declares" without hardcoding which of them can be
+ * submitted — a second home for a distinction that belongs in {@code provider-api}.
+ * Second, and decisive: the simulator keeps one reference store across both products, so a
+ * reference submitted on the collections path is answered on the disbursements path too.
+ * The rule would pass whether or not an adapter routed correctly, and a green test that
+ * cannot fail is worse than an absent one. Partitioning the simulator per product is what
+ * unblocks it.
  */
 public abstract class ProviderAdapterConformanceTest {
 

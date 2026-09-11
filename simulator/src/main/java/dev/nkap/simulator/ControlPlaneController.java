@@ -1,6 +1,7 @@
 package dev.nkap.simulator;
 
 import com.fasterxml.jackson.databind.JsonMappingException;
+import dev.nkap.simulator.scenario.AccountBehaviour;
 import dev.nkap.simulator.scenario.ScenarioEngine;
 import dev.nkap.simulator.scenario.ScenarioRule;
 import dev.nkap.simulator.scenario.TokenBehaviour;
@@ -47,14 +48,16 @@ public class ControlPlaneController {
     /**
      * The request and response body of {@code /_nkap/scenarios}: the whole
      * declared configuration in one document — the token lifetime, the fallback
-     * callback URL and the rule list. All optional; {@code token} defaults to
-     * one hour, {@code rules} to empty, {@code callbackUrl} to none. Posting it
-     * replaces the lot atomically.
+     * callback URL, the rule list, and the account balance / holder-validation
+     * answers (issue #72). All optional; {@code token} defaults to one hour,
+     * {@code rules} to empty, {@code callbackUrl} to none, {@code account} to the
+     * default balance and an active holder. Posting it replaces the lot atomically.
      */
-    public record Declaration(TokenBehaviour token, String callbackUrl, List<ScenarioRule> rules) {
+    public record Declaration(TokenBehaviour token, String callbackUrl, List<ScenarioRule> rules, AccountBehaviour account) {
         public Declaration {
             token = token != null ? token : new TokenBehaviour(null);
             rules = rules != null ? List.copyOf(rules) : List.of();
+            account = account != null ? account : AccountBehaviour.defaultBehaviour();
         }
     }
 
@@ -64,12 +67,12 @@ public class ControlPlaneController {
     @PostMapping("/scenarios")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void declare(@RequestBody Declaration body) {
-        engine.replaceConfiguration(body.token(), body.callbackUrl(), body.rules());
+        engine.replaceConfiguration(body.token(), body.callbackUrl(), body.rules(), body.account());
     }
 
     @GetMapping("/scenarios")
     public Declaration current() {
-        return new Declaration(engine.token(), engine.callbackUrl(), engine.rules());
+        return new Declaration(engine.token(), engine.callbackUrl(), engine.rules(), engine.account());
     }
 
     @DeleteMapping("/scenarios")

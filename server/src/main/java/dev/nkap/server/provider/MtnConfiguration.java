@@ -1,16 +1,11 @@
 package dev.nkap.server.provider;
 
-import dev.nkap.core.payment.ReferenceId;
-import dev.nkap.provider.Capability;
 import dev.nkap.provider.ProviderAdapter;
 import dev.nkap.provider.ProviderId;
 import dev.nkap.provider.mtn.MtnAdapter;
 import dev.nkap.provider.mtn.MtnCollectionsAdapter;
 import dev.nkap.provider.mtn.MtnDisbursementsAdapter;
 import dev.nkap.provider.mtn.MtnProfile;
-import dev.nkap.server.payment.PaymentRepository;
-import java.util.Optional;
-import java.util.function.Function;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -19,12 +14,16 @@ import org.springframework.context.annotation.Configuration;
  * Disbursements behind it (issue #62). Each product is a whole {@link MtnProfile} — its own
  * subscription key and API user/key — sharing only the installation's base URL, target
  * environment, currency and country.
+ *
+ * <p>This bean needs nothing from the payment store. Since #67 the capability travels on
+ * {@code query(reference, capability)}, so the facade routes on its argument; there is no
+ * lookup to wire in.
  */
 @Configuration
 class MtnConfiguration {
 
     @Bean
-    ProviderAdapter mtnAdapter(MtnProperties properties, PaymentRepository payments) {
+    ProviderAdapter mtnAdapter(MtnProperties properties) {
         MtnCollectionsAdapter collections = new MtnCollectionsAdapter(
                 collectionProfile(properties), properties.requestTimeout());
 
@@ -35,14 +34,7 @@ class MtnConfiguration {
                 ? new MtnDisbursementsAdapter(disbursementProfile(properties), properties.requestTimeout())
                 : null;
 
-        // query() and parseCallback() are handed a reference, not an intent, so the facade
-        // routes query() to the right product by reading the operation off the payment the
-        // gateway already recorded. The adapter does not see payments; the composition root
-        // does, so the lookup is wired here.
-        Function<ReferenceId, Optional<Capability>> productOf =
-                reference -> payments.findByReference(reference).map(payment -> payment.intent().operation());
-
-        return new MtnAdapter(collections, disbursements, productOf);
+        return new MtnAdapter(collections, disbursements);
     }
 
     /**

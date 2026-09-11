@@ -90,7 +90,7 @@ class ReconcilerIT {
     @DisplayName("a payment the reconciler moves from UNKNOWN to PENDING is claimed again on the next pass")
     void a_payment_moved_to_pending_is_still_chased() throws Exception {
         ProviderAdapter operator = mock(ProviderAdapter.class);
-        when(operator.query(any())).thenReturn(new ProviderStatus(
+        when(operator.query(any(), any())).thenReturn(new ProviderStatus(
                 PaymentState.PENDING, "PENDING", "", null, "", "{\"status\":\"PENDING\"}"));
         Reconciler reconciler = reconcilerWith(defaults(), registryFor(operator));
 
@@ -108,7 +108,7 @@ class ReconcilerIT {
         assertThat(reconciler.runOnce())
                 .as("PENDING is not resolved — nothing has settled — so the reconciler must ask again")
                 .isEqualTo(1);
-        verify(operator, times(2)).query(any());
+        verify(operator, times(2)).query(any(), any());
         assertThat(payments.findByReference(reference).orElseThrow().state()).isEqualTo(PaymentState.PENDING);
     }
 
@@ -116,13 +116,13 @@ class ReconcilerIT {
     @DisplayName("a SUBMITTED payment whose operator has gone silent is claimed and re-queried")
     void a_silent_submitted_payment_is_chased() throws Exception {
         ProviderAdapter operator = mock(ProviderAdapter.class);
-        when(operator.query(any())).thenThrow(new ProviderUnavailableException("still nothing"));
+        when(operator.query(any(), any())).thenThrow(new ProviderUnavailableException("still nothing"));
         Reconciler reconciler = reconcilerWith(defaults(), registryFor(operator));
 
         ReferenceId reference = aSubmittedPaymentDueForReconciliation();
 
         assertThat(reconciler.runOnce()).as("a SUBMITTED payment is claimed").isEqualTo(1);
-        verify(operator, times(1)).query(any());
+        verify(operator, times(1)).query(any(), any());
 
         Map<String, Object> row = paymentRow(reference);
         assertThat(row.get("state")).as("a silent query changes nothing").isEqualTo(PaymentState.SUBMITTED.name());
@@ -327,7 +327,7 @@ class ReconcilerIT {
         ReconcilerProperties properties = new ReconcilerProperties(
                 Duration.ofSeconds(30), 50, Duration.ofMinutes(10), Duration.ofMinutes(10), Duration.ofSeconds(1));
         ProviderAdapter silentOperator = mock(ProviderAdapter.class);
-        when(silentOperator.query(any())).thenThrow(new ProviderUnavailableException("silent"));
+        when(silentOperator.query(any(), any())).thenThrow(new ProviderUnavailableException("silent"));
         Reconciler reconciler = reconcilerWith(properties, registryFor(silentOperator));
 
         ReferenceId reference = anUnknownPaymentDueForReconciliation();
@@ -469,7 +469,7 @@ class ReconcilerIT {
         ReconcilerProperties properties = new ReconcilerProperties(
                 Duration.ofSeconds(30), 50, Duration.ofMinutes(10), Duration.ofMinutes(10), Duration.ofSeconds(1));
         ProviderAdapter silentOperator = mock(ProviderAdapter.class);
-        when(silentOperator.query(any())).thenThrow(new ProviderUnavailableException("silent"));
+        when(silentOperator.query(any(), any())).thenThrow(new ProviderUnavailableException("silent"));
         Reconciler reconciler = reconcilerWith(properties, registryFor(silentOperator));
 
         ReferenceId reference = anUnknownPaymentDueForReconciliation();
@@ -485,7 +485,7 @@ class ReconcilerIT {
         int claimed = reconciler.runOnce();
 
         assertThat(claimed).as("escalated payments are not claimed").isZero();
-        verify(silentOperator, times(1)).query(any());   // never asked a second time
+        verify(silentOperator, times(1)).query(any(), any());   // never asked a second time
         assertThat(payments.findByReference(reference).orElseThrow().state()).isEqualTo(PaymentState.UNKNOWN);
 
         // A callback for the same reference, later, goes through the shared path and resolves it.
@@ -586,7 +586,7 @@ class ReconcilerIT {
     private static AdapterRegistry operatorThatIsSilent() {
         ProviderAdapter operator = mock(ProviderAdapter.class);
         try {
-            when(operator.query(any())).thenThrow(new ProviderUnavailableException("the operator is silent"));
+            when(operator.query(any(), any())).thenThrow(new ProviderUnavailableException("the operator is silent"));
         } catch (ProviderUnavailableException impossible) {
             throw new AssertionError(impossible);
         }
@@ -596,7 +596,7 @@ class ReconcilerIT {
     private static AdapterRegistry operatorAnswering(ProviderStatus status) {
         ProviderAdapter operator = mock(ProviderAdapter.class);
         try {
-            when(operator.query(any())).thenReturn(status);
+            when(operator.query(any(), any())).thenReturn(status);
         } catch (ProviderUnavailableException impossible) {
             throw new AssertionError(impossible);
         }

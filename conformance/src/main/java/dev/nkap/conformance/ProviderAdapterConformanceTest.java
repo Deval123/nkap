@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import dev.nkap.core.payment.PaymentState;
 import dev.nkap.core.payment.ReferenceId;
+import dev.nkap.provider.Capability;
 import dev.nkap.provider.ProviderAdapter;
 import dev.nkap.provider.ProviderStatus;
 import dev.nkap.provider.ProviderUnavailableException;
@@ -45,6 +46,15 @@ public abstract class ProviderAdapterConformanceTest {
         }
     }
 
+    /**
+     * The capability the rules exercise: the one {@link ConformanceHarness#anIntent()}
+     * submits under. It is passed to {@code query} because the contract now carries it
+     * (ADR 0008) — a reference is answered under the capability it was submitted under.
+     */
+    private Capability capabilityUnderTest() {
+        return harness.anIntent().operation();
+    }
+
     @Test
     @DisplayName("the same reference submitted twice produces one payment, not two")
     void a_reference_submitted_twice_is_idempotent() throws Exception {
@@ -57,7 +67,7 @@ public abstract class ProviderAdapterConformanceTest {
         assertInstanceOf(SubmitResult.Acknowledged.class, first, "first submission");
         assertInstanceOf(SubmitResult.Acknowledged.class, again,
                 "the same reference again is acknowledged, not rejected and not an error");
-        assertSame(PaymentState.SUCCEEDED, adapter.query(reference).state(),
+        assertSame(PaymentState.SUCCEEDED, adapter.query(reference, capabilityUnderTest()).state(),
                 "the reused reference resolves to a single outcome");
     }
 
@@ -73,7 +83,7 @@ public abstract class ProviderAdapterConformanceTest {
                 () -> adapter.submit(harness.anIntent(), reference));
 
         // The payment may still exist at the operator: a later query can resolve it.
-        assertSame(PaymentState.SUCCEEDED, adapter.query(reference).state());
+        assertSame(PaymentState.SUCCEEDED, adapter.query(reference, capabilityUnderTest()).state());
     }
 
     @Test
@@ -97,8 +107,8 @@ public abstract class ProviderAdapterConformanceTest {
         ReferenceId reference = ReferenceId.newReference();
         adapter.submit(harness.anIntent(), reference);
 
-        ProviderStatus firstAnswer = adapter.query(reference);
-        ProviderStatus secondAnswer = adapter.query(reference);
+        ProviderStatus firstAnswer = adapter.query(reference, capabilityUnderTest());
+        ProviderStatus secondAnswer = adapter.query(reference, capabilityUnderTest());
 
         // The rule this kit can check is the adapter's: it reports what it is told on each
         // query, faithfully, and decides nothing. That the second answer cannot reopen the
@@ -124,7 +134,7 @@ public abstract class ProviderAdapterConformanceTest {
         // not a timed loop: the wait is the harness's business, the count is the kit's.
         Thread.sleep(harness.credentialLifetime().plusMillis(500).toMillis());
         for (int query = 1; query <= 3; query++) {
-            assertSame(PaymentState.SUCCEEDED, adapter.query(reference).state(),
+            assertSame(PaymentState.SUCCEEDED, adapter.query(reference, capabilityUnderTest()).state(),
                     "query " + query + " after the credential expired");
         }
     }

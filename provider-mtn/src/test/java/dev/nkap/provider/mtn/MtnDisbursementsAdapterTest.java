@@ -70,7 +70,7 @@ class MtnDisbursementsAdapterTest {
         assertThat(submitted).isInstanceOfSatisfying(SubmitResult.Acknowledged.class,
                 acknowledged -> assertThat(acknowledged.state()).isEqualTo(PaymentState.SUBMITTED));
 
-        ProviderStatus status = mtn.query(reference);
+        ProviderStatus status = mtn.query(reference, Capability.DISBURSE);
         assertThat(status.state()).isEqualTo(PaymentState.SUCCEEDED);
         assertThat(status.providerStatusCode()).isEqualTo("SUCCESSFUL");
     }
@@ -84,7 +84,7 @@ class MtnDisbursementsAdapterTest {
         ReferenceId reference = ReferenceId.newReference();
         mtn.submit(disburseIntent(), reference);
 
-        ProviderStatus status = mtn.query(reference);
+        ProviderStatus status = mtn.query(reference, Capability.DISBURSE);
         assertThat(status.state()).isEqualTo(PaymentState.FAILED);
         assertThat(status.providerStatusCode()).isEqualTo("NOT_ENOUGH_FUNDS");
     }
@@ -98,13 +98,13 @@ class MtnDisbursementsAdapterTest {
         ReferenceId reference = ReferenceId.newReference();
         mtn.submit(disburseIntent(), reference);
 
-        assertThat(mtn.query(reference).state()).isEqualTo(PaymentState.UNKNOWN);
+        assertThat(mtn.query(reference, Capability.DISBURSE).state()).isEqualTo(PaymentState.UNKNOWN);
     }
 
     @Test
     @DisplayName("a query on a reference the operator has never seen is UNKNOWN, not a failure")
     void a_query_on_an_unknown_reference_is_unknown() throws Exception {
-        assertThat(adapter().query(ReferenceId.newReference()).state()).isEqualTo(PaymentState.UNKNOWN);
+        assertThat(adapter().query(ReferenceId.newReference(), Capability.DISBURSE).state()).isEqualTo(PaymentState.UNKNOWN);
     }
 
     @Test

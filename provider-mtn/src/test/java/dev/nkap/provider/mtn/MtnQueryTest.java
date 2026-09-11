@@ -47,7 +47,7 @@ class MtnQueryTest {
                          "amount":"50.00","currency":"EUR"}"""));
             MtnCollectionsAdapter adapter = new MtnCollectionsAdapter(profileAt(mtn.baseUrl()), Duration.ofSeconds(3));
 
-            ProviderStatus status = adapter.query(ReferenceId.newReference());
+            ProviderStatus status = adapter.query(ReferenceId.newReference(), Capability.COLLECT);
 
             assertThat(status.state()).isEqualTo(PaymentState.SUCCEEDED);
             assertThat(status.transactionId()).contains("1510430965");
@@ -65,7 +65,7 @@ class MtnQueryTest {
                          "payer":{"partyIdType":"MSISDN","partyId":"46733123453"},"status":"PENDING"}"""));
             MtnCollectionsAdapter adapter = new MtnCollectionsAdapter(profileAt(mtn.baseUrl()), Duration.ofSeconds(3));
 
-            ProviderStatus status = adapter.query(ReferenceId.newReference());
+            ProviderStatus status = adapter.query(ReferenceId.newReference(), Capability.COLLECT);
 
             assertThat(status.state()).isEqualTo(PaymentState.PENDING);
             assertThat(status.transactionId()).isEmpty();

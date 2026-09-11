@@ -15,9 +15,7 @@ import dev.nkap.provider.SubmitResult;
 import dev.nkap.provider.UntrustedCallbackException;
 import java.util.EnumSet;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.Set;
-import java.util.function.Function;
 
 /**
  * One {@link ProviderAdapter} for MTN, two products behind it: Collections and
@@ -26,31 +24,22 @@ import java.util.function.Function;
  * <p>{@link ProviderId} names the operator, not the product, and
  * {@code ConfiguredAdapterRegistry} rightly refuses two adapters claiming one id. So MTN is
  * one adapter that declares {@code {COLLECT, DISBURSE}} and holds the untouched
- * {@link MtnCollectionsAdapter} and a new {@link MtnDisbursementsAdapter}, each with its own
+ * {@link MtnCollectionsAdapter} and a {@link MtnDisbursementsAdapter}, each with its own
  * {@link MtnProfile} (its own subscription key, API user/key and token endpoint) and its own
  * token cache.
  *
- * <p>{@link #submit} dispatches on {@code intent.operation()} — the intent says which
- * product. {@link #query} and {@link #parseCallback} are handed only a reference, so:
+ * <p>Every method routes on what it is <strong>given</strong>:
  *
  * <ul>
- *   <li><strong>{@code parseCallback}</strong> delegates to one product's parser. An MTN
- *       callback is the same JSON either way — {@code referenceId}, {@code status},
- *       {@code reason}, {@code financialTransactionId} — and both parsers map it through the
- *       same {@link MtnStatusMap}. There is nothing product-specific to decide.</li>
- *   <li><strong>{@code query}</strong> does need the product, to hit the right base path.
- *       It is resolved with {@code productOf} — a lookup the wiring supplies, reading the
- *       operation off the payment the gateway already recorded. The payment knows; the
- *       adapter does not see payments, which is why the lookup is injected rather than a
- *       field. {@code query} is only ever called after the caller has found the payment
- *       (see {@code SettlementService.confirm}), so the lookup resolves in practice; the
- *       {@code COLLECT} fallback is for the impossible gap.</li>
+ *   <li>{@link #submit} on {@code intent.operation()};</li>
+ *   <li>{@link #query} on the {@code capability} argument the caller passes — the operation
+ *       the reference was submitted under. It used to route on a lookup the wiring injected,
+ *       which read the operation off the recorded payment; the contract now carries it
+ *       (ADR 0008), so the lookup and the fallback are gone.</li>
+ *   <li>{@link #parseCallback} routes on nothing: an MTN callback is the same JSON for both
+ *       products and both parsers map it through the same {@link MtnStatusMap}, so it
+ *       delegates to one. The contract's javadoc says why this one takes no capability.</li>
  * </ul>
- *
- * <p>The cleaner long-term shape is {@code ProviderAdapter.query(ReferenceId, Capability)} —
- * the caller has the capability and would just pass it — but that is a {@code provider-api}
- * contract change with its own issue, not something to fold into this slice. See the pull
- * request for #62.
  */
 public final class MtnAdapter implements ProviderAdapter {
 
@@ -59,7 +48,6 @@ public final class MtnAdapter implements ProviderAdapter {
     private final MtnCollectionsAdapter collections;
     /** {@code null} when the deployment has not configured the Disbursements product. */
     private final MtnDisbursementsAdapter disbursements;
-    private final Function<ReferenceId, Optional<Capability>> productOf;
 
     /**
      * @param disbursements the Disbursements adapter, or {@code null} when
@@ -67,11 +55,9 @@ public final class MtnAdapter implements ProviderAdapter {
      *                      {@link #capabilities()} does not advertise {@code DISBURSE} and a
      *                      {@code DISBURSE} call fails with a clear message.
      */
-    public MtnAdapter(MtnCollectionsAdapter collections, MtnDisbursementsAdapter disbursements,
-                      Function<ReferenceId, Optional<Capability>> productOf) {
+    public MtnAdapter(MtnCollectionsAdapter collections, MtnDisbursementsAdapter disbursements) {
         this.collections = Objects.requireNonNull(collections, "collections");
         this.disbursements = disbursements;
-        this.productOf = Objects.requireNonNull(productOf, "productOf");
     }
 
     @Override
@@ -93,10 +79,10 @@ public final class MtnAdapter implements ProviderAdapter {
     }
 
     @Override
-    public ProviderStatus query(ReferenceId reference) throws ProviderUnavailableException {
+    public ProviderStatus query(ReferenceId reference, Capability capability) throws ProviderUnavailableException {
         Objects.requireNonNull(reference, "reference");
-        Capability product = productOf.apply(reference).orElse(Capability.COLLECT);
-        return productAdapter(product).query(reference);
+        Objects.requireNonNull(capability, "capability");
+        return productAdapter(capability).query(reference, capability);
     }
 
     @Override
@@ -105,7 +91,7 @@ public final class MtnAdapter implements ProviderAdapter {
     }
 
     @Override
-    public Money balance(Currency currency) throws ProviderUnavailableException {
+    public Money balance(Capability capability, Currency currency) throws ProviderUnavailableException {
         throw new UnsupportedOperationException(
                 "balance is out of scope for MTN; capabilities() does not advertise BALANCE");
     }

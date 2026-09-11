@@ -127,8 +127,12 @@ public final class MtnDisbursementsAdapter implements ProviderAdapter {
     }
 
     @Override
-    public ProviderStatus query(ReferenceId reference) throws ProviderUnavailableException {
+    public ProviderStatus query(ReferenceId reference, Capability capability) throws ProviderUnavailableException {
         Objects.requireNonNull(reference, "reference");
+        if (capability != Capability.DISBURSE) {
+            throw new IllegalArgumentException(
+                    "the MTN disbursements adapter only answers DISBURSE queries, not " + capability);
+        }
         HttpRequest.Builder request = HttpRequest.newBuilder(profile.endpoint(TRANSFER_PATH + "/" + reference))
                 .timeout(requestTimeout)
                 .header("Ocp-Apim-Subscription-Key", profile.subscriptionKey())
@@ -187,7 +191,7 @@ public final class MtnDisbursementsAdapter implements ProviderAdapter {
     }
 
     @Override
-    public Money balance(Currency currency) throws ProviderUnavailableException {
+    public Money balance(Capability capability, Currency currency) throws ProviderUnavailableException {
         throw new UnsupportedOperationException(
                 "balance is out of scope for the disbursements adapter; capabilities() does not advertise BALANCE");
     }

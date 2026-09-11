@@ -78,7 +78,7 @@ class MtnCollectionsAdapterTest {
         assertThat(submitted).isInstanceOfSatisfying(SubmitResult.Acknowledged.class,
                 acknowledged -> assertThat(acknowledged.state()).isEqualTo(PaymentState.SUBMITTED));
 
-        ProviderStatus status = mtn.query(reference);
+        ProviderStatus status = mtn.query(reference, Capability.COLLECT);
         assertThat(status.state()).isEqualTo(PaymentState.SUCCEEDED);
         assertThat(status.providerStatusCode()).isEqualTo("SUCCESSFUL");
     }
@@ -92,13 +92,13 @@ class MtnCollectionsAdapterTest {
         ReferenceId reference = ReferenceId.newReference();
         mtn.submit(collectIntent(), reference);
 
-        assertThat(mtn.query(reference).state()).isEqualTo(PaymentState.UNKNOWN);
+        assertThat(mtn.query(reference, Capability.COLLECT).state()).isEqualTo(PaymentState.UNKNOWN);
     }
 
     @Test
     @DisplayName("a query on a reference the operator has never seen is UNKNOWN, not a failure")
     void a_query_on_an_unknown_reference_is_unknown() throws Exception {
-        ProviderStatus status = adapter().query(ReferenceId.newReference());
+        ProviderStatus status = adapter().query(ReferenceId.newReference(), Capability.COLLECT);
 
         assertThat(status.state()).isEqualTo(PaymentState.UNKNOWN);
     }
@@ -149,7 +149,7 @@ class MtnCollectionsAdapterTest {
     @Test
     @DisplayName("balance is not offered by the collections adapter")
     void balance_is_unsupported() {
-        assertThatThrownBy(() -> adapter().balance(Currency.EUR))
+        assertThatThrownBy(() -> adapter().balance(Capability.COLLECT, Currency.EUR))
                 .isInstanceOf(UnsupportedOperationException.class);
     }
 }

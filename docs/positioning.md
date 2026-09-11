@@ -90,6 +90,14 @@ credential Nkap can verify, and the path is safe because it only ever triggers a
 `SettlementService`. It is the one route that takes no key, and that is a decision, not a
 gap.
 
+**Health and metrics are on their own port, and this repository does not publish it.**
+`/actuator/health` and `/actuator/prometheus` carry no key either, but they are not on the
+API's port — a Prometheus scrape and a liveness probe are unauthenticated by convention on
+the assumption that they answer on a management port a scraper reaches from inside the
+network, not the port serving a public API. An operator who publishes that port is choosing
+to hand out business volume, the suspense balance, and exactly when the operator is
+struggling; Nkap does not make that choice by default.
+
 The one action that writes to the ledger from a file — statement reconciliation — is a
 host-side command and not a route, for the same reason keys are.
 

@@ -52,16 +52,26 @@ psql() { docker compose exec -T db psql -U nkap -d nkap -tAc "$1"; }
 
 # --- wait for the stack ---------------------------------------------------------------
 
+# The gateway's health check moved to its own, unpublished management port (issue #75's
+# follow-up): this script runs on the host, outside the compose network, so it cannot
+# reach that port and never should — the whole point is that only the API port is
+# published. "Is the gateway up" is asked the way any caller outside the network can ask
+# it: a request that needs a key, sent without one. 401 means the app is routing requests
+# and its own database lookup for the (absent) key completed — a weaker probe would only
+# prove the port is open, not that the app behind it is actually answering.
+gateway_answering() {
+  [ "$(curl -s -o /dev/null -w '%{http_code}' "$GATEWAY/payments/00000000-0000-0000-0000-000000000000")" = "401" ]
+}
+
 say "Waiting for the stack"
 for _ in $(seq 1 60); do
-  if curl -fsS -o /dev/null "$GATEWAY/actuator/health" \
-     && curl -fsS -o /dev/null "$SIMULATOR/_nkap/scenarios"; then
+  if gateway_answering && curl -fsS -o /dev/null "$SIMULATOR/_nkap/scenarios"; then
     ok "gateway and simulator are up"
     break
   fi
   sleep 1
 done
-curl -fsS -o /dev/null "$GATEWAY/actuator/health" || fail "gateway did not come up — try 'docker compose logs gateway'"
+gateway_answering || fail "gateway did not come up — try 'docker compose logs gateway'"
 curl -fsS -o /dev/null "$SIMULATOR/_nkap/scenarios" || fail "simulator did not come up — try 'docker compose logs simulator'"
 
 # --- 1. script the operator ---------------------------------------------------------

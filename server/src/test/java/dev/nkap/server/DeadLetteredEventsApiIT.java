@@ -10,8 +10,6 @@ import dev.nkap.server.outbox.OutboxEvent;
 import dev.nkap.server.outbox.OutboxRelayStore;
 import dev.nkap.server.support.PostgresSpringBootIT;
 import java.time.Instant;
-import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -119,26 +117,30 @@ class DeadLetteredEventsApiIT extends PostgresSpringBootIT {
         outbox.append(new OutboxEvent(retryingId, merchant, "payment.succeeded",
                 "{\"id\":\"" + retryingId + "\"}"));
         store.recordFailure(retryingId, "boom: receiver refused the request, will retry", false, Instant.now());
-        // Push the schedule out, the way a real claim would: the relay is disabled in this
-        // Spring context (nkap.webhooks.enabled=false, PostgresSpringBootIT), but every IT
-        // test shares the one PostgreSQL instance for the life of the JVM, and this row
-        // would otherwise sit "due" forever — claimable by OutboxRelayIT's own relay
-        // instances, which run against that same shared database directly.
-        jdbc.update("UPDATE outbox_event SET next_attempt_at = ? WHERE id = ?",
-                OffsetDateTime.now(ZoneOffset.UTC).plusDays(1), retryingId);
         UUID deadLetteredId = deadLetteredEvent(merchant, "payment.failed");
 
-        ResponseEntity<String> response = list(adminKey);
+        try {
+            ResponseEntity<String> response = list(adminKey);
 
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-        JsonNode events = json.readTree(response.getBody());
-        for (JsonNode event : events) {
-            assertThat(event.get("eventId").asText())
-                    .as("an event that is only retrying, not dead-lettered, should not be in this listing")
-                    .isNotEqualTo(retryingId.toString());
+            assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+            JsonNode events = json.readTree(response.getBody());
+            for (JsonNode event : events) {
+                assertThat(event.get("eventId").asText())
+                        .as("an event that is only retrying, not dead-lettered, should not be in this listing")
+                        .isNotEqualTo(retryingId.toString());
+            }
+            assertThat(events).anySatisfy(event ->
+                    assertThat(event.get("eventId").asText()).isEqualTo(deadLetteredId.toString()));
+        } finally {
+            // Every IT test shares one PostgreSQL instance for the life of the JVM, with no
+            // per-class isolation of outbox_event. Left un-dead-lettered, this row stays
+            // "due" — and pushing next_attempt_at into the future is an arms race against
+            // clock jumps other tests make on their own terms (OutboxRelayIT deliberately
+            // jumps a day ahead to prove a dead-lettered event is never claimed again, which
+            // collided with an earlier version of this fix). Deleting it is the only version
+            // of this that cannot collide with what any other test decides to do with time.
+            jdbc.update("DELETE FROM outbox_event WHERE id = ?", retryingId);
         }
-        assertThat(events).anySatisfy(event ->
-                assertThat(event.get("eventId").asText()).isEqualTo(deadLetteredId.toString()));
     }
 
     private ResponseEntity<String> list(String key) {

@@ -91,6 +91,12 @@ tests run in parallel — and tests running in parallel is exactly what a simula
   callback twice, a configurable interval apart" (issue #5) could not be expressed. It was
   one field, added when delivery was built, and no file anyone had written needed to
   change. That is the outcome the risk was accepted for.
+- `onSubmit` gained an optional `code` — the operator error code a failing outcome reports —
+  for the same reason `CallbackSpec` gained an interval: a behaviour that had to be
+  expressible could not be expressed. A conformance kit has to be able to ask an operator for
+  a code nothing recognises, to prove an adapter maps it to `UNKNOWN` rather than to a known
+  failure, and an outcome alone cannot say that. It is free text, deliberately not an enum,
+  and optional — every scenario written before it parses and behaves unchanged (issue #26).
 - Scenarios must stay deterministic. No randomness, no dependence on wall-clock time beyond
   the declared delays: a scenario that behaves differently on two runs is worse than no
   scenario.

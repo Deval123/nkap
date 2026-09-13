@@ -75,14 +75,18 @@ class RequestToPayApiTest {
         mvc.perform(post("/collection/v1_0/requesttopay")
                 .header("X-Reference-Id", ref)
                 .contentType(MediaType.APPLICATION_JSON).content(BODY))
-            .andExpect(status().isConflict());
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.code").value("RESOURCE_ALREADY_EXIST"))
+            .andExpect(jsonPath("$.message").value("Duplicated reference id. Creation of resource failed."));
     }
 
     @Test
     void missing_reference_header_is_bad_request() throws Exception {
         mvc.perform(post("/collection/v1_0/requesttopay")
                 .contentType(MediaType.APPLICATION_JSON).content(BODY))
-            .andExpect(status().isBadRequest());
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.code").value("INVALID_REFERENCE_ID"))
+            .andExpect(jsonPath("$.message").isNotEmpty());
     }
 
     @Test
@@ -90,13 +94,17 @@ class RequestToPayApiTest {
         mvc.perform(post("/collection/v1_0/requesttopay")
                 .header("X-Reference-Id", "not-a-uuid")
                 .contentType(MediaType.APPLICATION_JSON).content(BODY))
-            .andExpect(status().isBadRequest());
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.code").value("INVALID_REFERENCE_ID"))
+            .andExpect(jsonPath("$.message").isNotEmpty());
     }
 
     @Test
     void unknown_reference_is_not_found() throws Exception {
         mvc.perform(get("/collection/v1_0/requesttopay/" + UUID.randomUUID()))
-            .andExpect(status().isNotFound());
+            .andExpect(status().isNotFound())
+            .andExpect(jsonPath("$.code").value("RESOURCE_NOT_FOUND"))
+            .andExpect(jsonPath("$.message").value("Requested resource was not found."));
     }
 
     @Test

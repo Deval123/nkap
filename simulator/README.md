@@ -31,6 +31,9 @@ State is held in memory only — every restart is a clean operator.
 | `POST` | `/collection/v1_0/requesttopay` | Reads `X-Reference-Id` (a client-supplied UUID, the idempotency key), records the request, and applies the resolved scenario's `onSubmit`. Default is **202 with an empty body**. A reused `X-Reference-Id` is **409**; a missing or malformed one is **400** — those are protocol errors and keep priority over the scenario. |
 | `GET` | `/collection/v1_0/requesttopay/{referenceId}` | Applies the scenario's next `onQuery` entry and returns `{"status": "..."}` (plus `reason` when the scenario sets one). The default scenario moves a request to `SUCCESSFUL` on the first query. An unknown reference is **404**. |
 
+Every error above answers with MTN's error body, never an empty one — see
+[Error bodies](#error-bodies).
+
 The `X-Reference-Id` is matched case-insensitively, as MTN's own API does. Both
 `requesttopay` endpoints require a live `Authorization: Bearer` token **only when the
 declared configuration turns enforcement on** — see [Token expiry](#token-expiry). By
@@ -41,8 +44,10 @@ default they ignore it.
 A scenario is a **timeline** — what the simulator does at each interaction point of one
 payment (see `docs/adr/0002-scenarios-are-timelines.md`):
 
-- `onSubmit`: a `delay` and an `outcome` among `ACCEPT`, `CONFLICT`, `BAD_REQUEST`,
-  `SERVER_ERROR`, `NO_RESPONSE` (`NO_RESPONSE` never answers — it is the timeout case).
+- `onSubmit`: a `delay`, an `outcome` among `ACCEPT`, `CONFLICT`, `BAD_REQUEST`,
+  `SERVER_ERROR`, `NO_RESPONSE` (`NO_RESPONSE` never answers — it is the timeout case), and
+  optionally the `code` the operator reports when that outcome is a failure — see
+  [Error bodies](#error-bodies).
 - `onQuery`: an ordered list of `{delay, status, reason}`, one per successive query.
   **The last entry repeats**, so a client that polls more times than the scenario
   declares keeps getting a defined answer.
@@ -54,6 +59,37 @@ payment (see `docs/adr/0002-scenarios-are-timelines.md`):
 Every field is optional and defaults sensibly: an empty document is the happy path
 (accepted on submission, `SUCCESSFUL` on the next query). A scenario file declares only
 what it changes.
+
+### Error bodies
+
+Every error on the operator surface is MTN's shape, so an adapter can always read a code:
+
+```json
+{ "message": "Duplicated reference id. Creation of resource failed.", "code": "RESOURCE_ALREADY_EXIST" }
+```
+
+A reused `X-Reference-Id` is `409` `RESOURCE_ALREADY_EXIST`, an unknown reference `404`
+`RESOURCE_NOT_FOUND`, a missing or malformed one `400` `INVALID_REFERENCE_ID`. The failing
+`onSubmit` outcomes default to `RESOURCE_ALREADY_EXIST` (`CONFLICT`), `NOT_ALLOWED`
+(`BAD_REQUEST`) and `INTERNAL_PROCESSING_ERROR` (`SERVER_ERROR`); a scenario that needs a
+particular one declares it:
+
+```json
+"onSubmit": { "outcome": "BAD_REQUEST", "code": "INVALID_CURRENCY" }
+```
+
+`code` is optional — a scenario that omits it gets the default for its outcome — and it is
+ignored by `ACCEPT` and `NO_RESPONSE`, which have no error body. It is **free text and never
+validated against any vocabulary**: a scenario may name a code nothing recognises, such as
+`UNRECOGNISED_OPERATOR_CODE`, and the simulator answers with it verbatim. That is what lets a
+test prove a client maps an unknown operator code to "I do not know" rather than to a known
+failure — the rule that matters most in this project — and it is why the field is a string
+rather than an enum.
+
+Which of these codes are observed against the real sandbox and which the simulator chooses
+is recorded in [`docs/providers/mtn.md`](../docs/providers/mtn.md). The `/_nkap/` control
+plane is the one exception to all of this: it does not imitate MTN, and answers a malformed
+scenario with its own 400 naming the offending field.
 
 The **token settings and the fallback callback URL are not part of a scenario**. A bearer
 token is obtained before any payment exists, and a callback URL is about where the

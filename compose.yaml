@@ -81,6 +81,46 @@ services:
       - "--nkap.apikey.token=nkap_demo-key-not-for-production"
     restart: "no"
 
+  # One-shot: provision a demo webhook endpoint, then exit. Same shape as key-init, and the
+  # same reason it is a command rather than a route: a route that lets a caller point a
+  # signing secret at an arbitrary URL is worse than one that writes ledger entries.
+  #
+  # The url is https, on purpose: provisioning refuses anything else (issue #77's second
+  # defect — a typo giving http:// would send a signed payment notification in clear text).
+  # example.invalid is a reserved domain that never resolves (RFC 2606) — nothing in this
+  # compose file receives the webhook, and nothing needs to; this step exists to prove
+  # provisioning itself still works end to end after that check landed, not to demonstrate
+  # delivery. examples/demo.sh asserts the row this leaves behind.
+  webhook-init:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NKAP_DB_URL: jdbc:postgresql://db:5432/nkap
+      NKAP_DB_USER: nkap
+      NKAP_DB_PASSWORD: nkap
+      # The provisioning command builds the full context, which wires an MTN adapter bean;
+      # these placeholders keep that construction happy. Nothing here calls the operator.
+      NKAP_PROVIDER_MTN_BASE_URL: http://simulator:8081
+      NKAP_PROVIDER_MTN_TARGET_ENVIRONMENT: sandbox
+      NKAP_PROVIDER_MTN_SUBSCRIPTION_KEY: placeholder-not-a-real-subscription-key
+      NKAP_PROVIDER_MTN_API_USER: placeholder-not-a-real-api-user
+      NKAP_PROVIDER_MTN_API_KEY: placeholder-not-a-real-api-key
+      NKAP_PROVIDER_MTN_CURRENCY: EUR
+      NKAP_PROVIDER_MTN_COUNTRY: demoland
+      # A one-shot command has no use for the reconciler's or the relay's scheduler.
+      NKAP_RECONCILER_ENABLED: "false"
+      NKAP_WEBHOOKS_ENABLED: "false"
+    command:
+      - "--nkap.webhook.create"
+      - "--nkap.webhook.merchant=acme"
+      - "--nkap.webhook.url=https://example.invalid/hooks"
+      - "--nkap.webhook.secret=whsec_demo-secret-not-for-production"
+    restart: "no"
+
   gateway:
     build:
       context: .
@@ -93,6 +133,8 @@ services:
       simulator:
         condition: service_healthy
       key-init:
+        condition: service_completed_successfully
+      webhook-init:
         condition: service_completed_successfully
     ports:
       - "8080:8080"

@@ -16,13 +16,18 @@ import org.springframework.jdbc.core.RowMapper;
  * {@code V7}) holds one row per merchant — {@code merchant_id} is {@code UNIQUE} — so
  * provisioning is an upsert: re-running the command rotates the endpoint rather than
  * failing.
+ *
+ * <p>{@code allowInsecureUrl} is {@code nkap.webhooks.allow-insecure-endpoint-url} — off by
+ * default, so provisioning refuses anything but {@code https} (see {@link WebhookUrlPolicy}).
  */
 public final class PostgresWebhookEndpointStore implements WebhookEndpointStore {
 
     private final JdbcTemplate jdbc;
+    private final boolean allowInsecureUrl;
 
-    public PostgresWebhookEndpointStore(JdbcTemplate jdbc) {
+    public PostgresWebhookEndpointStore(JdbcTemplate jdbc, boolean allowInsecureUrl) {
         this.jdbc = jdbc;
+        this.allowInsecureUrl = allowInsecureUrl;
     }
 
     @Override
@@ -43,6 +48,7 @@ public final class PostgresWebhookEndpointStore implements WebhookEndpointStore 
         Objects.requireNonNull(secret, "secret");
         String merchant = requireText(merchantId, "merchantId");
         String endpointUrl = requireText(url, "url");
+        WebhookUrlPolicy.requireAllowed(endpointUrl, allowInsecureUrl);
         UUID id = UUID.randomUUID();
         OffsetDateTime createdAt = OffsetDateTime.now(ZoneOffset.UTC);
         jdbc.update(

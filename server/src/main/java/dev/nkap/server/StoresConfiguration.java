@@ -17,6 +17,7 @@ import dev.nkap.server.statement.StatementParser;
 import dev.nkap.server.statement.StatementReconciliationStore;
 import dev.nkap.server.webhook.PostgresWebhookEndpointStore;
 import dev.nkap.server.webhook.WebhookEndpointStore;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -65,8 +66,10 @@ class StoresConfiguration {
     }
 
     @Bean
-    WebhookEndpointStore webhookEndpointStore(JdbcTemplate jdbc) {
-        return new PostgresWebhookEndpointStore(jdbc);
+    WebhookEndpointStore webhookEndpointStore(
+            JdbcTemplate jdbc,
+            @Value("${nkap.webhooks.allow-insecure-endpoint-url:false}") boolean allowInsecureUrl) {
+        return new PostgresWebhookEndpointStore(jdbc, allowInsecureUrl);
     }
 
     @Bean

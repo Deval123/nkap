@@ -42,6 +42,9 @@ class WebhookReplayApiIT extends PostgresSpringBootIT {
         registry.add("nkap.provider.mtn.api-key", () -> "unused");
         registry.add("nkap.provider.mtn.currency", () -> "EUR");
         registry.add("nkap.provider.mtn.country", () -> "sandbox");
+        // StubReceiver is plain HTTP; this test is about replay, not about the URL policy
+        // — that is WebhookUrlPolicyTest's job.
+        registry.add("nkap.webhooks.allow-insecure-endpoint-url", () -> "true");
     }
 
     @Autowired

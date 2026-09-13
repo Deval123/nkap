@@ -104,6 +104,11 @@ The secret is printed once. Re-running the command for a merchant that already h
 endpoint replaces it — one endpoint per merchant in this slice, so provisioning and
 rotating are the same operation.
 
+The url must be `https`: this is a signed notification about money, and the signature
+protects integrity, not confidentiality — a typo giving `http://` would send it in clear
+text. `nkap.webhooks.allow-insecure-endpoint-url=true` lifts that for a local demo or a test
+with no TLS in front of it; a real deployment never sets it.
+
 ## Retries, and giving up
 
 A failed delivery is retried with a growing delay (`nkap.webhooks.backoff-base`, doubling,

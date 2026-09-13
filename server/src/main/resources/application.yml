@@ -120,6 +120,12 @@ nkap:
     # alongside everything else about a delivery, and documented for whoever implements
     # the receiving side.
     signature-tolerance: 5m
+    # Provisioning refuses anything but https by default: this is a signed notification
+    # about money, and the signature protects integrity, not confidentiality — plain http
+    # leaves the amount, the reference and the merchant readable to anything on the path.
+    # Set true only for a local demo or a test with no TLS in front of it; a real
+    # deployment never sets this.
+    allow-insecure-endpoint-url: false
   provider:
     # The provider a POST /payments is routed to. Routing by country arrives with
     # multi-country support; for now there is one.

@@ -66,20 +66,36 @@ class TransferApiTest {
         mvc.perform(post("/disbursement/v1_0/transfer")
                 .header("X-Reference-Id", ref)
                 .contentType(MediaType.APPLICATION_JSON).content(BODY))
-            .andExpect(status().isConflict());
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.code").value("RESOURCE_ALREADY_EXIST"))
+            .andExpect(jsonPath("$.message").value("Duplicated reference id. Creation of resource failed."));
     }
 
     @Test
     void a_status_get_on_an_unknown_reference_is_404() throws Exception {
         mvc.perform(get("/disbursement/v1_0/transfer/" + UUID.randomUUID()))
-            .andExpect(status().isNotFound());
+            .andExpect(status().isNotFound())
+            .andExpect(jsonPath("$.code").value("RESOURCE_NOT_FOUND"))
+            .andExpect(jsonPath("$.message").value("Requested resource was not found."));
     }
 
     @Test
     void a_missing_reference_header_is_400() throws Exception {
         mvc.perform(post("/disbursement/v1_0/transfer")
                 .contentType(MediaType.APPLICATION_JSON).content(BODY))
-            .andExpect(status().isBadRequest());
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.code").value("INVALID_REFERENCE_ID"))
+            .andExpect(jsonPath("$.message").isNotEmpty());
+    }
+
+    @Test
+    void a_malformed_reference_header_is_400() throws Exception {
+        mvc.perform(post("/disbursement/v1_0/transfer")
+                .header("X-Reference-Id", "not-a-uuid")
+                .contentType(MediaType.APPLICATION_JSON).content(BODY))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.code").value("INVALID_REFERENCE_ID"))
+            .andExpect(jsonPath("$.message").isNotEmpty());
     }
 
     @Test

@@ -63,7 +63,7 @@ public class TransferController {
         String currency = field(body, "currency");
 
         if (!store.record(reference)) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "X-Reference-Id already used");
+            throw new MtnErrorException(HttpStatus.CONFLICT, MtnErrorResponse.duplicateReference());
         }
 
         Scenario scenario = engine.resolveForSubmission(reference, msisdn, amount, currency);
@@ -79,9 +79,7 @@ public class TransferController {
         sleep(onSubmit.delay());
         return switch (onSubmit.outcome()) {
             case ACCEPT -> ResponseEntity.accepted().build();
-            case CONFLICT -> ResponseEntity.status(HttpStatus.CONFLICT).build();
-            case BAD_REQUEST -> ResponseEntity.badRequest().build();
-            case SERVER_ERROR -> ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+            case CONFLICT, BAD_REQUEST, SERVER_ERROR -> MtnErrorResponse.forSubmit(onSubmit);
             case NO_RESPONSE -> throw new IllegalStateException("handled above");
         };
     }
@@ -94,7 +92,7 @@ public class TransferController {
         authenticator.require(authorization);
 
         QueryBehaviour behaviour = engine.nextQueryBehaviour(References.canonical(referenceId))
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "unknown reference"));
+                .orElseThrow(() -> new MtnErrorException(HttpStatus.NOT_FOUND, MtnErrorResponse.notFound()));
 
         sleep(behaviour.delay());
 
@@ -112,12 +110,12 @@ public class TransferController {
 
     private static String requireUuid(String value) {
         if (value == null || value.isBlank()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "X-Reference-Id header is required");
+            throw MtnErrorResponse.invalidReference("X-Reference-Id header is required.");
         }
         try {
             return UUID.fromString(value).toString();
         } catch (IllegalArgumentException e) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "X-Reference-Id must be a UUID");
+            throw MtnErrorResponse.invalidReference("X-Reference-Id must be a UUID.");
         }
     }
 

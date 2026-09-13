@@ -13,6 +13,7 @@ import dev.nkap.provider.Capability;
 import dev.nkap.provider.ProviderId;
 import dev.nkap.provider.ProviderStatus;
 import dev.nkap.provider.ProviderUnavailableException;
+import dev.nkap.server.outbox.OutboxNotifier;
 import dev.nkap.server.provider.AdapterRegistry;
 import java.time.Instant;
 import java.util.List;
@@ -54,6 +55,10 @@ import org.springframework.transaction.support.TransactionTemplate;
  *       no settled payment, is the worst state this system can be in.</li>
  * </ul>
  *
+ * <p>A terminal outcome also writes an outbox event, in that same transaction — see
+ * {@link OutboxNotifier}. A merchant that polls learns a verdict late; a merchant with a
+ * webhook endpoint learns it as soon as this transaction commits (ADR 0003, issue #77).
+ *
  * <p>{@code query} runs <strong>outside</strong> the transaction, for the reason the submit
  * call does: an operator that does not answer must not hold a database transaction open for
  * the whole timeout. The transaction opens once the answer is in hand, takes the payment's
@@ -73,13 +78,15 @@ public class SettlementService {
     private final PaymentRepository payments;
     private final AdapterRegistry adapters;
     private final Ledger ledger;
+    private final OutboxNotifier notifier;
     private final TransactionTemplate tx;
 
     public SettlementService(PaymentRepository payments, AdapterRegistry adapters, Ledger ledger,
-                             PlatformTransactionManager txManager) {
+                             OutboxNotifier notifier, PlatformTransactionManager txManager) {
         this.payments = payments;
         this.adapters = adapters;
         this.ledger = ledger;
+        this.notifier = notifier;
         this.tx = new TransactionTemplate(txManager);
     }
 
@@ -158,6 +165,11 @@ public class SettlementService {
         if (payment.state() == PaymentState.SUCCEEDED) {
             settle(payment);
         }
+        // Same transaction as the settle() above and the save() below: the event and the
+        // state change commit together, or neither does (ADR 0003, issue #77). Writes
+        // nothing for a state that is not SUCCEEDED/FAILED/EXPIRED, and nothing at all for
+        // a merchant with no registered webhook endpoint.
+        notifier.notifyIfTerminal(payment);
         payments.save(payment);
         // A terminal state is a verdict and the payment leaves the queue. A move to another
         // non-terminal state — UNKNOWN -> PENDING — is progress, not a resolution: the

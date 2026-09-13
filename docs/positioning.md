@@ -84,6 +84,15 @@ issuance-and-refresh is a second system to get wrong. Rate limiting, key rotatio
 an audit trail are later slices; TLS termination and network placement are the operator's,
 as for any service.
 
+**A webhook secret is stored differently from an API key, and that is a real trade-off.**
+An API key is hashed and unrecoverable — the gateway only ever checks one. A webhook
+signing secret cannot be: HMAC-SHA256 needs the actual bytes on every delivery, so
+`webhook_endpoint` keeps it readable. The consequence is exactly what it sounds like —
+whoever can read that table can forge a notification to that merchant — which is why it
+gets its own paragraph rather than an implicit "well, obviously" next to the API key one
+above. Secrets are provisioned the way keys are: a host-side command, shown once, never a
+route (`docs/webhooks.md`).
+
 **The callback endpoint stays unauthenticated, on purpose.** The operator sends no
 credential Nkap can verify, and the path is safe because it only ever triggers a confirming
 `adapter.query` and believes nothing in the payload — the argument is written out in

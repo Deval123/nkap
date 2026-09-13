@@ -7,6 +7,7 @@ import dev.nkap.provider.ProviderAdapter;
 import dev.nkap.provider.ProviderId;
 import dev.nkap.provider.ProviderUnavailableException;
 import dev.nkap.provider.SubmitResult;
+import dev.nkap.server.outbox.OutboxNotifier;
 import dev.nkap.server.provider.AdapterRegistry;
 import java.util.Optional;
 import org.slf4j.Logger;
@@ -50,11 +51,14 @@ public class PaymentService {
 
     private final PaymentRepository payments;
     private final AdapterRegistry adapters;
+    private final OutboxNotifier notifier;
     private final TransactionTemplate tx;
 
-    public PaymentService(PaymentRepository payments, AdapterRegistry adapters, PlatformTransactionManager txManager) {
+    public PaymentService(PaymentRepository payments, AdapterRegistry adapters, OutboxNotifier notifier,
+                          PlatformTransactionManager txManager) {
         this.payments = payments;
         this.adapters = adapters;
+        this.notifier = notifier;
         this.tx = new TransactionTemplate(txManager);
     }
 
@@ -91,6 +95,10 @@ public class PaymentService {
                     return;
                 }
                 applyOutcome(outcome, current, reference);
+                // Same transaction as the save() below: a Rejected outcome moves the payment
+                // straight to FAILED, and that is a terminal verdict a merchant is waiting
+                // for too, not only the ones SettlementService reaches later (issue #77).
+                notifier.notifyIfTerminal(current);
                 payments.save(current);
             });
 

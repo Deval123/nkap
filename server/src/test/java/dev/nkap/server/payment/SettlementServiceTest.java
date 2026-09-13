@@ -21,7 +21,11 @@ import dev.nkap.provider.ProviderAdapter;
 import dev.nkap.provider.ProviderId;
 import dev.nkap.provider.ProviderStatus;
 import dev.nkap.provider.ProviderUnavailableException;
+import dev.nkap.server.outbox.InMemoryOutbox;
+import dev.nkap.server.outbox.OutboxNotifier;
 import dev.nkap.server.support.LogCapture;
+import dev.nkap.server.webhook.InMemoryWebhookEndpointStore;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.Map;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -38,8 +42,10 @@ class SettlementServiceTest {
     private final ProviderAdapter adapter = mock(ProviderAdapter.class);
     private final dev.nkap.server.provider.AdapterRegistry adapters = mock(dev.nkap.server.provider.AdapterRegistry.class);
     private final Ledger ledger = new InMemoryLedger();
-    private final SettlementService settlement =
-            new SettlementService(payments, adapters, ledger, new DirectTransactionManager());
+    private final InMemoryOutbox outbox = new InMemoryOutbox();
+    private final InMemoryWebhookEndpointStore endpoints = new InMemoryWebhookEndpointStore();
+    private final SettlementService settlement = new SettlementService(payments, adapters, ledger,
+            new OutboxNotifier(outbox, endpoints, new ObjectMapper()), new DirectTransactionManager());
 
     SettlementServiceTest() {
         when(adapters.require(MTN)).thenReturn(adapter);

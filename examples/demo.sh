@@ -74,6 +74,17 @@ done
 gateway_answering || fail "gateway did not come up — try 'docker compose logs gateway'"
 curl -fsS -o /dev/null "$SIMULATOR/_nkap/scenarios" || fail "simulator did not come up — try 'docker compose logs simulator'"
 
+# gateway depends on webhook-init completing, so if the stack is up this already ran. It is
+# checked here rather than skipped: issue #77's second defect made provisioning refuse
+# anything but https, and this is what proves that check did not silently break the one
+# thing in this compose file that provisions an endpoint.
+say "Checking webhook-init provisioned a demo endpoint"
+endpoint_count="$(psql "SELECT count(*) FROM webhook_endpoint WHERE merchant_id = 'acme'")"
+[ "$endpoint_count" = "1" ] || fail "expected webhook-init to have provisioned one endpoint for 'acme', found $endpoint_count"
+endpoint_url="$(psql "SELECT url FROM webhook_endpoint WHERE merchant_id = 'acme'")"
+[ "$endpoint_url" = "https://example.invalid/hooks" ] || fail "unexpected webhook endpoint url '$endpoint_url'"
+ok "webhook endpoint provisioned for 'acme', at an https:// url"
+
 # --- 1. script the operator ---------------------------------------------------------
 
 say "1. Scripting the operator: it accepts the submission, then never answers"

@@ -18,6 +18,8 @@ import dev.nkap.provider.ProviderAdapter;
 import dev.nkap.provider.ProviderId;
 import dev.nkap.provider.ProviderStatus;
 import dev.nkap.provider.ProviderUnavailableException;
+import dev.nkap.server.outbox.InMemoryOutbox;
+import dev.nkap.server.outbox.OutboxNotifier;
 import dev.nkap.server.payment.Payment;
 import dev.nkap.server.payment.PaymentTransition;
 import dev.nkap.server.payment.SettlementService;
@@ -26,6 +28,7 @@ import dev.nkap.server.persistence.PostgresPaymentRepository;
 import dev.nkap.server.provider.AdapterRegistry;
 import dev.nkap.server.support.DockerAvailable;
 import dev.nkap.server.support.PostgresDatabase;
+import dev.nkap.server.webhook.InMemoryWebhookEndpointStore;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.Clock;
 import java.time.Duration;
@@ -343,7 +346,8 @@ class ReconcilerIT {
         // the shared path moves it UNKNOWN -> PENDING.
         AdapterRegistry callbackAdapters = operatorAnswering(new ProviderStatus(
                 PaymentState.PENDING, "PENDING", "", null, "", "{\"status\":\"PENDING\"}"));
-        new SettlementService(payments, callbackAdapters, ledger, txManager)
+        new SettlementService(payments, callbackAdapters, ledger,
+                new OutboxNotifier(new InMemoryOutbox(), new InMemoryWebhookEndpointStore(), new ObjectMapper()), txManager)
                 .confirm(MTN, reference, PaymentTransition.Cause.CALLBACK);
 
         assertThat(payments.findByReference(reference).orElseThrow().state()).isEqualTo(PaymentState.PENDING);
@@ -492,7 +496,8 @@ class ReconcilerIT {
         // A callback for the same reference, later, goes through the shared path and resolves it.
         AdapterRegistry callbackAdapters = operatorAnswering(new ProviderStatus(
                 PaymentState.SUCCEEDED, "SUCCESSFUL", "txn-late", null, "", "{\"status\":\"SUCCESSFUL\"}"));
-        new SettlementService(payments, callbackAdapters, ledger, txManager)
+        new SettlementService(payments, callbackAdapters, ledger,
+                new OutboxNotifier(new InMemoryOutbox(), new InMemoryWebhookEndpointStore(), new ObjectMapper()), txManager)
                 .confirm(MTN, reference, PaymentTransition.Cause.CALLBACK);
 
         assertThat(payments.findByReference(reference).orElseThrow().state()).isEqualTo(PaymentState.SUCCEEDED);
@@ -580,7 +585,8 @@ class ReconcilerIT {
     private Reconciler reconcilerWith(ReconcilerProperties properties, AdapterRegistry adapters, Clock clock) {
         ReconciliationPolicy policy = new ReconciliationPolicy(properties);
         ReconciliationStore store = new PostgresReconciliationStore(jdbc, txManager, policy);
-        SettlementService settlement = new SettlementService(payments, adapters, ledger, txManager);
+        SettlementService settlement = new SettlementService(payments, adapters, ledger,
+                new OutboxNotifier(new InMemoryOutbox(), new InMemoryWebhookEndpointStore(), new ObjectMapper()), txManager);
         return new Reconciler(store, settlement, policy, properties, clock, new SimpleMeterRegistry());
     }
 

@@ -42,14 +42,14 @@ class MtnConfigurationTest {
     }
 
     @Test
-    @DisplayName("the MTN adapter bean is built from configuration alone")
-    void the_adapter_bean_is_built_from_properties_alone() {
-        Method adapterBean = beanMethods().stream()
-                .filter(method -> method.getName().equals("mtnAdapter"))
+    @DisplayName("the MTN adapter beans are built from configuration alone")
+    void the_adapter_beans_are_built_from_properties_alone() {
+        Method adapterBeans = beanMethods().stream()
+                .filter(method -> method.getName().equals("mtnAdapters"))
                 .findFirst()
-                .orElseThrow(() -> new AssertionError("MtnConfiguration no longer declares an mtnAdapter bean"));
+                .orElseThrow(() -> new AssertionError("MtnConfiguration no longer declares an mtnAdapters bean"));
 
-        assertThat(adapterBean.getParameterTypes())
+        assertThat(adapterBeans.getParameterTypes())
                 .as("MtnProperties and nothing else")
                 .containsExactly(MtnProperties.class);
     }

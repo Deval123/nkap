@@ -7,6 +7,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import org.springframework.stereotype.Component;
 
 /**
@@ -56,5 +57,10 @@ public final class ConfiguredAdapterRegistry implements AdapterRegistry {
     @Override
     public Optional<Currency> settlementCurrency(ProviderId id) {
         return Optional.ofNullable(settlementCurrencies.get(id));
+    }
+
+    @Override
+    public Set<ProviderId> configuredProviders() {
+        return byId.keySet();
     }
 }

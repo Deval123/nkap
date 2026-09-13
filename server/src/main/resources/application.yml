@@ -127,15 +127,42 @@ nkap:
     # deployment never sets this.
     allow-insecure-endpoint-url: false
   provider:
-    # The provider a POST /payments is routed to. Routing by country arrives with
-    # multi-country support; for now there is one.
-    default: mtn
+    # The provider GET /balance and GET /account-holders/{msisdn} route to — those two
+    # routes are not per-country (issue #82's "not in this slice"); POST /payments names
+    # its own country on every request instead. Defaults to the first installation below.
+    default: ${NKAP_PROVIDER_DEFAULT:mtn-cm}
     mtn:
-      # Credentials come from the environment, never from a committed file.
-      base-url: ${NKAP_PROVIDER_MTN_BASE_URL:}
-      target-environment: ${NKAP_PROVIDER_MTN_TARGET_ENVIRONMENT:}
-      subscription-key: ${NKAP_PROVIDER_MTN_SUBSCRIPTION_KEY:}
-      api-user: ${NKAP_PROVIDER_MTN_API_USER:}
-      api-key: ${NKAP_PROVIDER_MTN_API_KEY:}
-      currency: ${NKAP_PROVIDER_MTN_CURRENCY:}
-      country: ${NKAP_PROVIDER_MTN_COUNTRY:}
+      # Several country installations in one deployment (issue #82): a list, one entry per
+      # country, each registered as mtn-<country> (see MtnConfiguration) so POST
+      # /payments's country field routes to it directly. Credentials come from the
+      # environment, never from a committed file.
+      #
+      # A slot with a blank country is not an installation — MtnConfiguration skips it,
+      # the same way an unset nkap.provider.mtn.*.disbursement.* block is not a configured
+      # product. A deployment that serves only Cameroon leaves the second slot's env vars
+      # unset and gets one adapter, not a startup failure over credentials it does not
+      # have. (A raw indexed environment variable — NKAP_PROVIDER_MTN_INSTALLATIONS_1_API_KEY
+      # — was tried and rejected: Spring's relaxed binding cannot reliably tell "api" + "key"
+      # from a nested "api.key" without a YAML key already naming the field, and silently
+      # fails the whole list element when it guesses wrong. Both slots declared here, with
+      # named placeholders, sidesteps that guesswork entirely.)
+      installations:
+        - base-url: ${NKAP_PROVIDER_MTN_CM_BASE_URL:}
+          target-environment: ${NKAP_PROVIDER_MTN_CM_TARGET_ENVIRONMENT:}
+          subscription-key: ${NKAP_PROVIDER_MTN_CM_SUBSCRIPTION_KEY:}
+          api-user: ${NKAP_PROVIDER_MTN_CM_API_USER:}
+          api-key: ${NKAP_PROVIDER_MTN_CM_API_KEY:}
+          currency: ${NKAP_PROVIDER_MTN_CM_CURRENCY:XAF}
+          country: ${NKAP_PROVIDER_MTN_CM_COUNTRY:cm}
+          request-timeout: ${NKAP_PROVIDER_MTN_CM_REQUEST_TIMEOUT:PT20S}
+          disbursement:
+            subscription-key: ${NKAP_PROVIDER_MTN_CM_DISBURSEMENT_SUBSCRIPTION_KEY:}
+            api-user: ${NKAP_PROVIDER_MTN_CM_DISBURSEMENT_API_USER:}
+            api-key: ${NKAP_PROVIDER_MTN_CM_DISBURSEMENT_API_KEY:}
+        - base-url: ${NKAP_PROVIDER_MTN_GH_BASE_URL:}
+          target-environment: ${NKAP_PROVIDER_MTN_GH_TARGET_ENVIRONMENT:}
+          subscription-key: ${NKAP_PROVIDER_MTN_GH_SUBSCRIPTION_KEY:}
+          api-user: ${NKAP_PROVIDER_MTN_GH_API_USER:}
+          api-key: ${NKAP_PROVIDER_MTN_GH_API_KEY:}
+          currency: ${NKAP_PROVIDER_MTN_GH_CURRENCY:GHS}
+          country: ${NKAP_PROVIDER_MTN_GH_COUNTRY:}

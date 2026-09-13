@@ -44,26 +44,32 @@ import java.util.Set;
  */
 public final class MtnAdapter implements ProviderAdapter {
 
-    private static final ProviderId ID = ProviderId.of("mtn");
-
     private final MtnCollectionsAdapter collections;
     /** {@code null} when the deployment has not configured the Disbursements product. */
     private final MtnDisbursementsAdapter disbursements;
 
     /**
-     * @param disbursements the Disbursements adapter, or {@code null} when
-     *                      {@code nkap.provider.mtn.disbursement.*} is unset — then
+     * @param disbursements the Disbursements adapter, or {@code null} when this
+     *                      installation's {@code disbursement.*} block is unset — then
      *                      {@link #capabilities()} does not advertise {@code DISBURSE} and a
      *                      {@code DISBURSE} call fails with a clear message.
+     * @throws IllegalArgumentException if {@code disbursements} is registered under a
+     *                                  different {@link ProviderId} than {@code collections}
+     *                                  — one MTN installation cannot be two ids
      */
     public MtnAdapter(MtnCollectionsAdapter collections, MtnDisbursementsAdapter disbursements) {
         this.collections = Objects.requireNonNull(collections, "collections");
         this.disbursements = disbursements;
+        if (disbursements != null && !disbursements.id().equals(collections.id())) {
+            throw new IllegalArgumentException("collections is registered as " + collections.id()
+                    + " but disbursements is " + disbursements.id() + " -- one MTN installation, one id");
+        }
     }
 
+    /** Takes its id from {@link #collections}, never its own field — see the constructor check. */
     @Override
     public ProviderId id() {
-        return ID;
+        return collections.id();
     }
 
     /**
@@ -130,7 +136,7 @@ public final class MtnAdapter implements ProviderAdapter {
             case DISBURSE -> {
                 if (disbursements == null) {
                     throw new IllegalStateException(
-                            "MTN disbursements is not configured; set nkap.provider.mtn.disbursement.subscription-key, "
+                            "MTN disbursements is not configured for this installation; set its disbursement.subscription-key, "
                                     + ".api-user and .api-key");
                 }
                 yield disbursements;

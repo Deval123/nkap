@@ -51,18 +51,19 @@ class DisbursementApiIT {
         registry.add("spring.datasource.username", db::username);
         registry.add("spring.datasource.password", db::password);
 
-        registry.add("nkap.provider.mtn.base-url", SIMULATOR::baseUri);
-        registry.add("nkap.provider.mtn.target-environment", () -> "sandbox");
-        registry.add("nkap.provider.mtn.subscription-key", () -> "collection-sub-key");
-        registry.add("nkap.provider.mtn.api-user", () -> "collection-user");
-        registry.add("nkap.provider.mtn.api-key", () -> "collection-key");
-        registry.add("nkap.provider.mtn.currency", () -> "EUR");
-        registry.add("nkap.provider.mtn.country", () -> "sandbox");
-        registry.add("nkap.provider.mtn.request-timeout", () -> "PT2S");
+        registry.add("nkap.provider.mtn.installations[0].base-url", SIMULATOR::baseUri);
+        registry.add("nkap.provider.mtn.installations[0].target-environment", () -> "sandbox");
+        registry.add("nkap.provider.mtn.installations[0].subscription-key", () -> "collection-sub-key");
+        registry.add("nkap.provider.mtn.installations[0].api-user", () -> "collection-user");
+        registry.add("nkap.provider.mtn.installations[0].api-key", () -> "collection-key");
+        registry.add("nkap.provider.mtn.installations[0].currency", () -> "EUR");
+        registry.add("nkap.provider.mtn.installations[0].country", () -> "sandbox");
+        registry.add("nkap.provider.mtn.installations[0].request-timeout", () -> "PT2S");
         // The Disbursements product's own credentials — the thing MTN makes different.
-        registry.add("nkap.provider.mtn.disbursement.subscription-key", () -> "disbursement-sub-key");
-        registry.add("nkap.provider.mtn.disbursement.api-user", () -> "disbursement-user");
-        registry.add("nkap.provider.mtn.disbursement.api-key", () -> "disbursement-key");
+        registry.add("nkap.provider.mtn.installations[0].disbursement.subscription-key", () -> "disbursement-sub-key");
+        registry.add("nkap.provider.mtn.installations[0].disbursement.api-user", () -> "disbursement-user");
+        registry.add("nkap.provider.mtn.installations[0].disbursement.api-key", () -> "disbursement-key");
+        registry.add("nkap.provider.default", () -> "mtn-sandbox");
 
         // Reconciler on, but only when a test asks for a pass.
         registry.add("nkap.reconciler.enabled", () -> "true");
@@ -164,7 +165,7 @@ class DisbursementApiIT {
         String reference = field(postDisbursement(9000), "reference");
 
         // The callback endpoint takes no credential; it triggers a confirming query.
-        ResponseEntity<String> callbackAnswer = http.postForEntity("/callbacks/mtn",
+        ResponseEntity<String> callbackAnswer = http.postForEntity("/callbacks/mtn-sandbox",
                 new HttpEntity<>("{\"referenceId\":\"" + reference + "\",\"status\":\"SUCCESSFUL\"}", jsonHeaders(null)),
                 String.class);
         assertThat(callbackAnswer.getStatusCode().value()).isEqualTo(202);
@@ -183,7 +184,7 @@ class DisbursementApiIT {
 
     private static void assertMirrorPostings(LedgerEntry entry) {
         assertThat(entry.postings()).hasSize(2);
-        assertThat(signed(entry, AccountId.providerFloat("mtn", Currency.EUR)))
+        assertThat(signed(entry, AccountId.providerFloat("mtn-sandbox", Currency.EUR)))
                 .as("the float goes down — money left it").isNegative();
         assertThat(signed(entry, AccountId.merchantPayable("merchant-1", Currency.EUR)))
                 .as("we owe the merchant less").isPositive();
@@ -198,7 +199,7 @@ class DisbursementApiIT {
 
     private ResponseEntity<String> postDisbursement(long amount) {
         String body = """
-            {"operation":"DISBURSE","amount":%d,"currency":"EUR",
+            {"operation":"DISBURSE","amount":%d,"currency":"EUR","country":"sandbox",
              "counterpartyMsisdn":"46733123453","payerMessage":"payout","payeeNote":"payout"}"""
                 .formatted(amount);
         HttpHeaders headers = jsonHeaders(apiKey);

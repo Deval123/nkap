@@ -35,8 +35,19 @@ final class EmbeddedSimulator implements AutoCloseable {
         // whose classpath now carries spring-boot-starter-jdbc, Flyway and the PostgreSQL
         // driver — enough for their auto-configuration to switch on and try to connect.
         // Turn it off explicitly for this process.
+        //
+        // Same classpath-contamination reasoning for the management port: this JVM's
+        // application.yml (the server's own) fixes it at 9464, and that value leaks into
+        // this embedded SimulatorApplication the same way the datasource beans would.
+        // Harmless with one instance running at a time, since it is released before the
+        // next test class's context needs it — but a second EmbeddedSimulator alive at
+        // once (issue #82, MultiCountryPaymentApiIT) collides with the first on that same
+        // fixed port, and the loser's failed startup means its @AfterAll never runs to
+        // release the winner's hold on it either, wedging every later test in the same
+        // JVM. The simulator needs no actuator endpoint in a test at all; disable it.
         this.context = app.run(
                 "--server.port=0",
+                "--management.server.port=-1",
                 "--server.shutdown=immediate",
                 "--spring.lifecycle.timeout-per-shutdown-phase=3s",
                 "--spring.autoconfigure.exclude="

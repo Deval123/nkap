@@ -40,14 +40,15 @@ class MetricsSurfaceIT extends PostgresSpringBootIT {
 
     @DynamicPropertySource
     static void mtnPointsAtTheSimulator(DynamicPropertyRegistry registry) {
-        registry.add("nkap.provider.mtn.base-url", SIMULATOR::baseUri);
-        registry.add("nkap.provider.mtn.target-environment", () -> "sandbox");
-        registry.add("nkap.provider.mtn.subscription-key", () -> SUBSCRIPTION_KEY);
-        registry.add("nkap.provider.mtn.api-user", () -> API_USER);
-        registry.add("nkap.provider.mtn.api-key", () -> API_KEY);
-        registry.add("nkap.provider.mtn.currency", () -> "EUR");
-        registry.add("nkap.provider.mtn.country", () -> "sandbox");
-        registry.add("nkap.provider.mtn.request-timeout", () -> "PT2S");
+        registry.add("nkap.provider.mtn.installations[0].base-url", SIMULATOR::baseUri);
+        registry.add("nkap.provider.mtn.installations[0].target-environment", () -> "sandbox");
+        registry.add("nkap.provider.mtn.installations[0].subscription-key", () -> SUBSCRIPTION_KEY);
+        registry.add("nkap.provider.mtn.installations[0].api-user", () -> API_USER);
+        registry.add("nkap.provider.mtn.installations[0].api-key", () -> API_KEY);
+        registry.add("nkap.provider.mtn.installations[0].currency", () -> "EUR");
+        registry.add("nkap.provider.mtn.installations[0].country", () -> "sandbox");
+        registry.add("nkap.provider.mtn.installations[0].request-timeout", () -> "PT2S");
+        registry.add("nkap.provider.default", () -> "mtn-sandbox");
     }
 
     @AfterAll

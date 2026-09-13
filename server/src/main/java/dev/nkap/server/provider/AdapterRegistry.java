@@ -4,6 +4,7 @@ import dev.nkap.core.money.Currency;
 import dev.nkap.provider.ProviderAdapter;
 import dev.nkap.provider.ProviderId;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * Resolves a {@link ProviderAdapter} by its {@link ProviderId}, and answers what the
@@ -30,4 +31,12 @@ public interface AdapterRegistry {
      * idempotency claim exists.
      */
     Optional<Currency> settlementCurrency(ProviderId id);
+
+    /**
+     * Every provider id this deployment has an adapter for. For a caller who named one that
+     * is not configured — a request routing by country (issue #82) is the first place that
+     * can be a client mistake rather than a server misconfiguration, and the answer should
+     * say what is actually configured.
+     */
+    Set<ProviderId> configuredProviders();
 }

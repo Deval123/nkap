@@ -19,7 +19,6 @@ import dev.nkap.server.payment.PaymentService;
 import dev.nkap.server.provider.AdapterRegistry;
 import java.util.Locale;
 import java.util.Map;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -48,22 +47,27 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/payments")
 class PaymentController {
 
+    /**
+     * Every configured MTN installation is registered as {@code "mtn-" + country} (issue
+     * #82, {@code MtnConfiguration}) — this is the other half of that convention, and the
+     * only place it is written down. A second operator would need a real routing rule here
+     * instead of a string; for one operator, a prefix is the boring, honest choice.
+     */
+    private static final String COUNTRY_PROVIDER_PREFIX = "mtn-";
+
     private final PaymentService payments;
     private final PaymentRepository repository;
     private final IdempotencyStore idempotency;
     private final AdapterRegistry adapters;
     private final ObjectMapper json;
-    private final ProviderId defaultProvider;
 
     PaymentController(PaymentService payments, PaymentRepository repository, IdempotencyStore idempotency,
-                      AdapterRegistry adapters, ObjectMapper json,
-                      @Value("${nkap.provider.default}") String defaultProvider) {
+                      AdapterRegistry adapters, ObjectMapper json) {
         this.payments = payments;
         this.repository = repository;
         this.idempotency = idempotency;
         this.adapters = adapters;
         this.json = json;
-        this.defaultProvider = ProviderId.of(defaultProvider);
     }
 
     @PostMapping
@@ -81,7 +85,8 @@ class PaymentController {
         // Validate before touching the idempotency store: a request that cannot be served
         // must not leave a claim behind that a retry would then collide with.
         PaymentIntent intent = toIntent(request);
-        rejectUnservedCurrency(intent);
+        ProviderId provider = resolveProvider(request);
+        rejectUnservedCurrency(provider, intent);
         // The merchant is the one the API key identifies, never a body field. This is what
         // makes the (merchant, key) scope of the idempotency store an identity the gateway
         // established rather than one the caller asserted — the hole this slice closes.
@@ -89,7 +94,7 @@ class PaymentController {
         RequestFingerprint fingerprint = RequestFingerprint.of(canonical(request));
 
         return switch (idempotency.begin(key, fingerprint)) {
-            case IdempotentOutcome.Proceed ignored -> proceed(key, intent);
+            case IdempotentOutcome.Proceed ignored -> proceed(key, provider, intent);
             case IdempotentOutcome.Replay replay -> replay(replay);
             case IdempotentOutcome.Conflict ignored -> throw new ApiException(HttpStatus.CONFLICT,
                     ProblemTypes.IDEMPOTENCY_KEY_REUSE, "Idempotency-Key reused with a different body",
@@ -101,10 +106,10 @@ class PaymentController {
         };
     }
 
-    private ResponseEntity<String> proceed(IdempotencyKey key, PaymentIntent intent) {
+    private ResponseEntity<String> proceed(IdempotencyKey key, ProviderId provider, PaymentIntent intent) {
         Payment payment;
         try {
-            payment = payments.createAndSubmit(defaultProvider, key.merchantId(), intent);
+            payment = payments.createAndSubmit(provider, key.merchantId(), intent);
         } catch (RuntimeException failedBeforePersist) {
             // createAndSubmit only throws before it has persisted anything — its contract.
             // Once the payment is saved a submit-time problem is recorded on it, not
@@ -149,19 +154,43 @@ class PaymentController {
     }
 
     /**
-     * Turns away a currency the addressed deployment does not settle, before any payment or
-     * idempotency claim exists. This is not a failed payment: no operator was asked, and
-     * the caller simply routed to an installation that does not serve that currency.
+     * The installation named by {@code country} (issue #82) — the request names its
+     * country, explicit rather than guessed from the MSISDN, the currency or the merchant
+     * (all rejected in the pull request: numbers are ported, a currency can span several
+     * countries, and a merchant can operate in more than one). Resolved and checked before
+     * any payment or idempotency claim exists, the same as the currency check below.
      */
-    private void rejectUnservedCurrency(PaymentIntent intent) {
+    private ProviderId resolveProvider(CreatePaymentRequest request) {
+        requireText(request.country(), "country");
+        ProviderId provider;
+        try {
+            provider = ProviderId.of(COUNTRY_PROVIDER_PREFIX + request.country().strip().toLowerCase(Locale.ROOT));
+        } catch (IllegalArgumentException e) {
+            throw invalid("country '" + request.country() + "' is not a valid country code");
+        }
+        if (adapters.find(provider).isEmpty()) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, ProblemTypes.UNCONFIGURED_COUNTRY,
+                    "This country is not configured",
+                    "No installation is configured for country '" + request.country() + "'. This deployment "
+                            + "configures: " + adapters.configuredProviders() + ".");
+        }
+        return provider;
+    }
+
+    /**
+     * Turns away a currency the addressed installation does not settle, before any payment
+     * or idempotency claim exists. This is not a failed payment: no operator was asked, and
+     * the caller simply named a country that does not serve that currency.
+     */
+    private void rejectUnservedCurrency(ProviderId provider, PaymentIntent intent) {
         Currency requested = intent.amount().currency();
-        adapters.settlementCurrency(defaultProvider)
+        adapters.settlementCurrency(provider)
                 .filter(settled -> settled != requested)
                 .ifPresent(settled -> {
                     throw new ApiException(HttpStatus.BAD_REQUEST, ProblemTypes.UNSERVED_CURRENCY,
                             "This deployment does not serve that currency",
-                            "Payments here settle in " + settled + "; this request was for " + requested
-                                    + ". No payment was created.");
+                            "Payments for " + provider + " settle in " + settled + "; this request was for "
+                                    + requested + ". No payment was created.");
                 });
     }
 

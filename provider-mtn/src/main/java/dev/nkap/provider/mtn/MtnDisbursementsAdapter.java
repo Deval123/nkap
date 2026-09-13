@@ -53,11 +53,12 @@ public final class MtnDisbursementsAdapter implements ProviderAdapter {
     static final String TOKEN_PATH = "/disbursement/token/";
     static final String TRANSFER_PATH = "/disbursement/v1_0/transfer";
 
-    private static final ProviderId ID = ProviderId.of("mtn");
+    private static final ProviderId DEFAULT_ID = ProviderId.of("mtn");
     private static final Duration DEFAULT_REQUEST_TIMEOUT = Duration.ofSeconds(20);
     private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(5);
     private static final int BRIEF_BODY = 200;
 
+    private final ProviderId id;
     private final MtnProfile profile;
     private final Duration requestTimeout;
     private final HttpClient http;
@@ -69,6 +70,15 @@ public final class MtnDisbursementsAdapter implements ProviderAdapter {
     }
 
     public MtnDisbursementsAdapter(MtnProfile profile, Duration requestTimeout) {
+        this(DEFAULT_ID, profile, requestTimeout);
+    }
+
+    /**
+     * @param id the {@link ProviderId} this installation is registered under, matching
+     *           {@link MtnCollectionsAdapter}'s own parameter — one MTN installation, one id.
+     */
+    public MtnDisbursementsAdapter(ProviderId id, MtnProfile profile, Duration requestTimeout) {
+        this.id = Objects.requireNonNull(id, "id");
         this.profile = Objects.requireNonNull(profile, "profile");
         this.requestTimeout = Objects.requireNonNull(requestTimeout, "requestTimeout");
         this.http = HttpClient.newBuilder().connectTimeout(CONNECT_TIMEOUT).build();
@@ -77,7 +87,7 @@ public final class MtnDisbursementsAdapter implements ProviderAdapter {
 
     @Override
     public ProviderId id() {
-        return ID;
+        return id;
     }
 
     @Override

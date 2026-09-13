@@ -47,6 +47,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.stream.Collectors;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -79,6 +80,14 @@ class ReconcilerIT {
     private static PostgresPaymentRepository payments;
     private static PostgresLedger ledger;
 
+    // Every IT test shares one PostgreSQL instance for the life of the JVM. A payment left
+    // UNKNOWN or SUBMITTED with reconcile_due_at in the past stays claimable by anyone's
+    // Reconciler.runOnce() forever, not only this class's own (mocked) reconciler — a
+    // different test with a real ConfiguredAdapterRegistry has no adapter for provider
+    // "mtn" and would fail outright on one of these. Tracked here and deleted afterward,
+    // the same fix applied to DeadLetteredEventsApiIT's outbox fixture for the same reason.
+    private final List<ReferenceId> pendingReferences = new ArrayList<>();
+
     @BeforeAll
     static void connect() {
         PostgresDatabase db = PostgresDatabase.shared();
@@ -86,6 +95,19 @@ class ReconcilerIT {
         txManager = db.transactionManager();
         payments = new PostgresPaymentRepository(jdbc, new ObjectMapper());
         ledger = new PostgresLedger(jdbc, txManager);
+    }
+
+    @AfterEach
+    void neutralizePendingPayments() {
+        // payment_transition is append-only (CLAUDE.md's rule 1) — no DELETE, and the FK
+        // from it to payment forbids deleting the payment row too. Raw-set the row to a
+        // terminal state instead: a_terminal_payment_is_never_claimed (below) already
+        // establishes that the reconciler's claim query respects state above everything
+        // else on the row, so this alone is enough to stop it being claimed again.
+        for (ReferenceId reference : pendingReferences) {
+            jdbc.update("UPDATE payment SET state = 'FAILED' WHERE reference = ?", reference.value());
+        }
+        pendingReferences.clear();
     }
 
     // === the reconciler chases every unresolved payment, not only UNKNOWN ==========
@@ -632,6 +654,7 @@ class ReconcilerIT {
         // Make it unambiguously due, whatever the clocks are doing.
         jdbc.update("UPDATE payment SET reconcile_due_at = now() - interval '1 hour' WHERE reference = ?",
                 reference.value());
+        pendingReferences.add(reference);
         return reference;
     }
 
@@ -643,6 +666,7 @@ class ReconcilerIT {
         payments.save(payment);
         jdbc.update("UPDATE payment SET reconcile_due_at = now() - interval '1 hour' WHERE reference = ?",
                 reference.value());
+        pendingReferences.add(reference);
         return reference;
     }
 

@@ -10,6 +10,13 @@ import java.math.BigInteger;
  * body — that field scoped idempotency, named the ledger account and gated every read, on
  * an identity nobody checked. It is gone on purpose.
  *
+ * <p>{@code country} names which installation this payment routes to (issue #82) —
+ * {@code "cm"} for the {@code mtn-cm} installation, and so on; see
+ * {@code docs/providers/mtn.md} for what is actually configured. Explicit and boring on
+ * purpose: the alternatives (guessing from the MSISDN's prefix, from the currency, from the
+ * merchant) were all rejected in the pull request that added this field, each for a way it
+ * could quietly charge the wrong installation.
+ *
  * <p>{@code amount} is an integer count of the currency's minor units — {@code 5000} XAF
  * is 5000 francs, {@code 5000} EUR is 50.00. It binds as {@link BigInteger} and Jackson is
  * configured to refuse a fractional number, so "50.5" is a 400 before anything is
@@ -23,6 +30,7 @@ public record CreatePaymentRequest(
         String operation,
         BigInteger amount,
         String currency,
+        String country,
         String counterpartyMsisdn,
         String payerMessage,
         String payeeNote) {

@@ -45,13 +45,14 @@ class ActuatorSurfaceIT extends PostgresSpringBootIT {
     static void mtnConfigThisTestNeverCalls(DynamicPropertyRegistry registry) {
         // This test never reaches MTN; any non-null config satisfies the context (same
         // pattern as StatementApiIT).
-        registry.add("nkap.provider.mtn.base-url", () -> "http://localhost:1");
-        registry.add("nkap.provider.mtn.target-environment", () -> "sandbox");
-        registry.add("nkap.provider.mtn.subscription-key", () -> "unused");
-        registry.add("nkap.provider.mtn.api-user", () -> "unused");
-        registry.add("nkap.provider.mtn.api-key", () -> "unused");
-        registry.add("nkap.provider.mtn.currency", () -> "EUR");
-        registry.add("nkap.provider.mtn.country", () -> "sandbox");
+        registry.add("nkap.provider.mtn.installations[0].base-url", () -> "http://localhost:1");
+        registry.add("nkap.provider.mtn.installations[0].target-environment", () -> "sandbox");
+        registry.add("nkap.provider.mtn.installations[0].subscription-key", () -> "unused");
+        registry.add("nkap.provider.mtn.installations[0].api-user", () -> "unused");
+        registry.add("nkap.provider.mtn.installations[0].api-key", () -> "unused");
+        registry.add("nkap.provider.mtn.installations[0].currency", () -> "EUR");
+        registry.add("nkap.provider.mtn.installations[0].country", () -> "sandbox");
+        registry.add("nkap.provider.default", () -> "mtn-sandbox");
     }
 
     /** The API port — random per test run, resolved by TestRestTemplate the same way every other *ApiIT uses it. */

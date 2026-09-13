@@ -30,14 +30,15 @@ class PaymentApiIT extends PostgresSpringBootIT {
 
     @DynamicPropertySource
     static void mtnPointsAtTheSimulator(DynamicPropertyRegistry registry) {
-        registry.add("nkap.provider.mtn.base-url", SIMULATOR::baseUri);
-        registry.add("nkap.provider.mtn.target-environment", () -> "sandbox");
-        registry.add("nkap.provider.mtn.subscription-key", () -> "test-subscription-key");
-        registry.add("nkap.provider.mtn.api-user", () -> "test-api-user");
-        registry.add("nkap.provider.mtn.api-key", () -> "test-api-key");
-        registry.add("nkap.provider.mtn.currency", () -> "EUR");
-        registry.add("nkap.provider.mtn.country", () -> "sandbox");
-        registry.add("nkap.provider.mtn.request-timeout", () -> "PT2S");
+        registry.add("nkap.provider.mtn.installations[0].base-url", SIMULATOR::baseUri);
+        registry.add("nkap.provider.mtn.installations[0].target-environment", () -> "sandbox");
+        registry.add("nkap.provider.mtn.installations[0].subscription-key", () -> "test-subscription-key");
+        registry.add("nkap.provider.mtn.installations[0].api-user", () -> "test-api-user");
+        registry.add("nkap.provider.mtn.installations[0].api-key", () -> "test-api-key");
+        registry.add("nkap.provider.mtn.installations[0].currency", () -> "EUR");
+        registry.add("nkap.provider.mtn.installations[0].country", () -> "sandbox");
+        registry.add("nkap.provider.mtn.installations[0].request-timeout", () -> "PT2S");
+        registry.add("nkap.provider.default", () -> "mtn-sandbox");
     }
 
     @AfterAll
@@ -64,7 +65,7 @@ class PaymentApiIT extends PostgresSpringBootIT {
 
     private static String body(long amountMinorUnits) {
         return """
-            {"operation":"COLLECT","amount":%d,"currency":"EUR",
+            {"operation":"COLLECT","amount":%d,"currency":"EUR","country":"sandbox",
              "counterpartyMsisdn":"46733123453","payerMessage":"rent","payeeNote":"march"}"""
                 .formatted(amountMinorUnits);
     }
@@ -180,7 +181,7 @@ class PaymentApiIT extends PostgresSpringBootIT {
         assertThat(read.getStatusCode().value()).isEqualTo(200);
         JsonNode payment = parse(read.getBody());
         assertThat(payment.get("state").asText()).isEqualTo("SUBMITTED");
-        assertThat(payment.get("provider").asText()).isEqualTo("mtn");
+        assertThat(payment.get("provider").asText()).isEqualTo("mtn-sandbox");
         assertThat(payment.get("amountMinorUnits").asLong()).isEqualTo(5000);
         assertThat(payment.get("currency").asText()).isEqualTo("EUR");
         assertThat(payment.get("history")).hasSize(1);
@@ -240,5 +241,36 @@ class PaymentApiIT extends PostgresSpringBootIT {
 
         assertThat(noKey.getStatusCode().value()).isEqualTo(400);
         assertThat(parse(noKey.getBody()).get("type").asText()).endsWith("missing-idempotency-key");
+    }
+
+    @Test
+    @DisplayName("POST without a country is 400")
+    void the_country_is_required() {
+        String noCountryBody = body(5000).replace(",\"country\":\"sandbox\"", "");
+
+        ResponseEntity<String> rejected = post(UUID.randomUUID().toString(), noCountryBody);
+
+        assertThat(rejected.getStatusCode().value()).isEqualTo(400);
+        assertThat(parse(rejected.getBody()).get("type").asText()).endsWith("invalid-request");
+    }
+
+    @Test
+    @DisplayName("an unconfigured country is 400, before anything is persisted, and the message names what is configured")
+    void an_unconfigured_country_is_400_and_names_what_is_configured() {
+        String key = UUID.randomUUID().toString();
+        String bogusCountryBody = body(5000).replace("\"country\":\"sandbox\"", "\"country\":\"zz\"");
+
+        ResponseEntity<String> rejected = post(key, bogusCountryBody);
+
+        assertThat(rejected.getStatusCode().value()).isEqualTo(400);
+        JsonNode problem = parse(rejected.getBody());
+        assertThat(problem.get("type").asText()).endsWith("unconfigured-country");
+        assertThat(problem.get("detail").asText())
+                .as("this is a configuration mistake, not an attack -- say what is configured")
+                .contains("mtn-sandbox");
+
+        // No payment exists and the key was never claimed: the same key now works.
+        ResponseEntity<String> retry = post(key, body(5000));
+        assertThat(retry.getStatusCode().value()).isEqualTo(201);
     }
 }

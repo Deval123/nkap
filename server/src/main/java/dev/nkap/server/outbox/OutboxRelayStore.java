@@ -38,8 +38,27 @@ public interface OutboxRelayStore {
      */
     Optional<StoredEvent> find(UUID id);
 
+    /**
+     * The events the relay has given up retrying — {@code dead_lettered_at} set, oldest
+     * dead-letter first. Mirrors {@code PaymentRepository.findEscalated()}: stop trying, make
+     * it findable, never decide it did not matter. An event still being retried, or already
+     * delivered, is not in this list.
+     */
+    List<DeadLetteredEvent> findDeadLettered();
+
+    /**
+     * How many events are currently dead-lettered — a plain count, for a metric scraped
+     * every few seconds, rather than paying to hydrate every row's payload on each scrape.
+     */
+    long countDeadLettered();
+
     /** An event as read back, independent of the claim it was or was not part of. */
     record StoredEvent(UUID id, String merchantId, String eventType, String payload) {
+    }
+
+    /** A dead-lettered event, with the failure that finally gave up on it. */
+    record DeadLetteredEvent(
+            UUID id, String merchantId, String eventType, String payload, String lastError, Instant deadLetteredAt) {
     }
 
     /**

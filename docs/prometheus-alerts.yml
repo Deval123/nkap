@@ -1,6 +1,6 @@
-# Two alerting rules, because thirty metrics and no guidance is a list, not an operations
+# Three alerting rules, because thirty metrics and no guidance is a list, not an operations
 # handover (issue #75). Drop this file into a Prometheus server's rule_files, or paste the
-# two rules into an existing rule group — nothing here depends on how Nkap itself is scraped
+# rules into an existing rule group — nothing here depends on how Nkap itself is scraped
 # beyond the metric names, which come from GET /actuator/prometheus.
 #
 # The rest of this project's metrics — payments by state, reconciler passes, operator
@@ -50,3 +50,21 @@ groups:
             answer from the operator. The payment is not FAILED — it is still open,
             and a later callback or manual query can still resolve it — but the
             automatic retries have stopped and it needs a human to look.
+
+      # nkap_outbox_dead_lettered is computed live on every scrape (see
+      # DeadLetteredEventsMetrics), the same way the suspense balance is: a query
+      # failure reports NaN, not zero, so it cannot masquerade as a healthy, empty
+      # backlog. No "for:" here — unlike a retry that might still resolve itself, a
+      # dead-lettered event stays dead-lettered until a human replays it, so there is
+      # nothing gained by waiting before paging.
+      - alert: NkapOutboxDeadLettered
+        expr: nkap_outbox_dead_lettered > 0
+        labels:
+          severity: page
+        annotations:
+          summary: "Nkap has a dead-lettered webhook event"
+          description: >-
+            The outbox relay gave up retrying at least one event: a merchant was
+            never told what happened to a payment. List them with GET
+            /webhooks/events/dead-lettered (admin key), and once whatever broke
+            delivery is fixed, replay with POST /webhooks/events/{eventId}/replay.

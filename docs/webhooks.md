@@ -109,9 +109,12 @@ rotating are the same operation.
 A failed delivery is retried with a growing delay (`nkap.webhooks.backoff-base`, doubling,
 capped at `nkap.webhooks.backoff-max`). After `nkap.webhooks.max-attempts` attempts, the
 event is **dead-lettered**: delivery stops, but the event is never deleted — it stays
-findable, and `POST /webhooks/events/{eventId}/replay` (an admin credential; see
-`ProblemTypes.ADMIN_REQUIRED`) resends it by hand once whatever was wrong on the receiving
-end is fixed.
+findable. `GET /webhooks/events/dead-lettered` (an admin credential; see
+`ProblemTypes.ADMIN_REQUIRED`) lists them, oldest first, which is how a dead-lettered event
+is discovered instead of found by already knowing its id; `nkap_outbox_dead_lettered`
+(`docs/prometheus-alerts.yml`) is how it gets noticed in the first place. `POST
+/webhooks/events/{eventId}/replay` (same credential) resends one by hand once whatever was
+wrong on the receiving end is fixed.
 
 ## Not in this slice
 

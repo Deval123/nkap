@@ -47,6 +47,16 @@ public final class PostgresOutboxRelayStore implements OutboxRelayStore {
     private static final String FIND_BY_ID =
             "SELECT id, merchant_id, event_type, payload FROM outbox_event WHERE id = ?";
 
+    private static final String FIND_DEAD_LETTERED = """
+            SELECT id, merchant_id, event_type, payload, last_error, dead_lettered_at
+              FROM outbox_event
+             WHERE dead_lettered_at IS NOT NULL
+             ORDER BY dead_lettered_at
+            """;
+
+    private static final String COUNT_DEAD_LETTERED =
+            "SELECT count(*) FROM outbox_event WHERE dead_lettered_at IS NOT NULL";
+
     private final JdbcTemplate jdbc;
     private final TransactionTemplate tx;
     private final OutboxRelayPolicy policy;
@@ -94,11 +104,30 @@ public final class PostgresOutboxRelayStore implements OutboxRelayStore {
         return found.stream().findFirst();
     }
 
+    @Override
+    public List<DeadLetteredEvent> findDeadLettered() {
+        return jdbc.query(FIND_DEAD_LETTERED, DEAD_LETTERED_EVENT_MAPPER);
+    }
+
+    @Override
+    public long countDeadLettered() {
+        Long count = jdbc.queryForObject(COUNT_DEAD_LETTERED, Long.class);
+        return count == null ? 0 : count;
+    }
+
     private static final RowMapper<StoredEvent> STORED_EVENT_MAPPER = (ResultSet rs, int rowNum) -> new StoredEvent(
             rs.getObject("id", UUID.class),
             rs.getString("merchant_id"),
             rs.getString("event_type"),
             rs.getString("payload"));
+
+    private static final RowMapper<DeadLetteredEvent> DEAD_LETTERED_EVENT_MAPPER = (ResultSet rs, int rowNum) -> new DeadLetteredEvent(
+            rs.getObject("id", UUID.class),
+            rs.getString("merchant_id"),
+            rs.getString("event_type"),
+            rs.getString("payload"),
+            rs.getString("last_error"),
+            rs.getObject("dead_lettered_at", OffsetDateTime.class).toInstant());
 
     private record Due(UUID id, String merchantId, String eventType, String payload, int attempts) {
     }

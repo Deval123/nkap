@@ -313,6 +313,105 @@ class SettlementServiceTest {
         });
     }
 
+    // --- refunds (issue #84) --------------------------------------------------------------
+
+    @Test
+    @DisplayName("a settled refund posts its own refund:<ref> entry mirroring the collection, "
+            + "and the original collection's entry is still present and unmodified")
+    void a_settled_refund_posts_its_own_entry_and_leaves_the_original_alone() throws Exception {
+        Payment original = persisted(PaymentState.SUBMITTED);
+        when(adapter.query(any(), any())).thenReturn(status(PaymentState.SUCCEEDED, "SUCCESSFUL"));
+        settlement.confirm(MTN, original.reference(), PaymentTransition.Cause.CALLBACK);
+        LedgerEntry collectionEntry = ledger.entriesForReference(original.reference().toString()).get(0);
+
+        Payment refund = refundOf(original, Money.of(2000, Currency.EUR), PaymentState.SUBMITTED);
+        when(adapter.query(any(), any())).thenReturn(status(PaymentState.SUCCEEDED, "SUCCESSFUL"));
+
+        settlement.confirm(MTN, refund.reference(), PaymentTransition.Cause.CALLBACK);
+
+        assertThat(refund.state()).isEqualTo(PaymentState.SUCCEEDED);
+        assertThat(ledger.entriesForReference(refund.reference().toString())).singleElement().satisfies(entry -> {
+            assertThat(entry.id()).isEqualTo("refund:" + refund.reference());
+            assertThat(entry.description()).contains(original.reference().toString());
+            // The mirror of the collection: the float goes down, the merchant is owed less --
+            // the same shape settle() already writes for any disbursement.
+            assertThat(signedAmount(entry, AccountId.providerFloat("mtn", Currency.EUR))).isEqualTo(-2000L);
+            assertThat(signedAmount(entry, AccountId.merchantPayable("merchant-1", Currency.EUR))).isEqualTo(2000L);
+        });
+        assertThat(ledger.entriesForReference(original.reference().toString()))
+                .as("the original entry is still present and unmodified -- the point of the whole design")
+                .containsExactly(collectionEntry);
+        assertThat(ledger.entries()).as("nothing here is a reversal").noneMatch(e -> e.description().contains("Reversal"));
+    }
+
+    @Test
+    @DisplayName("a refund the operator refuses releases the amount it reserved on the original")
+    void a_refused_refund_releases_its_reservation() throws Exception {
+        Payment original = persisted(PaymentState.SUBMITTED);
+        when(adapter.query(any(), any())).thenReturn(status(PaymentState.SUCCEEDED, "SUCCESSFUL"));
+        settlement.confirm(MTN, original.reference(), PaymentTransition.Cause.CALLBACK);
+
+        Payment refund = refundOf(original, Money.of(2000, Currency.EUR), PaymentState.SUBMITTED);
+        assertThat(original.refundedMinor()).isEqualTo(2000L);
+        when(adapter.query(any(), any())).thenReturn(status(PaymentState.FAILED, "NOT_ALLOWED"));
+
+        settlement.confirm(MTN, refund.reference(), PaymentTransition.Cause.CALLBACK);
+
+        assertThat(refund.state()).isEqualTo(PaymentState.FAILED);
+        assertThat(original.refundedMinor()).as("FAILED releases what the refund reserved").isZero();
+        assertThat(ledger.entriesForReference(refund.reference().toString())).isEmpty();
+    }
+
+    @Test
+    @DisplayName("a refund the payer never approves in time expires and releases its reservation")
+    void an_expired_refund_releases_its_reservation() throws Exception {
+        Payment original = persisted(PaymentState.SUBMITTED);
+        when(adapter.query(any(), any())).thenReturn(status(PaymentState.SUCCEEDED, "SUCCESSFUL"));
+        settlement.confirm(MTN, original.reference(), PaymentTransition.Cause.CALLBACK);
+
+        Payment refund = refundOf(original, Money.of(2000, Currency.EUR), PaymentState.SUBMITTED);
+        when(adapter.query(any(), any())).thenReturn(status(PaymentState.EXPIRED, "EXPIRED"));
+
+        settlement.confirm(MTN, refund.reference(), PaymentTransition.Cause.RECONCILER);
+
+        assertThat(refund.state()).isEqualTo(PaymentState.EXPIRED);
+        assertThat(original.refundedMinor()).as("EXPIRED releases what the refund reserved").isZero();
+    }
+
+    @Test
+    @DisplayName("a refund still in flight (UNKNOWN) keeps its reservation")
+    void an_unresolved_refund_keeps_its_reservation() throws Exception {
+        Payment original = persisted(PaymentState.SUBMITTED);
+        when(adapter.query(any(), any())).thenReturn(status(PaymentState.SUCCEEDED, "SUCCESSFUL"));
+        settlement.confirm(MTN, original.reference(), PaymentTransition.Cause.CALLBACK);
+
+        Payment refund = refundOf(original, Money.of(2000, Currency.EUR), PaymentState.SUBMITTED);
+        when(adapter.query(any(), any())).thenThrow(new ProviderUnavailableException("read timed out"));
+
+        settlement.confirm(MTN, refund.reference(), PaymentTransition.Cause.RECONCILER);
+
+        assertThat(refund.state()).isEqualTo(PaymentState.SUBMITTED);
+        assertThat(original.refundedMinor())
+                .as("no answer changes nothing, including the reservation")
+                .isEqualTo(2000L);
+    }
+
+    /** A refund of {@code original}, reserved and persisted the way {@code RefundService} does it. */
+    private Payment refundOf(Payment original, Money amount, PaymentState state) {
+        original.reserveRefund(amount);
+        payments.save(original);
+        PaymentIntent refundIntent = new PaymentIntent(Capability.Operation.DISBURSE, amount,
+                original.intent().counterpartyMsisdn(), "refund", "refund of " + original.reference(), Map.of());
+        Payment refund = Payment.createRefund(ReferenceId.newReference(), MTN, "merchant-1", refundIntent, original.reference());
+        if (state == PaymentState.SUBMITTED) {
+            refund.applyTransition(PaymentState.SUBMITTED, PaymentTransition.Cause.SUBMIT_RESPONSE, "", "", "");
+        } else if (state != PaymentState.CREATED) {
+            throw new IllegalArgumentException("helper only makes CREATED or SUBMITTED refunds");
+        }
+        payments.save(refund);
+        return refund;
+    }
+
     private static long signedAmount(LedgerEntry entry, AccountId account) {
         return entry.postings().stream()
                 .filter(p -> p.account().equals(account))

@@ -6,10 +6,16 @@ import java.time.Instant;
 import java.util.List;
 
 /**
- * What {@code POST /payments} and {@code GET /payments/{reference}} return.
+ * What {@code POST /payments}, {@code POST /payments/{reference}/refunds} and
+ * {@code GET /payments/{reference}} return — a refund is a payment, polled the same way
+ * (issue #84).
  *
  * <p>{@code detail} is empty unless the state is {@code UNKNOWN}, where it tells the caller
  * the outcome is not settled and must be polled.
+ *
+ * <p>{@code refundOf} is the original collection's reference for a refund, else {@code ""}
+ * — how a caller tells "your refund went through" apart from "your disbursement went
+ * through" without any other signal.
  */
 public record PaymentResponse(
         String reference,
@@ -25,6 +31,7 @@ public record PaymentResponse(
         Instant createdAt,
         Instant updatedAt,
         String detail,
+        String refundOf,
         List<Transition> history) {
 
     public record Transition(
@@ -54,6 +61,7 @@ public record PaymentResponse(
                 payment.createdAt(),
                 payment.updatedAt(),
                 detailFor(payment),
+                payment.refundOf().map(Object::toString).orElse(""),
                 history);
     }
 

@@ -45,8 +45,9 @@ public final class PostgresPaymentRepository implements PaymentRepository {
             INSERT INTO payment (reference, provider, merchant_id, operation, amount_minor, currency,
                                  counterparty_msisdn, payer_message, payee_note, provider_options,
                                  state, provider_reference, provider_transaction_id, created_at, updated_at,
-                                 reconcile_attempts, reconcile_due_at, escalated_at, unresolved_since)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                 reconcile_attempts, reconcile_due_at, escalated_at, unresolved_since,
+                                 refund_of, refunded_minor)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT (reference) DO UPDATE SET
                 state = EXCLUDED.state,
                 provider_reference = EXCLUDED.provider_reference,
@@ -55,7 +56,8 @@ public final class PostgresPaymentRepository implements PaymentRepository {
                 reconcile_attempts = EXCLUDED.reconcile_attempts,
                 reconcile_due_at = EXCLUDED.reconcile_due_at,
                 escalated_at = EXCLUDED.escalated_at,
-                unresolved_since = EXCLUDED.unresolved_since
+                unresolved_since = EXCLUDED.unresolved_since,
+                refunded_minor = EXCLUDED.refunded_minor
             """;
 
     private static final String INSERT_TRANSITION = """
@@ -96,7 +98,9 @@ public final class PostgresPaymentRepository implements PaymentRepository {
                 payment.reconcileAttempts(),
                 atUtc(payment.reconcileDueAt()),
                 atUtc(payment.escalatedAt()),
-                atUtc(payment.unresolvedSince()));
+                atUtc(payment.unresolvedSince()),
+                payment.refundOf().map(ReferenceId::value).orElse(null),
+                payment.refundedMinor());
 
         List<PaymentTransition> history = payment.history();
         for (int seq = 0; seq < history.size(); seq++) {
@@ -172,7 +176,9 @@ public final class PostgresPaymentRepository implements PaymentRepository {
                 row.reconcileAttempts,
                 row.reconcileDueAt,
                 row.escalatedAt,
-                row.unresolvedSince));
+                row.unresolvedSince,
+                row.refundOf == null ? null : new ReferenceId(row.refundOf),
+                row.refundedMinor));
     }
 
     private static OffsetDateTime atUtc(Instant instant) {
@@ -200,7 +206,8 @@ public final class PostgresPaymentRepository implements PaymentRepository {
             String counterpartyMsisdn, String payerMessage, String payeeNote, String providerOptions,
             String state, String providerReference, String providerTransactionId,
             Instant createdAt, Instant updatedAt,
-            int reconcileAttempts, Instant reconcileDueAt, Instant escalatedAt, Instant unresolvedSince) {
+            int reconcileAttempts, Instant reconcileDueAt, Instant escalatedAt, Instant unresolvedSince,
+            UUID refundOf, long refundedMinor) {
     }
 
     private static final RowMapper<Row> ROW_MAPPER = (ResultSet rs, int rowNum) -> new Row(
@@ -221,7 +228,9 @@ public final class PostgresPaymentRepository implements PaymentRepository {
             rs.getInt("reconcile_attempts"),
             instantOrNull(rs.getObject("reconcile_due_at", OffsetDateTime.class)),
             instantOrNull(rs.getObject("escalated_at", OffsetDateTime.class)),
-            instantOrNull(rs.getObject("unresolved_since", OffsetDateTime.class)));
+            instantOrNull(rs.getObject("unresolved_since", OffsetDateTime.class)),
+            (UUID) rs.getObject("refund_of"),
+            rs.getLong("refunded_minor"));
 
     private static Instant instantOrNull(OffsetDateTime value) {
         return value == null ? null : value.toInstant();

@@ -79,31 +79,43 @@ public class PaymentService {
         try (var ignored = MDC.putCloseable("reference", reference.toString())) {
             Payment created = Payment.create(reference, providerId, merchantId, intent);
             payments.save(created);
-
-            SubmitOutcome outcome = callOperator(adapter, intent, reference);
-
-            tx.executeWithoutResult(status -> {
-                Payment current = payments.findByReferenceForUpdate(reference).orElseThrow();
-                if (current.state() != PaymentState.CREATED) {
-                    // A callback confirmed this payment while the submit call was in flight.
-                    // The response is stale — the callback path already recorded the
-                    // transitions, and forcing CREATED -> SUBMITTED now would be illegal.
-                    outcome.providerReference().ifPresent(current::recordProviderReference);
-                    log.info("submit response for {} is stale: a callback already advanced it to {}",
-                            reference, current.state());
-                    payments.save(current);
-                    return;
-                }
-                applyOutcome(outcome, current, reference);
-                // Same transaction as the save() below: a Rejected outcome moves the payment
-                // straight to FAILED, and that is a terminal verdict a merchant is waiting
-                // for too, not only the ones SettlementService reaches later (issue #77).
-                notifier.notifyIfTerminal(current);
-                payments.save(current);
-            });
-
-            return payments.findByReference(reference).orElseThrow();
+            return submit(adapter, intent, reference);
         }
+    }
+
+    /**
+     * The submit-and-apply half of {@link #createAndSubmit}, for a payment already persisted
+     * in {@link PaymentState#CREATED} under {@code reference} — split out so
+     * {@code RefundService} can reuse the exact same call-the-operator-and-apply-whatever-it-
+     * says logic for a refund it persisted itself, under its own reservation on the
+     * collection being refunded, without this class needing to know refunds exist. Every
+     * guarantee {@code createAndSubmit}'s javadoc makes about what escapes and what does not
+     * applies here unchanged; the split moved no behaviour.
+     */
+    Payment submit(ProviderAdapter adapter, PaymentIntent intent, ReferenceId reference) {
+        SubmitOutcome outcome = callOperator(adapter, intent, reference);
+
+        tx.executeWithoutResult(status -> {
+            Payment current = payments.findByReferenceForUpdate(reference).orElseThrow();
+            if (current.state() != PaymentState.CREATED) {
+                // A callback confirmed this payment while the submit call was in flight.
+                // The response is stale — the callback path already recorded the
+                // transitions, and forcing CREATED -> SUBMITTED now would be illegal.
+                outcome.providerReference().ifPresent(current::recordProviderReference);
+                log.info("submit response for {} is stale: a callback already advanced it to {}",
+                        reference, current.state());
+                payments.save(current);
+                return;
+            }
+            applyOutcome(outcome, current, reference);
+            // Same transaction as the save() below: a Rejected outcome moves the payment
+            // straight to FAILED, and that is a terminal verdict a merchant is waiting
+            // for too, not only the ones SettlementService reaches later (issue #77).
+            notifier.notifyIfTerminal(current);
+            payments.save(current);
+        });
+
+        return payments.findByReference(reference).orElseThrow();
     }
 
     private SubmitOutcome callOperator(ProviderAdapter adapter, PaymentIntent intent, ReferenceId reference) {
@@ -140,9 +152,14 @@ public class PaymentService {
                 payment.applyTransition(acknowledged.state(), PaymentTransition.Cause.SUBMIT_RESPONSE,
                         "", "", acknowledged.rawResponse());
             }
-            case SubmitResult.Rejected rejected -> payment.applyTransition(PaymentState.FAILED,
-                    PaymentTransition.Cause.SUBMIT_RESPONSE,
-                    rejected.providerCode(), rejected.reason(), rejected.rawResponse());
+            case SubmitResult.Rejected rejected -> {
+                payment.applyTransition(PaymentState.FAILED, PaymentTransition.Cause.SUBMIT_RESPONSE,
+                        rejected.providerCode(), rejected.reason(), rejected.rawResponse());
+                // A no-op unless this payment is a refund (issue #84): an outright rejection
+                // of the transfer releases the amount it had reserved on the collection it
+                // refunds, since it now never will move that money.
+                RefundReservations.release(payments, payment);
+            }
         }
     }
 

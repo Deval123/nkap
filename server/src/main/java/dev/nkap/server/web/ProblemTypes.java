@@ -73,6 +73,35 @@ public final class ProblemTypes {
     /** A replay was asked for an event whose merchant has no registered webhook endpoint. */
     public static final URI NO_WEBHOOK_ENDPOINT = URI.create(BASE + "no-webhook-endpoint");
 
+    /**
+     * {@code POST /payments/{reference}/refunds} named a payment that is not a
+     * {@code COLLECT}. Sending money back to someone Nkap paid is a new collection, with a
+     * different consent story, not a refund.
+     */
+    public static final URI CANNOT_REFUND_A_DISBURSEMENT = URI.create(BASE + "cannot-refund-a-disbursement");
+
+    /**
+     * {@code POST /payments/{reference}/refunds} named a collection that is not
+     * {@code SUCCEEDED}. In particular, {@code UNKNOWN} is refused, not just {@code PENDING}
+     * or {@code FAILED}: whether the payer's money was ever taken is not known, and sending
+     * money back on that guess is a real, unrecoverable loss.
+     */
+    public static final URI ORIGINAL_NOT_REFUNDABLE = URI.create(BASE + "original-not-refundable");
+
+    /**
+     * {@code POST /payments/{reference}/refunds} carried a {@code counterpartyMsisdn}. A
+     * refund's destination is always the original collection's payer, never one the caller
+     * supplies — see {@code docs/positioning.md}. Refused explicitly rather than ignored, so
+     * a caller does not learn the field silently works.
+     */
+    public static final URI REFUND_DESTINATION_NOT_ALLOWED = URI.create(BASE + "refund-destination-not-allowed");
+
+    /**
+     * {@code POST /payments/{reference}/refunds} asked for more than the collection has left
+     * to refund. Partial refunds are allowed; their total may never exceed the original.
+     */
+    public static final URI REFUND_EXCEEDS_REMAINING = URI.create(BASE + "refund-exceeds-remaining");
+
     private ProblemTypes() {
     }
 }

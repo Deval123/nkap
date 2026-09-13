@@ -3,7 +3,6 @@ package dev.nkap.server.outbox;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.nkap.core.money.Money;
-import dev.nkap.core.payment.PaymentState;
 import dev.nkap.server.payment.Payment;
 import dev.nkap.server.payment.PaymentTransition;
 import dev.nkap.server.webhook.WebhookEndpoint;
@@ -47,7 +46,7 @@ public final class OutboxNotifier {
     }
 
     public void notifyIfTerminal(Payment payment) {
-        String type = eventType(payment.state());
+        String type = eventType(payment);
         if (type == null) {
             return;
         }
@@ -72,7 +71,8 @@ public final class OutboxNotifier {
                 payment.state().name(),
                 lastOperatorCode(payment.history()),
                 payment.providerTransactionId(),
-                Instant.now().toString());
+                Instant.now().toString(),
+                payment.refundOf().map(Object::toString).orElse(""));
         String body;
         try {
             body = json.writeValueAsString(data);
@@ -85,12 +85,18 @@ public final class OutboxNotifier {
         return new OutboxEvent(id, payment.merchantId(), type, body);
     }
 
-    /** {@code null} for every state that is not worth telling a merchant about. */
-    private static String eventType(PaymentState state) {
-        return switch (state) {
-            case SUCCEEDED -> "payment.succeeded";
-            case FAILED -> "payment.failed";
-            case EXPIRED -> "payment.expired";
+    /**
+     * {@code null} for every state that is not worth telling a merchant about. A refund
+     * (issue #84) gets its own {@code refund.*} type rather than {@code payment.*} — the
+     * plain reason a merchant needs to tell "your refund went through" from "your
+     * disbursement went through" without inspecting {@code refundOf}.
+     */
+    private static String eventType(Payment payment) {
+        boolean refund = payment.refundOf().isPresent();
+        return switch (payment.state()) {
+            case SUCCEEDED -> refund ? "refund.succeeded" : "payment.succeeded";
+            case FAILED -> refund ? "refund.failed" : "payment.failed";
+            case EXPIRED -> refund ? "refund.expired" : "payment.expired";
             default -> null;
         };
     }

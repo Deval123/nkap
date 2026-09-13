@@ -1,5 +1,6 @@
 package dev.nkap.server.payment;
 
+import dev.nkap.core.money.Money;
 import dev.nkap.core.payment.PaymentState;
 import dev.nkap.core.payment.ReferenceId;
 import dev.nkap.provider.PaymentIntent;
@@ -8,6 +9,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * A payment: the thing this project is about.
@@ -29,12 +31,23 @@ public final class Payment {
     private final String merchantId;
     private final PaymentIntent intent;
     private final Instant createdAt;
+    private final ReferenceId refundOf;
     private final List<PaymentTransition> history = new ArrayList<>();
 
     private PaymentState state;
     private Instant updatedAt;
     private String providerReference = "";
     private String providerTransactionId = "";
+
+    // Meaningful only on a SUCCEEDED collection: the running total reserved or already paid
+    // out against it by a refund (ADR 0010). Reserved the moment a refund is created — see
+    // reserveRefund — not only once it settles, because an in-flight refund that later
+    // succeeds must not have let a second refund spend the same money in the meantime.
+    // Released only if that refund ends FAILED or EXPIRED (releaseRefundReservation); a
+    // SUCCEEDED refund, or one still unresolved, keeps its reservation forever. Zero on every
+    // payment that has never had a refund taken against it, which is every DISBURSE payment
+    // and every COLLECT payment nobody has refunded yet.
+    private long refundedMinor;
 
     // The reconciler's schedule. Meaningful while the payment is unresolved — SUBMITTED,
     // PENDING or UNKNOWN. reconcileAttempts, reconcileDueAt and unresolvedSince are set once,
@@ -48,11 +61,13 @@ public final class Payment {
     private Instant escalatedAt;
     private Instant unresolvedSince;
 
-    private Payment(ReferenceId reference, ProviderId provider, String merchantId, PaymentIntent intent, Instant now) {
+    private Payment(ReferenceId reference, ProviderId provider, String merchantId, PaymentIntent intent,
+                    ReferenceId refundOf, Instant now) {
         this.reference = Objects.requireNonNull(reference, "reference");
         this.provider = Objects.requireNonNull(provider, "provider");
         this.merchantId = requireText(merchantId, "merchantId");
         this.intent = Objects.requireNonNull(intent, "intent");
+        this.refundOf = refundOf;
         this.createdAt = Objects.requireNonNull(now, "now");
         this.state = PaymentState.CREATED;
         this.updatedAt = now;
@@ -60,7 +75,19 @@ public final class Payment {
 
     /** A new payment in {@link PaymentState#CREATED}, persisted before the operator is called. */
     public static Payment create(ReferenceId reference, ProviderId provider, String merchantId, PaymentIntent intent) {
-        return new Payment(reference, provider, merchantId, intent, Instant.now());
+        return new Payment(reference, provider, merchantId, intent, null, Instant.now());
+    }
+
+    /**
+     * A refund: a {@code DISBURSE} payment like any other (ADR 0010 — not a third
+     * {@code Capability.Operation}, and never {@link dev.nkap.core.ledger.LedgerEntry#reversalOf}),
+     * distinguished only by {@code refundOf} naming the {@code SUCCEEDED} collection it sends
+     * money back for. The caller ({@code RefundService}) has already reserved {@code intent}'s
+     * amount against that collection's {@link #refundableRemaining()} before this is created.
+     */
+    public static Payment createRefund(ReferenceId reference, ProviderId provider, String merchantId,
+                                       PaymentIntent intent, ReferenceId refundOf) {
+        return new Payment(reference, provider, merchantId, intent, Objects.requireNonNull(refundOf, "refundOf"), Instant.now());
     }
 
     /**
@@ -73,8 +100,8 @@ public final class Payment {
                                     PaymentState state, String providerReference, String providerTransactionId,
                                     Instant createdAt, Instant updatedAt, List<PaymentTransition> history,
                                     int reconcileAttempts, Instant reconcileDueAt, Instant escalatedAt,
-                                    Instant unresolvedSince) {
-        Payment payment = new Payment(reference, provider, merchantId, intent, createdAt);
+                                    Instant unresolvedSince, ReferenceId refundOf, long refundedMinor) {
+        Payment payment = new Payment(reference, provider, merchantId, intent, refundOf, createdAt);
         payment.state = Objects.requireNonNull(state, "state");
         payment.updatedAt = Objects.requireNonNull(updatedAt, "updatedAt");
         payment.providerReference = providerReference == null ? "" : providerReference;
@@ -84,6 +111,7 @@ public final class Payment {
         payment.reconcileDueAt = reconcileDueAt;
         payment.escalatedAt = escalatedAt;
         payment.unresolvedSince = unresolvedSince;
+        payment.refundedMinor = refundedMinor;
         return payment;
     }
 
@@ -206,6 +234,62 @@ public final class Payment {
     /** The transitions so far, oldest first. Unmodifiable. */
     public List<PaymentTransition> history() {
         return List.copyOf(history);
+    }
+
+    /** The collection this payment sends money back for, or empty for every payment that is not a refund. */
+    public Optional<ReferenceId> refundOf() {
+        return Optional.ofNullable(refundOf);
+    }
+
+    /** The running total reserved or already paid out by a refund against this payment. Always {@code 0} for a refund itself. */
+    public long refundedMinor() {
+        return refundedMinor;
+    }
+
+    /**
+     * What is left of this ({@code SUCCEEDED} collection) payment for a new refund to claim:
+     * the amount, less every reservation {@link #reserveRefund} has made against it so far.
+     */
+    public Money refundableRemaining() {
+        Money amount = intent.amount();
+        return amount.minus(Money.of(refundedMinor, amount.currency()));
+    }
+
+    /**
+     * Reserves {@code amount} against this payment before any refund of it is submitted to
+     * the operator — a refund counts against the cap from the moment it is created, not only
+     * once it settles (rule 5 of issue #84): otherwise two refunds for half the remaining
+     * amount could both pass this check while both are still in flight, and both then
+     * succeed. Throws {@link RefundExceedsRemainingException} rather than let the running
+     * total pass what was ever collected.
+     *
+     * <p>This is the application-level half of the guard. The caller holds this payment's
+     * row locked ({@code SELECT … FOR UPDATE}) for the duration of the check-and-increment,
+     * the same lock the settlement path already takes — but the actual backstop against two
+     * concurrent writers is the database {@code CHECK} on {@code refunded_minor} (V8), not
+     * this method: an application check alone is exactly the shape of bug that refunds a
+     * merchant twice.
+     */
+    public void reserveRefund(Money amount) {
+        if (!amount.isPositive()) {
+            throw new IllegalArgumentException("a refund amount must be positive, was " + amount);
+        }
+        Money updated = Money.of(refundedMinor, amount.currency()).plus(amount);
+        if (updated.amount() > intent.amount().amount()) {
+            throw new RefundExceedsRemainingException(reference, refundableRemaining(), amount);
+        }
+        refundedMinor = updated.amount();
+    }
+
+    /**
+     * Releases {@code amount} previously reserved by a refund that turned out not to move
+     * money — {@code FAILED} or {@code EXPIRED}. Never called for a refund that
+     * {@code SUCCEEDED} or is still unresolved (including {@code UNKNOWN}): an escalated
+     * refund keeps holding its reservation, because un-reserving it on a guess would let the
+     * same money leave twice if it later turns out to have gone through after all.
+     */
+    public void releaseRefundReservation(Money amount) {
+        refundedMinor = Math.subtractExact(refundedMinor, amount.amount());
     }
 
     private static String requireText(String value, String field) {

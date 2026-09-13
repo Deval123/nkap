@@ -164,6 +164,13 @@ public class SettlementService {
 
         if (payment.state() == PaymentState.SUCCEEDED) {
             settle(payment);
+        } else if (payment.state().isTerminal()) {
+            // FAILED or EXPIRED. A no-op unless this payment is a refund (issue #84): the
+            // operator has now conclusively said this transfer will never move money, so the
+            // amount it reserved on the collection it refunds is released. A refund that is
+            // still unresolved — UNKNOWN included — keeps its reservation; see
+            // Payment.releaseRefundReservation.
+            RefundReservations.release(payments, payment);
         }
         // Same transaction as the settle() above and the save() below: the event and the
         // state change commit together, or neither does (ADR 0003, issue #77). Writes
@@ -182,13 +189,15 @@ public class SettlementService {
     /**
      * Posts the gross amount, two postings, in one currency, summing to zero. No fee posting
      * — the operator's fee arrives later from the statement as its own entry (ADR 0006,
-     * unchanged for disbursements).
+     * unchanged for disbursements and, per ADR 0010, unchanged for refunds: the merchant
+     * refunds the gross and eats the fee on the original collection).
      *
      * <p>The <strong>direction</strong> is the operation's, and it is the one thing this
      * method could not stay operation-agnostic about: a settled collection took money into
      * the float and increased what Nkap owes the merchant (ADR 0006); a settled disbursement
-     * is its mirror — the float goes down, the merchant is owed less (ADR 0007). Everything
-     * else — the state machine, {@code confirm}/{@code applyConfirmed}, the reconciler, the
+     * — a refund included, since a refund is a {@code DISBURSE} payment (ADR 0010) — is its
+     * mirror: the float goes down, the merchant is owed less (ADR 0007). Everything else —
+     * the state machine, {@code confirm}/{@code applyConfirmed}, the reconciler, the
      * statement importer — needed no change.
      */
     private void settle(Payment payment) {
@@ -204,7 +213,9 @@ public class SettlementService {
         Posting merchantPosting = disbursement
                 ? Posting.debit(merchantPayable, gross)   // we owe the merchant less
                 : Posting.credit(merchantPayable, gross); // we owe the merchant more
-        String verb = disbursement ? "Disbursement" : "Collection";
+
+        String verb = payment.refundOf().map(originalReference -> "Refund of " + originalReference)
+                .orElse(disbursement ? "Disbursement" : "Collection");
 
         LedgerEntry entry = new LedgerEntry(
                 entryId(payment),
@@ -226,8 +237,19 @@ public class SettlementService {
         }
     }
 
-    /** {@code collection:<ref>} or {@code disbursement:<ref>} — derived from the reference, so a re-settle is refused by the ledger. */
+    /**
+     * {@code collection:<ref>}, {@code disbursement:<ref>}, or — for a refund, its own prefix
+     * rather than inheriting {@code disbursement:} — {@code refund:<ref>} (issue #84). Every
+     * prefix is derived from the reference, so a re-settle is refused by the ledger's own
+     * duplicate rule regardless of which one applies. A refund keeping its own prefix, rather
+     * than being just another disbursement, is also the label a reader (or a future metric)
+     * would need to tell "money paid out to a payee" apart from "money paid back to one" —
+     * an exclusion after the fact would have to know to look for {@code refund_of} instead.
+     */
     private static String entryId(Payment payment) {
+        if (payment.refundOf().isPresent()) {
+            return "refund:" + payment.reference();
+        }
         String prefix = payment.intent().operation() == Capability.Operation.DISBURSE ? "disbursement:" : "collection:";
         return prefix + payment.reference();
     }

@@ -14,16 +14,16 @@ class MoneyTest {
     void cfaFrancHasNoDecimals() {
         assertEquals(0, Currency.XAF.minorUnits());
         assertEquals(0, Currency.XOF.minorUnits());
-        assertEquals(2, Currency.KES.minorUnits());
+        assertEquals(2, Currency.GHS.minorUnits());
     }
 
     @Test
     @DisplayName("amounts in different currencies cannot be combined")
     void refusesImplicitConversion() {
         Money xaf = Money.of(5_000, Currency.XAF);
-        Money kes = Money.of(5_000, Currency.KES);
+        Money ghs = Money.of(5_000, Currency.GHS);
 
-        CurrencyMismatchException thrown = assertThrows(CurrencyMismatchException.class, () -> xaf.plus(kes));
+        CurrencyMismatchException thrown = assertThrows(CurrencyMismatchException.class, () -> xaf.plus(ghs));
         assertTrue(thrown.getMessage().contains("position account"), thrown.getMessage());
     }
 

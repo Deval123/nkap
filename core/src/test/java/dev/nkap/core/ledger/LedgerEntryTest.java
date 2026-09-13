@@ -64,8 +64,8 @@ class LedgerEntryTest {
         LedgerInvariantViolation thrown = assertThrows(LedgerInvariantViolation.class, () ->
                 new LedgerEntry("e-4", AT, "pay-1", "Implicit FX", List.of(
                         Posting.debit(AccountId.providerFloat("mtn", Currency.XAF), xaf(5_000)),
-                        Posting.credit(AccountId.merchantPayable("acme", Currency.KES),
-                                Money.of(5_000, Currency.KES)))));
+                        Posting.credit(AccountId.merchantPayable("acme", Currency.GHS),
+                                Money.of(5_000, Currency.GHS)))));
 
         assertTrue(thrown.getMessage().contains("position account"), thrown.getMessage());
     }

@@ -15,8 +15,9 @@ import org.junit.jupiter.api.Test;
  *
  * <p>Every value below comes from ISO 4217's own minor-unit column, cross-checked against
  * the standard rather than assumed: XAF, XOF, RWF, UGX and GNF have none; the rest have
- * two. See {@link Currency}'s own javadoc for where "which currencies are needed" (MTN's
- * footprint) came from, a separate question from this one.
+ * two. See {@link Currency}'s own javadoc for the corrected membership rule — a currency
+ * this gateway can count in, with its minor units verified, and a list that only ever
+ * grows.
  */
 class CurrencyTest {
 
@@ -26,6 +27,7 @@ class CurrencyTest {
             Map.entry(Currency.RWF, 0),
             Map.entry(Currency.UGX, 0),
             Map.entry(Currency.GNF, 0),
+            Map.entry(Currency.KES, 2),
             Map.entry(Currency.GHS, 2),
             Map.entry(Currency.NGN, 2),
             Map.entry(Currency.ZAR, 2),

@@ -49,10 +49,17 @@ an unconfigured one is a `400` naming what is configured, not a server error.
 **Merely possible — MTN operates there, `Currency` has the right minor-unit entry, but no
 installation is configured here**: Benin, Republic of Congo, Côte d'Ivoire, Guinea,
 Guinea-Bissau, Liberia, Nigeria, Rwanda, South Africa, Uganda, Zambia, and others MTN's own
-footprint covers. A `Currency` member is not a claim that the country works — it is only
-ever a claim that, if an installation for that country were configured, its minor-unit count
-would be right. Wiring one in is adding an entry to `nkap.provider.mtn.installations` with
-its own credentials; nothing about the adapter, the ledger accounts (per installation — see
+footprint covers. `Currency` is the gateway's vocabulary, kept in `core` and answering only
+"can this gateway count in it, with its minor units verified" — this page is the separate
+record of what MTN coverage this adapter configures. The two lists overlap, since most of
+what MTN settles in has to be countable, but neither defines the other: `Currency` also
+holds members no MTN installation will ever use (`EUR`, `USD`, `KES` — Kenya is Safaricom's
+M-Pesa, not an MTN market), and a country appearing below is not itself a claim that
+`Currency` was extended *for* it. A `Currency` member is not a claim that the country
+works — it is only ever a claim that, if an installation for that country were configured,
+its minor-unit count would be right. Wiring one in is adding an entry to
+`nkap.provider.mtn.installations` with its own credentials; nothing about the adapter, the
+ledger accounts (per installation — see
 [ADR 0009](../adr/0009-accounts-are-per-installation.md)) or the conformance kit changes to
 support it.
 

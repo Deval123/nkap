@@ -33,7 +33,7 @@ public record Scenario(
 
     public Scenario {
         name = (name == null || name.isBlank()) ? DEFAULT_NAME : name;
-        onSubmit = onSubmit != null ? onSubmit : new SubmitBehaviour(null, null);
+        onSubmit = onSubmit != null ? onSubmit : new SubmitBehaviour(null, null, null);
         onQuery = (onQuery == null || onQuery.isEmpty())
                 ? List.of(new QueryBehaviour(null, null, null))
                 : List.copyOf(onQuery);

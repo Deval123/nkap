@@ -65,6 +65,29 @@ class ScenarioModelTest {
     }
 
     @Test
+    @DisplayName("a scenario written before onSubmit had a code still parses, and declares no code")
+    void a_scenario_without_a_code_still_parses() throws Exception {
+        Scenario scenario = json.readValue("""
+            {"onSubmit": {"outcome": "SERVER_ERROR"}}""", Scenario.class);
+
+        assertThat(scenario.onSubmit().outcome()).isEqualTo(SubmitOutcome.SERVER_ERROR);
+        // Null, not a default: what the scenario declared, nothing more. The code the
+        // operator actually answers with is chosen where the error body is built.
+        assertThat(scenario.onSubmit().code()).isNull();
+    }
+
+    @Test
+    @DisplayName("onSubmit.code is free text, so a scenario can name an operator code nothing recognises")
+    void a_declared_code_is_not_restricted_to_a_known_vocabulary() throws Exception {
+        Scenario scenario = json.readValue("""
+            {"onSubmit": {"outcome": "BAD_REQUEST", "code": "UNRECOGNISED_OPERATOR_CODE"}}""",
+            Scenario.class);
+
+        assertThat(scenario.onSubmit().code()).isEqualTo("UNRECOGNISED_OPERATOR_CODE");
+        assertThat(json.readValue(json.writeValueAsString(scenario), Scenario.class)).isEqualTo(scenario);
+    }
+
+    @Test
     @DisplayName("a token lifetime is a session property, not part of a scenario")
     void token_behaviour_stands_alone() throws Exception {
         assertThat(new TokenBehaviour(null).ttl()).isEqualTo(Duration.ofHours(1));
@@ -77,7 +100,7 @@ class ScenarioModelTest {
     @Test
     @DisplayName("durations serialise as ISO-8601 strings, not fractional seconds")
     void durations_are_iso_8601_strings() throws Exception {
-        String out = json.writeValueAsString(new SubmitBehaviour(Duration.ofSeconds(2), SubmitOutcome.ACCEPT));
+        String out = json.writeValueAsString(new SubmitBehaviour(Duration.ofSeconds(2), SubmitOutcome.ACCEPT, null));
 
         assertThat(out).contains("\"PT2S\"").doesNotContain("2.0");
     }

@@ -26,10 +26,7 @@ import org.junit.jupiter.api.Test;
  *
  * <p>A provider module extends this class from its own test code and returns a
  * {@link ConformanceHarness}. Every rule here was extracted from a test that already passes
- * against MTN — the kit is not a wishlist. Rules that are real but not yet drivable through
- * a harness (a code the adapter does not recognise mapping to {@code UNKNOWN}, which needs
- * an operator code a harness cannot express until issue #26) are left out entirely rather
- * than made optional.
+ * against MTN — the kit is not a wishlist.
  *
  * <p><strong>Not here, on purpose: routing by capability.</strong> Issue #67 considered a
  * rule that a reference submitted under one capability is answered under that capability.
@@ -185,6 +182,19 @@ public abstract class ProviderAdapterConformanceTest {
         // PaymentStateTest — asserting it here would pass with any adapter at all.
         assertSame(PaymentState.SUCCEEDED, firstAnswer.state());
         assertSame(PaymentState.FAILED, secondAnswer.state());
+    }
+
+    @Test
+    @DisplayName("an operator answer the adapter cannot map is UNKNOWN, never FAILED")
+    void an_unrecognised_answer_is_unknown() throws Exception {
+        ProviderAdapter adapter = harness.adapter();
+        harness.makeStatusUnrecognised();
+        ReferenceId reference = ReferenceId.newReference();
+        adapter.submit(harness.anIntent(), reference);
+
+        // The sentence this whole project rests on: a token the adapter has never seen is
+        // not a failure it can assert, so it is UNKNOWN — never a guess dressed up as FAILED.
+        assertSame(PaymentState.UNKNOWN, adapter.query(reference, operationUnderTest()).state());
     }
 
     @Test

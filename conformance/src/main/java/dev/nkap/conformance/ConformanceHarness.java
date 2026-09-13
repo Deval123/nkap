@@ -47,6 +47,15 @@ public interface ConformanceHarness extends AutoCloseable {
     void makeStatusFlap();
 
     /**
+     * The next query answers with a token this adapter has no mapping for — not a specific
+     * operator code, an arbitrary one nobody has seen before. The adapter's rule: an answer
+     * it cannot map is {@link dev.nkap.core.payment.PaymentState#UNKNOWN}, never
+     * {@link dev.nkap.core.payment.PaymentState#FAILED} — describing a token it has never
+     * seen would be a guess, not a report.
+     */
+    void makeStatusUnrecognised();
+
+    /**
      * The operator's credentials expire {@link #credentialLifetime()} from now, mid-flight, while
      * calls are in progress.
      */

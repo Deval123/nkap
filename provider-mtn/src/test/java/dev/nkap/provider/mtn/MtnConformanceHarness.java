@@ -74,6 +74,15 @@ final class MtnConformanceHarness implements ConformanceHarness {
     }
 
     @Override
+    public void makeStatusUnrecognised() {
+        // status stays a valid MomoStatus — the simulator only accepts the enum — but reason
+        // is free text (QueryBehaviour.reason), unvalidated, which is exactly how an operator
+        // code MtnStatusMap has never seen reaches the adapter: reason is consulted first.
+        onQuery = "\"onQuery\":[{\"status\":\"FAILED\",\"reason\":\"SOMETHING_NOBODY_MAPS\"}]";
+        redeclare();
+    }
+
+    @Override
     public void expireCredentialsMidFlight() {
         token = "\"token\":{\"ttl\":\"" + CREDENTIAL_LIFETIME + "\",\"enforce\":true}";
         redeclare();

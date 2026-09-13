@@ -40,15 +40,9 @@ Adapter-level rules, each already proven for MTN:
 5. An expired credential mid-flight is renewed and the call retried **with the same
    reference**.
 6. A callback for a reference the gateway never issued is rejected, writing nothing.
+7. An operator answer the adapter cannot map is `UNKNOWN`, never `FAILED`.
 
 ## What it does not check, and why
-
-**Waiting on [issue #26](https://github.com/Deval123/nkap/issues/26).** *A code the adapter
-does not recognise maps to `UNKNOWN`.* This rule is real and proven — but at unit level, in
-`MtnStatusMapTest`, which feeds the map directly. It cannot be driven through a harness
-today because a simulator scenario can only declare a known status, never an arbitrary
-operator code. It joins the kit when #26 lands. A conformance kit with an optional method
-is not a conformance kit, so the method is left out entirely until then.
 
 **Not adapter properties at all.** Two cases from the roadmap belong to a future
 gateway-level suite, once `server` exists:

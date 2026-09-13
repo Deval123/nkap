@@ -31,14 +31,15 @@ class BalanceApiIT extends PostgresSpringBootIT {
 
     @DynamicPropertySource
     static void mtnPointsAtTheSimulator(DynamicPropertyRegistry registry) {
-        registry.add("nkap.provider.mtn.base-url", SIMULATOR::baseUri);
-        registry.add("nkap.provider.mtn.target-environment", () -> "sandbox");
-        registry.add("nkap.provider.mtn.subscription-key", () -> "test-subscription-key");
-        registry.add("nkap.provider.mtn.api-user", () -> "test-api-user");
-        registry.add("nkap.provider.mtn.api-key", () -> "test-api-key");
-        registry.add("nkap.provider.mtn.currency", () -> "EUR");
-        registry.add("nkap.provider.mtn.country", () -> "sandbox");
-        registry.add("nkap.provider.mtn.request-timeout", () -> "PT2S");
+        registry.add("nkap.provider.mtn.installations[0].base-url", SIMULATOR::baseUri);
+        registry.add("nkap.provider.mtn.installations[0].target-environment", () -> "sandbox");
+        registry.add("nkap.provider.mtn.installations[0].subscription-key", () -> "test-subscription-key");
+        registry.add("nkap.provider.mtn.installations[0].api-user", () -> "test-api-user");
+        registry.add("nkap.provider.mtn.installations[0].api-key", () -> "test-api-key");
+        registry.add("nkap.provider.mtn.installations[0].currency", () -> "EUR");
+        registry.add("nkap.provider.mtn.installations[0].country", () -> "sandbox");
+        registry.add("nkap.provider.mtn.installations[0].request-timeout", () -> "PT2S");
+        registry.add("nkap.provider.default", () -> "mtn-sandbox");
     }
 
     @AfterAll
@@ -73,7 +74,7 @@ class BalanceApiIT extends PostgresSpringBootIT {
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         JsonNode body = json.readTree(response.getBody());
-        assertThat(body.get("provider").asText()).isEqualTo("mtn");
+        assertThat(body.get("provider").asText()).isEqualTo("mtn-sandbox");
         assertThat(body.get("operation").asText()).isEqualTo("COLLECT");
         assertThat(body.get("amountMinorUnits").asLong()).isEqualTo(123456);
         assertThat(body.get("currency").asText()).isEqualTo("EUR");

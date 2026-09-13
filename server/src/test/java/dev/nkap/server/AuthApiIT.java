@@ -41,14 +41,15 @@ class AuthApiIT extends PostgresSpringBootIT {
 
     @DynamicPropertySource
     static void mtnPointsAtTheSimulator(DynamicPropertyRegistry registry) {
-        registry.add("nkap.provider.mtn.base-url", SIMULATOR::baseUri);
-        registry.add("nkap.provider.mtn.target-environment", () -> "sandbox");
-        registry.add("nkap.provider.mtn.subscription-key", () -> "test-subscription-key");
-        registry.add("nkap.provider.mtn.api-user", () -> "test-api-user");
-        registry.add("nkap.provider.mtn.api-key", () -> "test-api-key");
-        registry.add("nkap.provider.mtn.currency", () -> "EUR");
-        registry.add("nkap.provider.mtn.country", () -> "sandbox");
-        registry.add("nkap.provider.mtn.request-timeout", () -> "PT2S");
+        registry.add("nkap.provider.mtn.installations[0].base-url", SIMULATOR::baseUri);
+        registry.add("nkap.provider.mtn.installations[0].target-environment", () -> "sandbox");
+        registry.add("nkap.provider.mtn.installations[0].subscription-key", () -> "test-subscription-key");
+        registry.add("nkap.provider.mtn.installations[0].api-user", () -> "test-api-user");
+        registry.add("nkap.provider.mtn.installations[0].api-key", () -> "test-api-key");
+        registry.add("nkap.provider.mtn.installations[0].currency", () -> "EUR");
+        registry.add("nkap.provider.mtn.installations[0].country", () -> "sandbox");
+        registry.add("nkap.provider.mtn.installations[0].request-timeout", () -> "PT2S");
+        registry.add("nkap.provider.default", () -> "mtn-sandbox");
     }
 
     @AfterAll
@@ -154,7 +155,7 @@ class AuthApiIT extends PostgresSpringBootIT {
         file.toFile().deleteOnExit();
         Files.writeString(file, "operator_transaction_id,amount_minor,fee_minor,currency,occurred_at,status\n"
                 + "auth-orphan-" + System.nanoTime() + ",1000,0,EUR,2026-09-10T14:00:00Z,SETTLED\n");
-        UUID importId = statementImport.run(file, ProviderId.of("mtn"), "auth-test.csv").report().importId();
+        UUID importId = statementImport.run(file, ProviderId.of("mtn-sandbox"), "auth-test.csv").report().importId();
 
         String merchantKey = apiKeys.provision("merchant-" + System.nanoTime(), false, "test").token();
         String adminKey = apiKeys.provision("ops-" + System.nanoTime(), true, "admin").token();
@@ -176,7 +177,7 @@ class AuthApiIT extends PostgresSpringBootIT {
         // and it must stay that — the operator sends no credential.
         String body = "{\"referenceId\":\"" + UUID.randomUUID() + "\",\"status\":\"SUCCESSFUL\"}";
 
-        ResponseEntity<String> answer = http.exchange("/callbacks/mtn", HttpMethod.POST,
+        ResponseEntity<String> answer = http.exchange("/callbacks/mtn-sandbox", HttpMethod.POST,
                 new HttpEntity<>(body, headers), String.class);
 
         assertThat(answer.getStatusCode())
@@ -212,7 +213,7 @@ class AuthApiIT extends PostgresSpringBootIT {
 
     private static String paymentBody() {
         return """
-                {"operation":"COLLECT","amount":5000,"currency":"EUR",
+                {"operation":"COLLECT","amount":5000,"currency":"EUR","country":"sandbox",
                  "counterpartyMsisdn":"46733123453","payerMessage":"rent","payeeNote":"march"}""";
     }
 

@@ -39,15 +39,16 @@ class CallbackApiIT extends PostgresSpringBootIT {
 
     @DynamicPropertySource
     static void mtnPointsAtTheSimulator(DynamicPropertyRegistry registry) {
-        registry.add("nkap.provider.mtn.base-url", SIMULATOR::baseUri);
-        registry.add("nkap.provider.mtn.target-environment", () -> "sandbox");
-        registry.add("nkap.provider.mtn.subscription-key", () -> "test-subscription-key");
-        registry.add("nkap.provider.mtn.api-user", () -> "test-api-user");
-        registry.add("nkap.provider.mtn.api-key", () -> "test-api-key");
-        registry.add("nkap.provider.mtn.currency", () -> "EUR");
-        registry.add("nkap.provider.mtn.country", () -> "sandbox");
+        registry.add("nkap.provider.mtn.installations[0].base-url", SIMULATOR::baseUri);
+        registry.add("nkap.provider.mtn.installations[0].target-environment", () -> "sandbox");
+        registry.add("nkap.provider.mtn.installations[0].subscription-key", () -> "test-subscription-key");
+        registry.add("nkap.provider.mtn.installations[0].api-user", () -> "test-api-user");
+        registry.add("nkap.provider.mtn.installations[0].api-key", () -> "test-api-key");
+        registry.add("nkap.provider.mtn.installations[0].currency", () -> "EUR");
+        registry.add("nkap.provider.mtn.installations[0].country", () -> "sandbox");
         // Wide enough that a two-second submit delay is not itself a timeout.
-        registry.add("nkap.provider.mtn.request-timeout", () -> "PT5S");
+        registry.add("nkap.provider.mtn.installations[0].request-timeout", () -> "PT5S");
+        registry.add("nkap.provider.default", () -> "mtn-sandbox");
     }
 
     @AfterAll
@@ -82,7 +83,7 @@ class CallbackApiIT extends PostgresSpringBootIT {
 
     private static String paymentBody(long amountMinorUnits) {
         return """
-            {"operation":"COLLECT","amount":%d,"currency":"EUR",
+            {"operation":"COLLECT","amount":%d,"currency":"EUR","country":"sandbox",
              "counterpartyMsisdn":"46733123453","payerMessage":"rent","payeeNote":"march"}"""
                 .formatted(amountMinorUnits);
     }
@@ -107,7 +108,7 @@ class CallbackApiIT extends PostgresSpringBootIT {
     private ResponseEntity<String> postCallback(String bodyJson) {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
-        return http.postForEntity("/callbacks/mtn", new HttpEntity<>(bodyJson, headers), String.class);
+        return http.postForEntity("/callbacks/mtn-sandbox", new HttpEntity<>(bodyJson, headers), String.class);
     }
 
     private static String callback(String reference, String status) {
@@ -197,7 +198,7 @@ class CallbackApiIT extends PostgresSpringBootIT {
             assertThat(entry.postings()).hasSize(2);
             assertThat(entry.currency()).isEqualTo(Currency.EUR);
             assertThat(sumSigned(entry)).isZero();
-            assertThat(signedAmount(entry, AccountId.providerFloat("mtn", Currency.EUR))).isEqualTo(5000L);
+            assertThat(signedAmount(entry, AccountId.providerFloat("mtn-sandbox", Currency.EUR))).isEqualTo(5000L);
             assertThat(signedAmount(entry, AccountId.merchantPayable("merchant-1", Currency.EUR))).isEqualTo(-5000L);
         });
     }
@@ -263,7 +264,7 @@ class CallbackApiIT extends PostgresSpringBootIT {
     // --- small assertion helpers ------------------------------------------------
 
     private String gatewayCallbackUrl() {
-        return "http://localhost:" + port + "/callbacks/mtn";
+        return "http://localhost:" + port + "/callbacks/mtn-sandbox";
     }
 
     private static long countCauses(JsonNode history, String cause) {

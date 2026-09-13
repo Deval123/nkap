@@ -40,13 +40,14 @@ class StatementApiIT extends PostgresSpringBootIT {
     static void mtnConfigThisTestNeverCalls(DynamicPropertyRegistry registry) {
         // The full context builds an MTN adapter; this test never reaches it, so any
         // non-null config does. (CallbackApiIT points these at an embedded simulator.)
-        registry.add("nkap.provider.mtn.base-url", () -> "http://localhost:1");
-        registry.add("nkap.provider.mtn.target-environment", () -> "sandbox");
-        registry.add("nkap.provider.mtn.subscription-key", () -> "unused");
-        registry.add("nkap.provider.mtn.api-user", () -> "unused");
-        registry.add("nkap.provider.mtn.api-key", () -> "unused");
-        registry.add("nkap.provider.mtn.currency", () -> "EUR");
-        registry.add("nkap.provider.mtn.country", () -> "sandbox");
+        registry.add("nkap.provider.mtn.installations[0].base-url", () -> "http://localhost:1");
+        registry.add("nkap.provider.mtn.installations[0].target-environment", () -> "sandbox");
+        registry.add("nkap.provider.mtn.installations[0].subscription-key", () -> "unused");
+        registry.add("nkap.provider.mtn.installations[0].api-user", () -> "unused");
+        registry.add("nkap.provider.mtn.installations[0].api-key", () -> "unused");
+        registry.add("nkap.provider.mtn.installations[0].currency", () -> "EUR");
+        registry.add("nkap.provider.mtn.installations[0].country", () -> "sandbox");
+        registry.add("nkap.provider.default", () -> "mtn-sandbox");
     }
 
     @Autowired
@@ -99,7 +100,7 @@ class StatementApiIT extends PostgresSpringBootIT {
         Files.writeString(file, "operator_transaction_id,amount_minor,fee_minor,currency,occurred_at,status\n"
                 + orphan + ",2500,0,EUR,2026-09-10T14:00:00Z,SETTLED\n");
 
-        ReconciliationReport produced = statementImport.run(file, ProviderId.of("mtn"), "api-read-test.csv").report();
+        ReconciliationReport produced = statementImport.run(file, ProviderId.of("mtn-sandbox"), "api-read-test.csv").report();
 
         ResponseEntity<String> fetched = getImport(produced.importId().toString(), adminKey);
         assertThat(fetched.getStatusCode()).isEqualTo(HttpStatus.OK);

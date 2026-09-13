@@ -37,6 +37,14 @@ public final class ProblemTypes {
     /** The addressed deployment does not settle the currency the request asked for. */
     public static final URI UNSERVED_CURRENCY = URI.create(BASE + "unserved-currency");
 
+    /**
+     * {@code POST /payments}'s {@code country} names an installation this deployment has
+     * not configured. Unlike {@link #PROVIDER_NOT_CONFIGURED}, this is a client mistake —
+     * the request named the country, not the server's own default — so it is a {@code 400},
+     * and the message says which countries are configured.
+     */
+    public static final URI UNCONFIGURED_COUNTRY = URI.create(BASE + "unconfigured-country");
+
     /** The path segment of {@code POST /callbacks/{providerId}} names a provider this server has no adapter for. */
     public static final URI UNKNOWN_CALLBACK_PROVIDER = URI.create(BASE + "unknown-callback-provider");
 

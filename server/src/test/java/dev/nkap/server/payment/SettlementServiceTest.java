@@ -273,6 +273,46 @@ class SettlementServiceTest {
         assertThat(ledger.entries()).isEmpty();
     }
 
+    @Test
+    @DisplayName("two installations settling the same currency credit different float accounts, and the same merchant payable")
+    void different_installations_share_no_float_account() throws Exception {
+        ProviderId cameroon = ProviderId.of("mtn-cm");
+        ProviderId congo = ProviderId.of("mtn-cg");
+        ProviderAdapter cameroonAdapter = mock(ProviderAdapter.class);
+        ProviderAdapter congoAdapter = mock(ProviderAdapter.class);
+        when(adapters.require(cameroon)).thenReturn(cameroonAdapter);
+        when(adapters.require(congo)).thenReturn(congoAdapter);
+        when(cameroonAdapter.query(any(), any())).thenReturn(status(PaymentState.SUCCEEDED, "SUCCESSFUL"));
+        when(congoAdapter.query(any(), any())).thenReturn(status(PaymentState.SUCCEEDED, "SUCCESSFUL"));
+
+        PaymentIntent xaf = new PaymentIntent(Capability.Operation.COLLECT, Money.of(5000, Currency.XAF),
+                "46733123453", "rent", "march", Map.of());
+        Payment fromCameroon = Payment.create(ReferenceId.newReference(), cameroon, "merchant-1", xaf);
+        fromCameroon.applyTransition(PaymentState.SUBMITTED, PaymentTransition.Cause.SUBMIT_RESPONSE, "", "", "");
+        payments.save(fromCameroon);
+        Payment fromCongo = Payment.create(ReferenceId.newReference(), congo, "merchant-1", xaf);
+        fromCongo.applyTransition(PaymentState.SUBMITTED, PaymentTransition.Cause.SUBMIT_RESPONSE, "", "", "");
+        payments.save(fromCongo);
+
+        settlement.confirm(cameroon, fromCameroon.reference(), PaymentTransition.Cause.CALLBACK);
+        settlement.confirm(congo, fromCongo.reference(), PaymentTransition.Cause.CALLBACK);
+
+        AccountId cameroonFloat = AccountId.providerFloat("mtn-cm", Currency.XAF);
+        AccountId congoFloat = AccountId.providerFloat("mtn-cg", Currency.XAF);
+        AccountId merchantPayable = AccountId.merchantPayable("merchant-1", Currency.XAF);
+        assertThat(cameroonFloat).as("Cameroon and Congo both settle XAF, but are different installations").isNotEqualTo(congoFloat);
+
+        assertThat(ledger.entriesForReference(fromCameroon.reference().toString())).singleElement().satisfies(entry -> {
+            assertThat(signedAmount(entry, cameroonFloat)).isEqualTo(5000L);
+            assertThat(signedAmount(entry, merchantPayable)).isEqualTo(-5000L);
+        });
+        assertThat(ledger.entriesForReference(fromCongo.reference().toString())).singleElement().satisfies(entry -> {
+            assertThat(signedAmount(entry, congoFloat)).isEqualTo(5000L);
+            // Same account both times -- the merchant is owed one XAF sum, not one per installation.
+            assertThat(signedAmount(entry, merchantPayable)).isEqualTo(-5000L);
+        });
+    }
+
     private static long signedAmount(LedgerEntry entry, AccountId account) {
         return entry.postings().stream()
                 .filter(p -> p.account().equals(account))

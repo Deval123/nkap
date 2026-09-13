@@ -22,22 +22,28 @@ service unit tests.
 
 ```json
 {
-  "merchantId": "merchant-1",
   "operation": "COLLECT",
   "amount": 5000,
-  "currency": "EUR",
+  "currency": "XAF",
+  "country": "cm",
   "counterpartyMsisdn": "46733123453",
   "payerMessage": "rent",
   "payeeNote": "march"
 }
 ```
 
+There is no `merchantId` field: the merchant is the one the API key identifies, never a
+value the caller asserts.
+
 - `amount` is an **integer count of minor units** — `5000` XAF is 5000 francs, `5000` EUR
   is 50.00. A fractional number is a **400**, before anything is persisted.
-- `currency` must be the one this deployment settles in (`nkap.provider.mtn.currency`). A
-  request in any other currency is a **400** with its own problem type, before a payment or
-  an idempotency claim exists: no operator was asked and nothing is unknown — the caller
-  addressed an installation that does not serve that currency.
+- `country` names the installation this payment routes to (issue #82) — `mtn-cm` for `"cm"`,
+  and so on; `docs/providers/mtn.md` lists which are configured. An unconfigured country is
+  a **400** naming what is configured, before a payment or an idempotency claim exists.
+- `currency` must be the one the named country's installation settles in. A request in any
+  other currency is a **400** with its own problem type, before a payment or an idempotency
+  claim exists: no operator was asked and nothing is unknown — the caller addressed an
+  installation that does not serve that currency.
 - The **`Idempotency-Key` header is required**. Absent, that is a 400. A repeat with the
   same key and body replays the first answer verbatim; the same key with a different body
   is a **409**; a key whose first request is still running is also a **409**, with a
@@ -153,17 +159,21 @@ file:
 | `NKAP_DB_URL` | `jdbc:postgresql://db:5432/nkap` |
 | `NKAP_DB_USER` | `nkap` |
 | `NKAP_DB_PASSWORD` | *(secret)* |
-| `NKAP_PROVIDER_MTN_BASE_URL` | `https://sandbox.momodeveloper.mtn.com` |
-| `NKAP_PROVIDER_MTN_TARGET_ENVIRONMENT` | `sandbox` |
-| `NKAP_PROVIDER_MTN_SUBSCRIPTION_KEY` | *(secret)* |
-| `NKAP_PROVIDER_MTN_API_USER` | *(secret)* |
-| `NKAP_PROVIDER_MTN_API_KEY` | *(secret)* |
-| `NKAP_PROVIDER_MTN_CURRENCY` | `EUR` |
-| `NKAP_PROVIDER_MTN_COUNTRY` | `sandbox` |
+| `NKAP_PROVIDER_MTN_CM_BASE_URL` | `https://sandbox.momodeveloper.mtn.com` |
+| `NKAP_PROVIDER_MTN_CM_TARGET_ENVIRONMENT` | `sandbox` |
+| `NKAP_PROVIDER_MTN_CM_SUBSCRIPTION_KEY` | *(secret)* |
+| `NKAP_PROVIDER_MTN_CM_API_USER` | *(secret)* |
+| `NKAP_PROVIDER_MTN_CM_API_KEY` | *(secret)* |
+| `NKAP_PROVIDER_MTN_CM_CURRENCY` | `XAF` |
 
-A missing value leaves the field blank and the context refuses to start — a clear failure
-at boot rather than the first payment failing. Which provider a `POST /payments` routes to
-is `nkap.provider.default` (`mtn`); routing by country arrives with multi-country support.
+One installation per country (issue #82), each its own `mtn-<country>` adapter — the table
+above is Cameroon's; a second country is another installation slot with its own env var
+prefix (`docs/providers/mtn.md` lists which are configured here and which are merely
+possible). `POST /payments` names its own country on every request; `nkap.provider.default`
+(`mtn-cm`) is only for the two routes that are not per-country, `GET /balance` and
+`GET /account-holders/{msisdn}`. A missing value on a configured installation leaves the
+field blank and the context refuses to start — a clear failure at boot rather than the
+first payment failing; a slot whose country is left blank is simply not built.
 
 ## Not in these slices
 

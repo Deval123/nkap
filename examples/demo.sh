@@ -115,7 +115,8 @@ response="$(curl -sS -w '\n%{http_code}' -X POST "$GATEWAY/payments" \
   -d '{
         "operation": "COLLECT",
         "amount": 5000,
-        "currency": "EUR",
+        "currency": "XAF",
+        "country": "cm",
         "counterpartyMsisdn": "46733123453",
         "payerMessage": "demo",
         "payeeNote": "demo"

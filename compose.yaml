@@ -65,13 +65,11 @@ services:
       NKAP_DB_PASSWORD: nkap
       # The provisioning command builds the full context, which wires an MTN adapter bean;
       # these placeholders keep that construction happy. Nothing here calls the operator.
-      NKAP_PROVIDER_MTN_BASE_URL: http://simulator:8081
-      NKAP_PROVIDER_MTN_TARGET_ENVIRONMENT: sandbox
-      NKAP_PROVIDER_MTN_SUBSCRIPTION_KEY: placeholder-not-a-real-subscription-key
-      NKAP_PROVIDER_MTN_API_USER: placeholder-not-a-real-api-user
-      NKAP_PROVIDER_MTN_API_KEY: placeholder-not-a-real-api-key
-      NKAP_PROVIDER_MTN_CURRENCY: EUR
-      NKAP_PROVIDER_MTN_COUNTRY: demoland
+      NKAP_PROVIDER_MTN_CM_BASE_URL: http://simulator:8081
+      NKAP_PROVIDER_MTN_CM_TARGET_ENVIRONMENT: sandbox
+      NKAP_PROVIDER_MTN_CM_SUBSCRIPTION_KEY: placeholder-not-a-real-subscription-key
+      NKAP_PROVIDER_MTN_CM_API_USER: placeholder-not-a-real-api-user
+      NKAP_PROVIDER_MTN_CM_API_KEY: placeholder-not-a-real-api-key
       # A one-shot command has no use for the reconciler's scheduler.
       NKAP_RECONCILER_ENABLED: "false"
     command:
@@ -104,13 +102,11 @@ services:
       NKAP_DB_PASSWORD: nkap
       # The provisioning command builds the full context, which wires an MTN adapter bean;
       # these placeholders keep that construction happy. Nothing here calls the operator.
-      NKAP_PROVIDER_MTN_BASE_URL: http://simulator:8081
-      NKAP_PROVIDER_MTN_TARGET_ENVIRONMENT: sandbox
-      NKAP_PROVIDER_MTN_SUBSCRIPTION_KEY: placeholder-not-a-real-subscription-key
-      NKAP_PROVIDER_MTN_API_USER: placeholder-not-a-real-api-user
-      NKAP_PROVIDER_MTN_API_KEY: placeholder-not-a-real-api-key
-      NKAP_PROVIDER_MTN_CURRENCY: EUR
-      NKAP_PROVIDER_MTN_COUNTRY: demoland
+      NKAP_PROVIDER_MTN_CM_BASE_URL: http://simulator:8081
+      NKAP_PROVIDER_MTN_CM_TARGET_ENVIRONMENT: sandbox
+      NKAP_PROVIDER_MTN_CM_SUBSCRIPTION_KEY: placeholder-not-a-real-subscription-key
+      NKAP_PROVIDER_MTN_CM_API_USER: placeholder-not-a-real-api-user
+      NKAP_PROVIDER_MTN_CM_API_KEY: placeholder-not-a-real-api-key
       # A one-shot command has no use for the reconciler's or the relay's scheduler.
       NKAP_RECONCILER_ENABLED: "false"
       NKAP_WEBHOOKS_ENABLED: "false"
@@ -145,21 +141,33 @@ services:
 
       # The MTN profile, pointed at the simulator. PLACEHOLDERS, not secrets — named so
       # nobody mistakes them for something to keep. A real deployment provides real ones
-      # through these same environment variables.
-      NKAP_PROVIDER_MTN_BASE_URL: http://simulator:8081
-      NKAP_PROVIDER_MTN_TARGET_ENVIRONMENT: sandbox
-      NKAP_PROVIDER_MTN_SUBSCRIPTION_KEY: placeholder-not-a-real-subscription-key
-      NKAP_PROVIDER_MTN_API_USER: placeholder-not-a-real-api-user
-      NKAP_PROVIDER_MTN_API_KEY: placeholder-not-a-real-api-key
-      NKAP_PROVIDER_MTN_CURRENCY: EUR
-      NKAP_PROVIDER_MTN_COUNTRY: demoland
+      # through these same environment variables. Cameroon (mtn-cm) is the primary
+      # installation this demo's own payment runs against — see examples/demo.sh.
+      NKAP_PROVIDER_MTN_CM_BASE_URL: http://simulator:8081
+      NKAP_PROVIDER_MTN_CM_TARGET_ENVIRONMENT: sandbox
+      NKAP_PROVIDER_MTN_CM_SUBSCRIPTION_KEY: placeholder-not-a-real-subscription-key
+      NKAP_PROVIDER_MTN_CM_API_USER: placeholder-not-a-real-api-user
+      NKAP_PROVIDER_MTN_CM_API_KEY: placeholder-not-a-real-api-key
+
+      # A second installation (issue #82): application.yml declares a second slot, blank by
+      # default (so a single-country deployment leaves it alone and gets one adapter, not a
+      # startup failure). NKAP_PROVIDER_MTN_GH_COUNTRY is what turns it on; the rest are its
+      # own credentials — the same simulator, since one operator with two accounts at it is
+      # the point here, not a second fake operator.
+      NKAP_PROVIDER_MTN_GH_COUNTRY: gh
+      NKAP_PROVIDER_MTN_GH_BASE_URL: http://simulator:8081
+      NKAP_PROVIDER_MTN_GH_TARGET_ENVIRONMENT: sandbox
+      NKAP_PROVIDER_MTN_GH_SUBSCRIPTION_KEY: placeholder-not-a-real-ghana-subscription-key
+      NKAP_PROVIDER_MTN_GH_API_USER: placeholder-not-a-real-ghana-api-user
+      NKAP_PROVIDER_MTN_GH_API_KEY: placeholder-not-a-real-ghana-api-key
 
       # Disbursements is a separate MTN product with its own credentials (issue #62). Same
       # placeholders, same simulator; set so a POST /payments with "operation":"DISBURSE"
       # works against the demo stack. A deployment that only collects leaves these unset.
-      NKAP_PROVIDER_MTN_DISBURSEMENT_SUBSCRIPTION_KEY: placeholder-not-a-real-disbursement-subscription-key
-      NKAP_PROVIDER_MTN_DISBURSEMENT_API_USER: placeholder-not-a-real-disbursement-api-user
-      NKAP_PROVIDER_MTN_DISBURSEMENT_API_KEY: placeholder-not-a-real-disbursement-api-key
+      # Cameroon's only — Ghana is here to demonstrate routing, not every product.
+      NKAP_PROVIDER_MTN_CM_DISBURSEMENT_SUBSCRIPTION_KEY: placeholder-not-a-real-disbursement-subscription-key
+      NKAP_PROVIDER_MTN_CM_DISBURSEMENT_API_USER: placeholder-not-a-real-disbursement-api-user
+      NKAP_PROVIDER_MTN_CM_DISBURSEMENT_API_KEY: placeholder-not-a-real-disbursement-api-key
 
       # Demo-only cadence, set here rather than in application.yml. The defaults there were
       # chosen for a real deployment and their comments explain why; a fast loop makes the
@@ -170,7 +178,7 @@ services:
       #    resolves while someone is still watching the terminal.
       #  - window is minutes, not a day, but still far longer than the demo runs — the demo
       #    shows resolution, not escalation.
-      NKAP_PROVIDER_MTN_REQUEST_TIMEOUT: PT2S
+      NKAP_PROVIDER_MTN_CM_REQUEST_TIMEOUT: PT2S
       NKAP_RECONCILER_INTERVAL: PT3S
       NKAP_RECONCILER_BACKOFF_BASE: PT3S
       NKAP_RECONCILER_BACKOFF_MAX: PT10S

@@ -30,6 +30,32 @@ The UUID you send as `X-Reference-Id` when creating the user *is* the API user i
 on. `providerCallbackHost` is fixed at creation and cannot be changed; it is an allow-list,
 and a later `X-Callback-Url` outside it is rejected with `INVALID_CALLBACK_URL_HOST`.
 
+## Multiple countries in one deployment
+
+Issue #82: one deployment configures several country installations at once, under
+`nkap.provider.mtn.installations` — each entry is everything above (its own portal, its own
+subscription keys, its own currency) plus the `country` field that names it. A country
+installation is registered as `mtn-<country>` (`ProviderId`), derived from that field, never
+configured separately — see `MtnConfiguration`. `POST /payments` names the country it wants;
+an unconfigured one is a `400` naming what is configured, not a server error.
+
+**Configured in this repository's demo and default reference deployment:**
+
+| Country | `ProviderId` | Currency |
+| --- | --- | --- |
+| Cameroon | `mtn-cm` | XAF |
+| Ghana | `mtn-gh` | GHS |
+
+**Merely possible — MTN operates there, `Currency` has the right minor-unit entry, but no
+installation is configured here**: Benin, Republic of Congo, Côte d'Ivoire, Guinea,
+Guinea-Bissau, Liberia, Nigeria, Rwanda, South Africa, Uganda, Zambia, and others MTN's own
+footprint covers. A `Currency` member is not a claim that the country works — it is only
+ever a claim that, if an installation for that country were configured, its minor-unit count
+would be right. Wiring one in is adding an entry to `nkap.provider.mtn.installations` with
+its own credentials; nothing about the adapter, the ledger accounts (per installation — see
+[ADR 0009](../adr/0009-accounts-are-per-installation.md)) or the conformance kit changes to
+support it.
+
 ## Quirks that cost time
 
 **A bodyless POST needs an explicit `Content-Length: 0`.** Both the API-key call and the
@@ -101,7 +127,7 @@ call proves otherwise:
 - A **separate product**: its own subscription key, API user and key, and token endpoint
   `POST /disbursement/token/`. `provider-mtn` has a whole `MtnDisbursementsAdapter` with its
   own `MtnProfile` and token cache; `MtnAdapter` is one adapter over both. In the gateway
-  the credentials are `nkap.provider.mtn.disbursement.*`.
+  the credentials are each installation's own `nkap.provider.mtn.installations[n].disbursement.*`.
 - `POST /disbursement/v1_0/transfer` — `202` with an empty body, `X-Reference-Id` the
   idempotency key, exactly like `requesttopay`. The body names the counterparty **`payee`**
   where a collection says `payer`.

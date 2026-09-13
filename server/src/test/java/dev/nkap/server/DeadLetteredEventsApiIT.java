@@ -10,6 +10,8 @@ import dev.nkap.server.outbox.OutboxEvent;
 import dev.nkap.server.outbox.OutboxRelayStore;
 import dev.nkap.server.support.PostgresSpringBootIT;
 import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -21,6 +23,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 
@@ -60,6 +63,9 @@ class DeadLetteredEventsApiIT extends PostgresSpringBootIT {
 
     @Autowired
     OutboxRelayStore store;
+
+    @Autowired
+    JdbcTemplate jdbc;
 
     private String adminKey;
     private String merchantKey;
@@ -113,6 +119,13 @@ class DeadLetteredEventsApiIT extends PostgresSpringBootIT {
         outbox.append(new OutboxEvent(retryingId, merchant, "payment.succeeded",
                 "{\"id\":\"" + retryingId + "\"}"));
         store.recordFailure(retryingId, "boom: receiver refused the request, will retry", false, Instant.now());
+        // Push the schedule out, the way a real claim would: the relay is disabled in this
+        // Spring context (nkap.webhooks.enabled=false, PostgresSpringBootIT), but every IT
+        // test shares the one PostgreSQL instance for the life of the JVM, and this row
+        // would otherwise sit "due" forever — claimable by OutboxRelayIT's own relay
+        // instances, which run against that same shared database directly.
+        jdbc.update("UPDATE outbox_event SET next_attempt_at = ? WHERE id = ?",
+                OffsetDateTime.now(ZoneOffset.UTC).plusDays(1), retryingId);
         UUID deadLetteredId = deadLetteredEvent(merchant, "payment.failed");
 
         ResponseEntity<String> response = list(adminKey);

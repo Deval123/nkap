@@ -33,6 +33,8 @@ import org.springframework.web.server.ResponseStatusException;
  *   <li>The POST returns 202 with an <em>empty</em> body: the status is only
  *       ever available through the GET.</li>
  *   <li>A GET on an unknown reference is a 404.</li>
+ *   <li>Every one of those errors carries an MTN-shaped body — see
+ *       {@link MtnErrorResponse}, issue #26.</li>
  * </ul>
  */
 @RestController
@@ -76,7 +78,7 @@ public class RequestToPayController {
         String currency = field(body, "currency");
 
         if (!store.record(reference)) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "X-Reference-Id already used");
+            throw new MtnErrorException(HttpStatus.CONFLICT, MtnErrorResponse.duplicateReference());
         }
 
         Scenario scenario = engine.resolveForSubmission(reference, msisdn, amount, currency);
@@ -99,9 +101,7 @@ public class RequestToPayController {
         sleep(onSubmit.delay());
         return switch (onSubmit.outcome()) {
             case ACCEPT -> ResponseEntity.accepted().build();
-            case CONFLICT -> ResponseEntity.status(HttpStatus.CONFLICT).build();
-            case BAD_REQUEST -> ResponseEntity.badRequest().build();
-            case SERVER_ERROR -> ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+            case CONFLICT, BAD_REQUEST, SERVER_ERROR -> MtnErrorResponse.forSubmit(onSubmit);
             case NO_RESPONSE -> throw new IllegalStateException("handled above");
         };
     }
@@ -117,7 +117,7 @@ public class RequestToPayController {
         authenticator.require(authorization);
 
         QueryBehaviour behaviour = engine.nextQueryBehaviour(References.canonical(referenceId))
-            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "unknown reference"));
+            .orElseThrow(() -> new MtnErrorException(HttpStatus.NOT_FOUND, MtnErrorResponse.notFound()));
 
         sleep(behaviour.delay());
 
@@ -146,14 +146,12 @@ public class RequestToPayController {
 
     private static String requireUuid(String value) {
         if (value == null || value.isBlank()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                "X-Reference-Id header is required");
+            throw MtnErrorResponse.invalidReference("X-Reference-Id header is required.");
         }
         try {
             return UUID.fromString(value).toString();
         } catch (IllegalArgumentException e) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                "X-Reference-Id must be a UUID");
+            throw MtnErrorResponse.invalidReference("X-Reference-Id must be a UUID.");
         }
     }
 

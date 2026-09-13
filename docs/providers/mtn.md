@@ -69,6 +69,29 @@ under test.
 | `GET /collection/v1_0/requesttopay/{ref}` | `200` with the payload above |
 | `GET` on a reference never submitted | `404` `{"code":"RESOURCE_NOT_FOUND"}` |
 
+### What the simulator answers with
+
+The simulator errors in this same shape everywhere, so an adapter driven against it can
+always read a `code` — an empty error body would be a fiction no real operator produces
+(issue #26). Only the two rows above are observed; the rest it chooses:
+
+| Simulator case | Response |
+| --- | --- |
+| reused `X-Reference-Id` | `409` `RESOURCE_ALREADY_EXIST` — observed |
+| `GET` on an unknown reference | `404` `RESOURCE_NOT_FOUND` — observed |
+| missing or malformed `X-Reference-Id` | `400` `INVALID_REFERENCE_ID` — **not an MTN code**, see *Still unknown* |
+| scenario `onSubmit.outcome: CONFLICT` | `409` `RESOURCE_ALREADY_EXIST` |
+| scenario `onSubmit.outcome: BAD_REQUEST` | `400` `NOT_ALLOWED` — documented vocabulary (ADR 0004), chosen as a default |
+| scenario `onSubmit.outcome: SERVER_ERROR` | `500` `INTERNAL_PROCESSING_ERROR` — documented vocabulary, chosen as a default |
+
+A scenario that needs a particular code declares one rather than relying on those defaults:
+`"onSubmit":{"outcome":"BAD_REQUEST","code":"INVALID_CURRENCY"}`. The field is optional and
+the status still comes from the outcome. `ACCEPT` and `NO_RESPONSE` are untouched by this —
+a 202 really is empty, and a non-answer really is nothing at all.
+
+The `/_nkap/` control plane deliberately keeps its own error shape: it does not imitate MTN,
+and a contributor who mistyped a scenario is better served by a 400 naming the field.
+
 ## Disbursements
 
 Not observed against a real MTN — mapped from the documented shape and driven through the
@@ -120,6 +143,10 @@ way a balance and a status query are:
 Left open deliberately rather than guessed. Each is worth a pull request adding a line here.
 
 - Which sandbox MSISDNs produce which failure codes, and how long each takes to settle.
+- **What MTN answers to a missing or malformed `X-Reference-Id`.** The simulator answers
+  `400` with `INVALID_REFERENCE_ID`, which is *its own* code: no observation records MTN's,
+  and inventing one that looked documented would be worse than an obviously local name. An
+  unrecognised code maps to `UNKNOWN` anyway, so nothing depends on the guess.
 - What a `SUCCESSFUL` and a `FAILED` status actually contain, field by field.
 - Whether production returns codes absent from the documentation.
 - The shape and headers of a real callback, and whether it is ever the only notification.

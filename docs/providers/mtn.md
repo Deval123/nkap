@@ -7,6 +7,13 @@ are in [ADR 0004](../adr/0004-mtn-adapter.md).
 Keep this file honest and specific. An operator's undocumented quirks are worth more to a
 contributor than the adapter's code, which they can read.
 
+The only other operator page today is
+[`docs/providers/orange-money.md`](orange-money.md) — read, not implemented, and worth
+reading first for the contrast: everything on that page is *assumed*, more weakly sourced
+than anything here, because nobody on this project holds an Orange developer account. This
+file's observed/assumed discipline is what makes that admission meaningful instead of a
+formality.
+
 ## Getting credentials
 
 Each country has its own developer portal with its own user store: an account on one does

@@ -279,6 +279,13 @@ own behaviour is undocumented or untested; the simulator implements the second c
 mismatch between the two is a bug in the simulator or the doc, not in MTN. Read that file for
 what it imitates before you trust an integration test that only ever ran against this.
 
+**Orange Money is read, not implemented.** There is no Orange adapter in this repository, and
+1.0.0 does not plan one. [`docs/providers/orange-money.md`](docs/providers/orange-money.md)
+records what a review of `provider-api` against Orange's documented API found — including two
+contract findings a redirect-style operator surfaces that MTN never could. Everything on that
+page is *assumed*, and more weakly sourced than `mtn.md`: nobody on this project holds an
+Orange developer account, and the page says so rather than presenting a guess as a fact.
+
 ## Integration guide and API reference
 
 [`docs/integration-guide.md`](docs/integration-guide.md) is for making your own backend talk

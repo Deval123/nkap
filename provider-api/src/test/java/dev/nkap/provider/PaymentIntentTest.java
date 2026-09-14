@@ -11,11 +11,11 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 /**
- * What used to be a runtime check — an operation of {@code BALANCE} or {@code STATEMENT} was
- * rejected with {@code IllegalArgumentException} — is now a type (issue #70). There is no
- * test here that feeds a {@link Capability.Feature} to this constructor and expects a
- * rejection: that call does not compile, so it cannot be written. What is left to test is
- * that the type is the one doing the work.
+ * What used to be a runtime check — an operation of {@code BALANCE} was rejected with
+ * {@code IllegalArgumentException} — is now a type (issue #70). There is no test here that
+ * feeds a {@link Capability.Feature} to this constructor and expects a rejection: that call
+ * does not compile, so it cannot be written. What is left to test is that the type is the
+ * one doing the work.
  */
 class PaymentIntentTest {
 
@@ -30,7 +30,7 @@ class PaymentIntentTest {
                 Capability.Operation.class, Money.class, String.class, String.class, String.class, Map.class);
 
         assertEquals(Capability.Operation.class, canonical.getParameterTypes()[0],
-                "operation is Capability.Operation — BALANCE and STATEMENT are not expressible here");
+                "operation is Capability.Operation — BALANCE is not expressible here");
     }
 
     @Test

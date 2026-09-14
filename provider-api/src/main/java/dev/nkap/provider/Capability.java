@@ -28,13 +28,18 @@ public sealed interface Capability {
         DISBURSE
     }
 
-    /** Something the gateway asks an adapter to do outright — no intent, no reference. */
+    /**
+     * Something the gateway asks an adapter to do outright — no intent, no reference, and
+     * every member has a method on {@link ProviderAdapter} to call for it
+     * ({@link CapabilityCoverageTest} asserts this). Statement reconciliation was
+     * deliberately left off this list: it reads a file from disk, and the operator is
+     * never asked for one — see {@code docs/positioning.md}'s *what is not in scope*
+     * section for why, and for what it would take to add it back as a member with its
+     * own contract method rather than a name alone (issue #74).
+     */
     enum Feature implements Capability {
         /** Report the balance of the account Nkap holds at the provider. */
         BALANCE,
-
-        /** Produce a statement for a period, which the reconciler compares to the ledger. */
-        STATEMENT,
 
         /** Whether the account behind an MSISDN is active at the provider. */
         HOLDER_VALIDATION

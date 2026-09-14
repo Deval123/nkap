@@ -12,9 +12,9 @@ import java.util.Objects;
  * separately to {@code submit}, because it is Nkap's, not the caller's.
  *
  * <p>{@code operation} is a {@link Capability.Operation}, not a {@link Capability}. An intent
- * for {@code BALANCE} or {@code STATEMENT} used to be rejected at construction, by a runtime
- * check that repeated what the type now says on its own: those are {@link Capability.Feature},
- * not something a caller submits, so there is no constructor here that accepts one.
+ * for {@code BALANCE} used to be rejected at construction, by a runtime check that repeated
+ * what the type now says on its own: {@link Capability.Feature} members are not something a
+ * caller submits, so there is no constructor here that accepts one.
  */
 public record PaymentIntent(
         Capability.Operation operation,

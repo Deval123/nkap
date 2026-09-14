@@ -93,6 +93,101 @@ test MSISDN `46733123453` stays `PENDING` for well over three seconds. A test th
 and immediately expects success fails for reasons that have nothing to do with the code
 under test.
 
+## Status and error mapping
+
+`MtnStatusMap` (package-private, `provider-mtn`) is the single place every MTN status and
+error code becomes a `PaymentState`. The table below is a copy for reading, not a second
+source of truth: `MtnStatusMappingDocTest`, beside `MtnStatusMap`, reads this file and
+asserts the two agree in both directions — every code in the map has a row here, every row
+here names a real code, and the state in the row is the state the map actually returns.
+Change one without the other and the build fails.
+
+**The table is closed, and anything absent is `UNKNOWN`.** A code MTN has not documented, a
+typo, or a new one added to their API tomorrow is not a failure this gateway can assert —
+only `UNKNOWN`. This is not merely intended: the conformance kit holds it as a rule every
+adapter must pass (issue #80, `ProviderAdapterConformanceTest.an_unrecognised_answer_is_unknown`),
+so an adapter that mapped an unrecognised code to `FAILED` would fail its own kit, not just
+disagree with a comment.
+
+**`reason` is consulted before `status`.** `MtnStatusMap.stateFor` checks `reason` first,
+then `status`, then the error body's `code` — whichever is non-blank first wins. The
+consequence is the least obvious behaviour in this adapter: a query or callback reporting
+`status: FAILED, reason: SERVICE_UNAVAILABLE` comes out `UNKNOWN`, not `FAILED`, because the
+`reason` — the operator's own system failing mid-answer — is what actually gets consulted,
+and it says nothing about whether the payment itself succeeded or failed.
+
+| Code | Appears in | Nkap records | Documented by MTN |
+| --- | --- | --- | --- |
+| `SUCCESSFUL` | `status` | `SUCCEEDED` | yes |
+| `PENDING` | `status` | `PENDING` | yes |
+| `EXPIRED` | `status` | `EXPIRED` | yes |
+| `FAILED` | `status` | `FAILED` | no |
+| `PAYER_NOT_FOUND` | `reason` | `FAILED` | yes |
+| `PAYEE_NOT_FOUND` | `reason` | `FAILED` | yes |
+| `NOT_ENOUGH_FUNDS` | `reason` | `FAILED` | yes |
+| `PAYER_LIMIT_REACHED` | `reason` | `FAILED` | yes |
+| `APPROVAL_REJECTED` | `reason` | `FAILED` | yes |
+| `INVALID_CURRENCY` | `reason` | `FAILED` | yes |
+| `NOT_ALLOWED` | `reason` | `FAILED` | yes |
+| `INVALID_CALLBACK_URL_HOST` | `reason` | `FAILED` | yes |
+| `SERVICE_UNAVAILABLE` | `reason` | `UNKNOWN` | yes |
+| `INTERNAL_PROCESSING_ERROR` | `reason` | `UNKNOWN` | yes |
+| `RESOURCE_NOT_FOUND` | error body `code`¹ | `UNKNOWN` | yes |
+
+¹ This column names where MTN's own vocabulary places the code, not where `stateFor` reads
+it from for this row. `MtnCollectionsAdapter`/`MtnDisbursementsAdapter`'s query handling maps
+any `404` to `UNKNOWN` unconditionally, without calling `stateFor` and without inspecting the
+body's `code` at all. That is deliberate, not an unwired lookup: see *Three namespaces, one
+flat map* below for why routing it through the table would be a regression, not a tidy-up.
+
+**Three rows carry the weight, and a reader will not believe them until they are argued.**
+`SERVICE_UNAVAILABLE` and `INTERNAL_PROCESSING_ERROR` are the operator saying *its own*
+system broke — which says nothing about where the money went, so `UNKNOWN`, not `FAILED`.
+`RESOURCE_NOT_FOUND` on a query means MTN has never seen the reference; since Nkap persists
+it before calling, that is either "never arrived" or "not visible yet", and one response
+cannot tell them apart — the reconciler does, after its window (see *Observed responses*
+below for the fuller argument, and `MtnStatusMap`'s own javadoc for the same reasoning next
+to the code it defends).
+
+**`FAILED` is in the map and not documented by MTN — that asymmetry is deliberate, not an
+omission.** ADR 0004 documents the fourteen codes marked "yes" above; a bare `FAILED` status
+with no recognised `reason` is Nkap's own interpretation, not an MTN vocabulary entry — MTN's
+own documentation never lists `FAILED` as a value of the `reason` field, only as the `status`
+value that carries one of the other codes. Treating an unadorned `FAILED` as `FAILED` rather
+than `UNKNOWN` is a narrow, deliberate exception to "anything absent is `UNKNOWN`": the
+operator's `status` field itself is never absent or unrecognised here, only its `reason` is,
+and a `status` of literally `FAILED` is already the verdict — there is nothing left for a
+missing `reason` to cast doubt on.
+
+### Three namespaces, one flat map
+
+The table is one flat map, but its keys come from three different namespaces — the "Appears
+in" column above: `status` values (`SUCCESSFUL`, `PENDING`, `FAILED`, `EXPIRED`), `reason`
+values, and the `code` field of a non-200 error body. Flattening them into one
+`Map<String, PaymentState>` works because the tokens happen to be disjoint across MTN's
+documented vocabulary, and it is what makes `stateFor` a one-liner — but it is an assumption,
+not a guarantee, and nothing checks that a future code MTN adds to one namespace does not
+collide with an existing one in another.
+
+**The error-body-`code` namespace is not wired into `stateFor` the way `status` and `reason`
+are, and that is not a gap — it is a stronger rule than the table can express.** Every call
+to `stateFor` in `MtnCollectionsAdapter` and `MtnDisbursementsAdapter` passes an empty string
+for that argument, and the one place a real `code` would naturally reach it — the query
+path's `404` branch — never calls `stateFor` at all. It returns `UNKNOWN` unconditionally,
+on purpose: a `404` moments after submission is indistinguishable from "not visible yet",
+and the adapter's own comment calls this "the least intuitive rule in the adapter" (see
+*Observed responses* below). Routing that branch through `stateFor` would let a `404` whose
+body happened to carry a recognised `FAILED` reason code — say, `NOT_ENOUGH_FUNDS` — come out
+`FAILED` instead of `UNKNOWN`, which is exactly the softening that rule exists to prevent:
+this project does not treat "the answer looks like a failure" as license to skip the
+one-response-cannot-tell-them-apart argument. `RESOURCE_NOT_FOUND`'s row in the table above
+is real, and records the mapping ADR 0004 documents for that code, and
+`MtnStatusMapTest.the_table_covers_every_documented_code` asserts it via `MtnStatusMap.isKnown`
+— but the row is not what runs for a `404`, and consulting it there would be a regression,
+not a tidy-up. A *second* error-body code, one no unconditional branch already overrides,
+would be the first to actually reach `stateFor` through this namespace — worth remembering
+before assuming this one already proves the wiring works.
+
 ## Observed responses
 
 | Call | Result |
@@ -101,6 +196,17 @@ under test.
 | same `X-Reference-Id` again | `409` `{"code":"RESOURCE_ALREADY_EXIST"}` — a previous attempt reached MTN; not an error |
 | `GET /collection/v1_0/requesttopay/{ref}` | `200` with the payload above |
 | `GET` on a reference never submitted | `404` `{"code":"RESOURCE_NOT_FOUND"}` |
+
+Every row above was actually seen against the sandbox. What a `400` on submission means is
+not: no real MTN account has produced one yet, so it stays here as **assumed**, from ADR
+0004's documented vocabulary and `MtnCollectionsAdapter.submit`'s own handling, not from
+observation — the same distinction the *Still unknown* section keeps elsewhere. `submit`
+treats any `400` as an outright refusal: no payment exists under this reference, the body's
+`code` is meant to be one of the `FAILED` reason codes from the mapping above, and the
+gateway records `CREATED → FAILED` directly rather than calling `query()` at all. Whether a
+real `400` body actually carries one of those codes, or something else entirely, is exactly
+the kind of thing worth confirming against a real account and moving up out of *assumed* once
+someone has.
 
 **A query on a reference MTN never saw is `UNKNOWN`, not `FAILED` — and it stays `UNKNOWN`
 forever if MTN genuinely never received it.** `MtnCollectionsAdapter`/
@@ -198,6 +304,10 @@ way a balance and a status query are:
 Left open deliberately rather than guessed. Each is worth a pull request adding a line here.
 
 - Which sandbox MSISDNs produce which failure codes, and how long each takes to settle.
+- **What a real `400` on submission actually contains.** Assumed from ADR 0004's vocabulary
+  and `MtnCollectionsAdapter.submit`'s own handling (*Observed responses* above); no real
+  account has produced one yet, so it is not yet known whether the body's `code` is always
+  one of the mapping's `FAILED` reason codes or something this table does not yet name.
 - **What MTN answers to a missing or malformed `X-Reference-Id`.** The simulator answers
   `400` with `INVALID_REFERENCE_ID`, which is *its own* code: no observation records MTN's,
   and inventing one that looked documented would be worse than an obviously local name. An

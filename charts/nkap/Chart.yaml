@@ -8,7 +8,18 @@ description: >-
   installing: three questions this chart forces that nothing before it did, and the
   credential rule that is not negotiable.
 type: application
-version: 0.1.0
+# The chart's own version, not the gateway's -- Helm allows the two to diverge, and after
+# this release they will. Set to 1.0.0 to match the gateway for this one release, on
+# purpose: shipping a "0.1.0" chart beside a "1.0.0" gateway would read as the chart having
+# fallen behind, when in fact nothing about it had. From here on the two move
+# independently -- a chart fixing a template bug, adding a value, or changing a default
+# bumps this number without appVersion changing at all, the same way a patch release of any
+# Helm chart works. Do not keep them in lockstep by habit; that would make every future
+# gateway release force a chart release whether or not the chart itself changed, which is
+# the exact coupling issue #96 spent a slice removing from ProviderAdapter for a different
+# reason -- an interface should version by what changed in it, not by what shares a
+# repository with it.
+version: 1.0.0
 # Documentation only -- there is no default image.tag (see values.yaml), so this is not a
 # default anything installs. It names the release this chart was written for.
 appVersion: "1.0.0"

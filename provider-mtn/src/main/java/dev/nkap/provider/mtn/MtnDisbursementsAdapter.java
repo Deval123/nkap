@@ -16,6 +16,7 @@ import dev.nkap.provider.ProviderAdapter;
 import dev.nkap.provider.ProviderId;
 import dev.nkap.provider.ProviderStatus;
 import dev.nkap.provider.ProviderUnavailableException;
+import dev.nkap.provider.QuerySubject;
 import dev.nkap.provider.RawCallback;
 import dev.nkap.provider.SubmitResult;
 import dev.nkap.provider.UntrustedCallbackException;
@@ -138,12 +139,16 @@ public final class MtnDisbursementsAdapter implements ProviderAdapter {
     }
 
     @Override
-    public ProviderStatus query(ReferenceId reference, Capability.Operation capability) throws ProviderUnavailableException {
-        Objects.requireNonNull(reference, "reference");
+    public ProviderStatus query(QuerySubject subject, Capability.Operation capability) throws ProviderUnavailableException {
+        Objects.requireNonNull(subject, "subject");
         if (capability != Capability.Operation.DISBURSE) {
             throw new IllegalArgumentException(
                     "the MTN disbursements adapter only answers DISBURSE queries, not " + capability);
         }
+        // subject.providerReference() is unused -- same reason as the collections adapter's
+        // query(): transfer's own reference is the key, and its 202 carries no body to have
+        // returned one anyway (see QuerySubject's javadoc, issue #96).
+        ReferenceId reference = subject.reference();
         HttpRequest.Builder request = HttpRequest.newBuilder(profile.endpoint(TRANSFER_PATH + "/" + reference))
                 .timeout(requestTimeout)
                 .header("Ocp-Apim-Subscription-Key", profile.subscriptionKey())

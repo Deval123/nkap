@@ -13,6 +13,7 @@ import dev.nkap.provider.PaymentIntent;
 import dev.nkap.provider.ProviderId;
 import dev.nkap.provider.ProviderStatus;
 import dev.nkap.provider.ProviderUnavailableException;
+import dev.nkap.provider.QuerySubject;
 import dev.nkap.provider.RawCallback;
 import dev.nkap.provider.SubmitResult;
 import java.time.Duration;
@@ -79,7 +80,7 @@ class MtnCollectionsAdapterTest {
         assertThat(submitted).isInstanceOfSatisfying(SubmitResult.Acknowledged.class,
                 acknowledged -> assertThat(acknowledged.state()).isEqualTo(PaymentState.SUBMITTED));
 
-        ProviderStatus status = mtn.query(reference, Capability.Operation.COLLECT);
+        ProviderStatus status = mtn.query(QuerySubject.of(reference), Capability.Operation.COLLECT);
         assertThat(status.state()).isEqualTo(PaymentState.SUCCEEDED);
         assertThat(status.providerStatusCode()).isEqualTo("SUCCESSFUL");
     }
@@ -93,13 +94,13 @@ class MtnCollectionsAdapterTest {
         ReferenceId reference = ReferenceId.newReference();
         mtn.submit(collectIntent(), reference);
 
-        assertThat(mtn.query(reference, Capability.Operation.COLLECT).state()).isEqualTo(PaymentState.UNKNOWN);
+        assertThat(mtn.query(QuerySubject.of(reference), Capability.Operation.COLLECT).state()).isEqualTo(PaymentState.UNKNOWN);
     }
 
     @Test
     @DisplayName("a query on a reference the operator has never seen is UNKNOWN, not a failure")
     void a_query_on_an_unknown_reference_is_unknown() throws Exception {
-        ProviderStatus status = adapter().query(ReferenceId.newReference(), Capability.Operation.COLLECT);
+        ProviderStatus status = adapter().query(QuerySubject.of(ReferenceId.newReference()), Capability.Operation.COLLECT);
 
         assertThat(status.state()).isEqualTo(PaymentState.UNKNOWN);
     }

@@ -11,6 +11,7 @@ import dev.nkap.provider.ProviderAdapter;
 import dev.nkap.provider.ProviderId;
 import dev.nkap.provider.ProviderStatus;
 import dev.nkap.provider.ProviderUnavailableException;
+import dev.nkap.provider.QuerySubject;
 import dev.nkap.provider.RawCallback;
 import dev.nkap.provider.SubmitResult;
 import dev.nkap.provider.UntrustedCallbackException;
@@ -99,11 +100,11 @@ public final class MtnAdapter implements ProviderAdapter {
     }
 
     @Override
-    public ProviderStatus query(ReferenceId reference, Capability.Operation capability)
+    public ProviderStatus query(QuerySubject subject, Capability.Operation capability)
             throws ProviderUnavailableException {
-        Objects.requireNonNull(reference, "reference");
+        Objects.requireNonNull(subject, "subject");
         Objects.requireNonNull(capability, "capability");
-        return productAdapter(capability).query(reference, capability);
+        return productAdapter(capability).query(subject, capability);
     }
 
     @Override

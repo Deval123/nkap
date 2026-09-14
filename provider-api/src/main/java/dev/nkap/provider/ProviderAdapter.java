@@ -18,8 +18,10 @@ import java.util.stream.Collectors;
  * would have to look something up — read gateway state, consult a payment it cannot see —
  * to do its job, the contract is missing an argument, and the fix is to add it here while
  * there is one adapter to change with it. ADR 0005 learned this from {@code submit};
- * {@link #query} learned it again from MTN's two products, and ADR 0008 records the
- * boundary.
+ * {@link #query} learned it from MTN's two products, and ADR 0008 records the boundary —
+ * then learned it a second time from reading a second operator's documentation rather than
+ * implementing it (issue #96), which is the harder case: a lesson from an operator with no
+ * adapter here to enforce it.
  *
  * <p>Every implementation must pass the conformance kit before it is merged. That is how
  * a provider nobody on the project has an account with can still be accepted.
@@ -58,15 +60,22 @@ public interface ProviderAdapter {
             throws ProviderUnavailableException;
 
     /**
-     * Asks the provider what became of a reference. The authority on the outcome.
+     * Asks the provider what became of a payment. The authority on the outcome.
      *
      * <p>{@code capability} is the operation the reference was submitted under. An operator
      * that runs one product per operation (MTN: Collections and Disbursements have different
      * base paths) needs it to know which one to ask; an operator with a single status endpoint
      * may ignore it. The caller has it — the payment records its operation — so it is passed,
      * not looked up. See ADR 0008.
+     *
+     * <p>{@link QuerySubject} carries {@code subject.providerReference()} for the same
+     * reason: an operator whose status call needs a token it issued, not the reference Nkap
+     * chose, needs it, and the caller already has it from {@link SubmitResult.Acknowledged}.
+     * MTN ignores it — {@code requesttopay}'s {@code 202} carries no body, so it is always
+     * blank for MTN — which is worth knowing before assuming a parameter that is empty in
+     * the only implementation is dead weight (ADR 0008, amendment).
      */
-    ProviderStatus query(ReferenceId reference, Capability.Operation capability) throws ProviderUnavailableException;
+    ProviderStatus query(QuerySubject subject, Capability.Operation capability) throws ProviderUnavailableException;
 
     /**
      * Authenticates and interprets an incoming webhook.
@@ -77,6 +86,15 @@ public interface ProviderAdapter {
      * route on. If a future operator sent product-distinct callbacks, that is a fact its own
      * adapter reads out of the payload — not a parameter the gateway supplies and no other
      * implementation uses. Do not add one to "complete the symmetry" with {@link #query}.
+     *
+     * <p><strong>A different, harder case: do not attempt to add an argument for a
+     * per-payment notification secret either</strong> — Orange's documented notification
+     * token appears to be issued per payment, so verifying one would mean already knowing
+     * which payment it concerns. That is not a missing argument the way {@link #query}'s
+     * {@link QuerySubject#providerReference()} was (issue #96): the gateway cannot look up
+     * which payment a callback is about until something has parsed the callback, which is
+     * the exact problem this method exists to solve. An argument cannot fix a circularity.
+     * Recorded as an open question in ADR 0008, not as a signature this method is missing.
      */
     CallbackEvent parseCallback(RawCallback callback) throws UntrustedCallbackException;
 

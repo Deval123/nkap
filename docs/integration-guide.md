@@ -306,11 +306,32 @@ LAST_REQUEST="$(docker logs guide-webhook-receiver 2>&1 \
       END { printf "%s", last }
     ')"
 SIGNATURE_HEADER="$(echo "$LAST_REQUEST" | grep -i '^Nkap-Signature:' | sed 's/^[^:]*: *//')"
+EVENT_ID_HEADER="$(echo "$LAST_REQUEST" | grep -i '^Nkap-Event-Id:' | sed 's/^[^:]*: *//')"
+EVENT_TYPE_HEADER="$(echo "$LAST_REQUEST" | grep -i '^Nkap-Event-Type:' | sed 's/^[^:]*: *//')"
 RAW_BODY="$(echo "$LAST_REQUEST" | sed -n '/^BODY_START$/,/^BODY_END$/p' | sed '1d;$d')"
 
 [ -n "$SIGNATURE_HEADER" ] || { echo "FAIL: no Nkap-Signature header captured"; exit 1; }
 echo "captured signature: $SIGNATURE_HEADER"
 ```
+
+`docs/webhooks.md` claims `Nkap-Event-Id` and `Nkap-Event-Type` carry "the same values as the
+body's own `id` and `type` fields" — checked here rather than left to quietly stop being true,
+since nothing about a header and a JSON field agreeing is enforced by anything but the code
+that sets both of them at send time:
+
+```bash
+BODY_ID="$(echo "$RAW_BODY" | python3 -c 'import json,sys;print(json.load(sys.stdin)["id"])')"
+BODY_TYPE="$(echo "$RAW_BODY" | python3 -c 'import json,sys;print(json.load(sys.stdin)["type"])')"
+
+[ "$EVENT_ID_HEADER" = "$BODY_ID" ] || { echo "FAIL: Nkap-Event-Id ($EVENT_ID_HEADER) != body id ($BODY_ID)"; exit 1; }
+[ "$EVENT_TYPE_HEADER" = "$BODY_TYPE" ] || { echo "FAIL: Nkap-Event-Type ($EVENT_TYPE_HEADER) != body type ($BODY_TYPE)"; exit 1; }
+echo "Nkap-Event-Id and Nkap-Event-Type both match the signed body's own fields"
+```
+
+That agreement is exactly why the header is tempting to trust and exactly why you still
+should not: it holds for every genuine delivery, and holds for nothing once something between
+Nkap and your receiver rewrites the header, because nothing re-checks it against the body the
+way `Nkap-Signature` is about to be re-checked next.
 
 Now verify it — the exact recipe from `docs/webhooks.md`, run for real against the secret this
 guide provisioned and the request the gateway actually sent, not a synthetic example:
@@ -354,16 +375,15 @@ ADMIN_KEY="$(docker compose run --rm gateway \
   --nkap.apikey.create --nkap.apikey.merchant="$ADMIN" --nkap.apikey.admin --nkap.apikey.label=integration-guide \
   | grep -oE 'nkap_[A-Za-z0-9_-]{43}')"
 
-EVENT_ID="$(echo "$RAW_BODY" | python3 -c 'import json,sys;print(json.load(sys.stdin)["id"])')"
-
 curl -sS -o /dev/null -X POST -H "Authorization: Bearer $ADMIN_KEY" \
-  "$GATEWAY/webhooks/events/$EVENT_ID/replay"
+  "$GATEWAY/webhooks/events/$BODY_ID/replay"
 sleep 2
 ```
 
 A receiver that only checks "did this payment settle" would process this twice. **Deduplicate
-on `id`** — it is the one field that is identical across every delivery of the same event,
-including a manual replay:
+on the body's `id`, not the `Nkap-Event-Id` header** — only the body is signed, so a header
+is not a value an attacker is prevented from changing, which makes it the wrong thing to key
+a dedup check on even though it carries the same value on every genuine delivery:
 
 ```bash
 SEEN_FILE="/tmp/nkap-guide-seen-events"

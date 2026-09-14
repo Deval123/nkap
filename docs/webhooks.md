@@ -70,7 +70,12 @@ you, since a refund's `operation` is `DISBURSE` like any other transfer out:
 }
 ```
 
-**`id` is the field to deduplicate on.** See the next section for why it has to be.
+**The body's `id` is the field to deduplicate on — not the `Nkap-Event-Id` header, even
+though it carries the same value on every genuine delivery.** Only the body is signed:
+a header can be changed by anything between Nkap and a receiver without touching
+`Nkap-Signature` at all, so a dedup check keyed on it is a dedup check an attacker can walk
+straight past by rewriting one header. See the next section for why deduplication has to
+happen at all.
 
 ## At-least-once, and no ordering
 
@@ -106,6 +111,18 @@ Nkap-Signature: t=1757602327,v1=5257a869e7bfce951fbb7d3fb8fe28c3b4b9c3a2b2e0d3a1
 `id` and `type` fields, available before you parse it, for routing or logging. **They are not
 signed and not a substitute for verifying the body** — a receiver that trusts them without
 checking `Nkap-Signature` is trusting whatever put them on the wire, not Nkap.
+
+**That exclusion is deliberate, not an oversight left for later** (raised and settled in
+review of issue #88): the signed material stays `"{t}.{body}"` and nothing else, on purpose.
+`id` and `type` are already inside the signed body, so adding the header copies to the
+signature would tell a verifier nothing it cannot already get by checking the signature and
+reading the body — the only thing it would add is one more field every independent
+implementation of this recipe has to canonicalise byte-for-byte the way Nkap's own signer
+does. That is exactly where separately-written verifiers drift apart in practice — one
+whitespace choice, one field-ordering choice, one encoding choice out of step with the
+sender — and a signature scheme that is easy to implement subtly wrong is worse than one
+with less in it: a receiver whose check silently stops verifying still looks like a receiver
+that verifies. Fewer inputs to the HMAC is the safer default, not a missing feature.
 
 `t` is the Unix timestamp (seconds) the request was signed at. `v1` is the hex-encoded
 HMAC-SHA256 of `"{t}.{body}"` (the timestamp, a literal `.`, then the raw request body),

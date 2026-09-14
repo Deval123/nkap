@@ -228,9 +228,10 @@ Any variable left unset fails fast with a one-line message naming it, before any
 starts. The last command prints your API key — **once**; only its hash is ever stored, and
 there is no command or route that reads it back. Save it now. Bringing the stack up again
 after a `docker compose down` runs `key-init` again too, which mints and prints a *new* key
-for the same merchant — the old one keeps working (there is no revocation yet; see the
-roadmap), so this is a second credential, not a replacement, until you deliberately stop using
-the first one. If you only want the one key, leave the stack running rather than cycling it,
+for the same merchant — the old one keeps working (there is no revocation command yet, only a
+direct database delete; see [`docs/security-notes.md`](docs/security-notes.md)), so this is a
+second credential, not a replacement, until you deliberately stop using the first one. If you
+only want the one key, leave the stack running rather than cycling it,
 or provision it once by hand instead (see below) and remove `key-init` from the file.
 
 Once it is up, fill in your real MTN credentials the same way — the file lists every variable
@@ -287,6 +288,13 @@ actually hits. [`docs/openapi.yaml`](docs/openapi.yaml) is the same API as a sch
 path, method, status code and field. Both are checked against the running application on
 every build (`OpenApiSpecIT`, `examples/run-integration-guide.sh`), not merely written once
 and left to drift.
+
+[`docs/configuration-reference.md`](docs/configuration-reference.md) covers every `nkap.*`
+setting, its default, and what a deployment actually experiences when it is wrong — kept
+honest against the code by `ConfigurationReferenceTest`.
+[`docs/security-notes.md`](docs/security-notes.md) covers credential handling, webhook
+verification, what Nkap does and does not protect, and what an operator has to do that Nkap
+cannot.
 
 ## Build
 

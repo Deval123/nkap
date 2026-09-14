@@ -51,6 +51,18 @@ public final class PostgresApiKeyStore implements ApiKeyStore {
     @Override
     public Provisioned provisionWithToken(String token, String merchantId, boolean admin, String label) {
         Objects.requireNonNull(token, "token");
+        if (!ApiKeys.isWellFormed(token)) {
+            // ApiKeys's own javadoc justifies a fast, unsalted hash on the premise that a
+            // key generated here already carries 256 bits of entropy. That premise is only
+            // true of a token this project generated -- refusing anything else here is what
+            // keeps it true no matter which caller reaches this method (issue #86's
+            // correction: an operator-supplied token was, briefly, the documented
+            // production path).
+            throw new IllegalArgumentException(
+                    "token does not have the shape ApiKeys.newToken() produces (" + ApiKeys.PREFIX
+                            + " followed by 43 base64url characters) -- provision without a token"
+                            + " to have one generated, which is always safe to store with a fast hash");
+        }
         String merchant = requireText(merchantId, "merchantId");
         String hash = ApiKeys.hash(token);
         UUID id = UUID.randomUUID();

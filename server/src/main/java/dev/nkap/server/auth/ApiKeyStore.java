@@ -34,8 +34,15 @@ public interface ApiKeyStore {
      * Creates a key whose token is exactly {@code token}, for a caller that needs a known
      * value — the demo, and tests. <strong>Idempotent for a given token</strong>: if a key
      * with that token already exists, it is returned unchanged, so re-running the demo's
-     * key-provisioning step does not fail. The token still must not be one anyone would
-     * mistake for production; that is the caller's responsibility.
+     * key-provisioning step does not fail.
+     *
+     * <p>{@code token} must have the shape {@link ApiKeys#newToken()} produces — this is not
+     * a route for a human-chosen secret. {@code ApiKeys}'s javadoc justifies a fast, unsalted
+     * hash entirely on the premise that a stored key already carries 256 bits of entropy;
+     * accepting an arbitrary string here would store it under that same premise while making
+     * it false. A caller that needs a fixed, obviously-fake value for a demo cannot use this
+     * method for that value directly — see {@code compose.yaml}'s own key-init for how it
+     * still gets one.
      */
     Provisioned provisionWithToken(String token, String merchantId, boolean admin, String label);
 

@@ -32,8 +32,11 @@ SIMULATOR="${SIMULATOR:-http://localhost:8081}"
 # The demo API key. compose.yaml's `key-init` service provisions exactly this one, for
 # merchant `acme`, before the gateway starts. The name says what it is: a real deployment
 # provisions its own with `docker compose run --rm gateway --nkap.apikey.create ...` and
-# never uses a fixed token.
-DEMO_KEY="${DEMO_KEY:-nkap_demo-key-not-for-production}"
+# never uses a fixed token. Overridable so the same script can run against a stack that
+# minted its own key instead -- .github/workflows/release.yml's verify-pull job does, reading
+# it out of `docker compose logs key-init` rather than fixing one here (issue #86's
+# correction: nothing outside this demo may make an operator-chosen token the norm).
+DEMO_KEY="${DEMO_KEY:-nkap_demo-key-not-for-production-000000000000000}"
 
 # Run compose commands from the repository root, whatever directory we were invoked from.
 cd "$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"

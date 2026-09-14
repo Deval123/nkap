@@ -149,13 +149,27 @@ jobs:
       NKAP_VERSION: ${{ needs.publish.outputs.version }}
       NKAP_DB_PASSWORD: release-check-not-for-production
       NKAP_MERCHANT_ID: acme
-      # Reused, on purpose, from compose.yaml's own demo key: this stack is torn down at the
-      # end of this job and never reachable from outside the runner, so it carries the exact
-      # same risk profile as the clone-path demo it stands in for -- not the risk this slice
-      # exists to prevent, which is this value ending up in a file a stranger downloads.
-      NKAP_API_KEY: nkap_demo-key-not-for-production
     steps:
       - uses: actions/checkout@v5
+
+      # A manifest missing linux/arm64 publishes green and fails only in the hands of the ARM
+      # user the multi-arch build was for -- pulling on this amd64 runner alone would never
+      # notice. `imagetools inspect` reads the manifest list itself, no credentials needed
+      # (proved: it works against a public image with no docker/login-action step run at all).
+      # Asserts only -- a step whose output a human is supposed to read is a step nobody reads.
+      - name: Assert both images actually shipped linux/amd64 and linux/arm64
+        run: |
+          for image in "${GATEWAY_IMAGE}:${NKAP_VERSION}" "${SIMULATOR_IMAGE}:${NKAP_VERSION}"; do
+            present="$(docker buildx imagetools inspect --raw "$image" \
+              | jq -r '.manifests[].platform | select(.architecture != "unknown") | "\(.os)/\(.architecture)"' \
+              | sort -u)"
+            for want in linux/amd64 linux/arm64; do
+              if ! grep -qx "$want" <<< "$present"; then
+                echo "::error::${image} has no ${want} manifest -- present: $(tr '\n' ' ' <<< "$present")"
+                exit 1
+              fi
+            done
+          done
 
       - name: Pull the images with no registry credentials at all
         run: |
@@ -168,8 +182,25 @@ jobs:
             -f nkap-standalone.compose.yaml -f .github/release-check.compose.yaml \
             up -d --wait --wait-timeout 240
 
+      # nkap-standalone.compose.yaml provisions no API key of its own -- an operator-chosen
+      # one is exactly the weak-key risk issue #86's correction removed -- so key-init mints
+      # one and prints it once, the same gesture a real operator's first run makes. Reading it
+      # out of the log here, rather than fixing a value in this job's own environment, is what
+      # actually exercises that gesture instead of routing around it.
+      - name: Read the API key key-init minted
+        id: key
+        run: |
+          key="$(docker compose -f nkap-standalone.compose.yaml -f .github/release-check.compose.yaml \
+            logs key-init | grep -oE 'nkap_[A-Za-z0-9_-]{43}' | head -n1)"
+          if [ -z "$key" ]; then
+            echo "::error::no API key found in key-init's log output" >&2
+            exit 1
+          fi
+          echo "::add-mask::$key"
+          echo "key=$key" >> "$GITHUB_OUTPUT"
+
       - name: Run the quick-start demo against the published images
-        run: DEMO_KEY="$NKAP_API_KEY" ./examples/demo.sh
+        run: DEMO_KEY="${{ steps.key.outputs.key }}" ./examples/demo.sh
 
       - name: Stack logs
         if: failure()

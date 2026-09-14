@@ -207,8 +207,9 @@ release — substitute the release you actually want; see
 [Releases](https://github.com/deval123/nkap/releases) for the list.
 
 This file provisions no API key and starts nothing without one — deriving a key from
-`compose.yaml`, the obvious shortcut, would put `nkap_demo-key-not-for-production`, published
-in this public repository, in front of a real gateway. It also changes none of
+`compose.yaml`, the obvious shortcut, would put a fixed, well-known credential, published in
+this public repository, in front of a real gateway. `key-init` below mints a real one instead,
+the same way `--nkap.apikey.create` always does, and prints it once. It also changes none of
 `application.yml`'s cadence: `compose.yaml`'s fast timeouts exist to make a demo watchable in
 one sitting, and would hammer a real MTN account and burn the reconciler's escalation window
 in minutes if carried here. And it never runs a simulator — an operator deploying Nkap for
@@ -219,14 +220,24 @@ own comment for the rest of that reasoning.
 export NKAP_VERSION=1.0.0                 # the release you downloaded the file for
 export NKAP_DB_PASSWORD=$(openssl rand -hex 32)
 export NKAP_MERCHANT_ID=your-merchant-id
-export NKAP_API_KEY=$(openssl rand -hex 32)
 docker compose -f nkap-standalone.compose.yaml up -d
+docker compose -f nkap-standalone.compose.yaml logs key-init
 ```
 
 Any variable left unset fails fast with a one-line message naming it, before any container
-starts. Once it is up, fill in your real MTN credentials the same way — the file lists every
-variable it reads, each defaulting to unconfigured rather than to a placeholder — and
-provision additional API keys the same way `compose.yaml`'s own comment describes:
+starts. The last command prints your API key — **once**; only its hash is ever stored, and
+there is no command or route that reads it back. Save it now. Bringing the stack up again
+after a `docker compose down` runs `key-init` again too, which mints and prints a *new* key
+for the same merchant — the old one keeps working (there is no revocation yet; see the
+roadmap), so this is a second credential, not a replacement, until you deliberately stop using
+the first one. If you only want the one key, leave the stack running rather than cycling it,
+or provision it once by hand instead (see below) and remove `key-init` from the file.
+
+Once it is up, fill in your real MTN credentials the same way — the file lists every variable
+it reads, each defaulting to unconfigured rather than to a placeholder — and provision
+additional keys, for additional merchants, the same command `compose.yaml`'s own comment
+describes (no `--nkap.apikey.token`: that is what lets the gateway generate one instead of you
+choosing one, which is the only way a fast, unsalted hash is safe to store):
 
 ```bash
 docker compose -f nkap-standalone.compose.yaml run --rm gateway \

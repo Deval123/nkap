@@ -6,6 +6,7 @@ import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.util.Base64;
 import java.util.HexFormat;
+import java.util.regex.Pattern;
 
 /**
  * Generates API keys and hashes them for storage.
@@ -18,12 +19,22 @@ import java.util.HexFormat;
  * expensive to guess. A key generated here already carries 256 bits of entropy; there is
  * nothing to slow down. A fast hash is the correct tool. The lookup is by exact hash match,
  * so it is also constant-time in the database's index, not a scan of every row.
+ *
+ * <p>That premise only holds for a token this class produced. {@link #isWellFormed} is what
+ * lets a caller taking a token from the outside — {@link PostgresApiKeyStore#provisionWithToken}
+ * does, for {@code --nkap.apikey.token} — refuse one that does not carry the entropy the
+ * javadoc above promises, rather than hash and store whatever it was handed (issue #86's
+ * correction).
  */
 final class ApiKeys {
 
     static final String PREFIX = "nkap_";
 
     private static final SecureRandom RANDOM = new SecureRandom();
+
+    // 32 random bytes, base64url without padding, is always exactly 43 characters
+    // (ceil(32 * 8 / 6)) drawn from base64url's own alphabet.
+    private static final Pattern WELL_FORMED = Pattern.compile("^" + PREFIX + "[A-Za-z0-9_-]{43}$");
 
     private ApiKeys() {
     }
@@ -33,6 +44,16 @@ final class ApiKeys {
         byte[] bytes = new byte[32];
         RANDOM.nextBytes(bytes);
         return PREFIX + Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+    }
+
+    /**
+     * Whether {@code token} could have come from {@link #newToken}: the right prefix, the
+     * right length, drawn from base64url's alphabet. Not a guarantee it did — that would need
+     * storing the plaintext, which this project never does — only that it is not a guessable
+     * string a human chose, which is the one thing a fast, unsalted hash requires to be safe.
+     */
+    static boolean isWellFormed(String token) {
+        return token != null && WELL_FORMED.matcher(token).matches();
     }
 
     /** The lowercase-hex SHA-256 of {@code token} — the only form that is stored. */

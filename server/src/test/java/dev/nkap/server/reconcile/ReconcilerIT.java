@@ -166,7 +166,7 @@ class ReconcilerIT {
         // that claims and advances the count without any real waiting would leave it.
         ReconcilerProperties properties = new ReconcilerProperties(
                 Duration.ofSeconds(30), 50,
-                Duration.ofMinutes(1), Duration.ofHours(1), Duration.ofHours(1));
+                Duration.ofMinutes(1), Duration.ofHours(1), Duration.ofHours(1), Duration.ofMinutes(2));
         Instant unresolvedSince = Instant.now().truncatedTo(ChronoUnit.SECONDS);
         AdjustableClock clock = new AdjustableClock(unresolvedSince.plus(Duration.ofMinutes(10)));
         Reconciler reconciler = reconcilerWith(properties, operatorThatIsSilent(), clock);
@@ -197,7 +197,7 @@ class ReconcilerIT {
         // the count.
         ReconcilerProperties properties = new ReconcilerProperties(
                 Duration.ofSeconds(30), 50,
-                Duration.ofMinutes(1), Duration.ofHours(1), Duration.ofHours(1));
+                Duration.ofMinutes(1), Duration.ofHours(1), Duration.ofHours(1), Duration.ofMinutes(2));
         Instant unresolvedSince = Instant.now().truncatedTo(ChronoUnit.SECONDS);
         AdjustableClock clock = new AdjustableClock(unresolvedSince.plus(Duration.ofHours(2)));
         Reconciler reconciler = reconcilerWith(properties, operatorThatIsSilent(), clock);
@@ -223,7 +223,7 @@ class ReconcilerIT {
     @DisplayName("past the window, the confirming call still happens first: a resolving answer settles the payment instead of escalating")
     void a_confirming_call_past_the_window_can_still_resolve_instead_of_escalate() {
         ReconcilerProperties properties = new ReconcilerProperties(
-                Duration.ofSeconds(30), 50, Duration.ofMinutes(1), Duration.ofHours(1), Duration.ofSeconds(1));
+                Duration.ofSeconds(30), 50, Duration.ofMinutes(1), Duration.ofHours(1), Duration.ofSeconds(1), Duration.ofMinutes(2));
         Reconciler reconciler = reconcilerWith(properties, operatorAnswering(new ProviderStatus(
                 PaymentState.SUCCEEDED, "SUCCESSFUL", "txn-last", null, "", "{\"status\":\"SUCCESSFUL\"}")));
 
@@ -243,7 +243,7 @@ class ReconcilerIT {
     @DisplayName("hopping between non-terminal states does not restart the window: a payment past the window is still escalated")
     void hopping_non_terminal_states_does_not_restart_the_window() {
         ReconcilerProperties properties = new ReconcilerProperties(
-                Duration.ofSeconds(30), 50, Duration.ofMinutes(1), Duration.ofHours(1), Duration.ofHours(1));
+                Duration.ofSeconds(30), 50, Duration.ofMinutes(1), Duration.ofHours(1), Duration.ofHours(1), Duration.ofMinutes(2));
         // The operator only ever says PENDING — a legal, non-terminal answer, never a verdict.
         Reconciler reconciler = reconcilerWith(properties, operatorAnswering(new ProviderStatus(
                 PaymentState.PENDING, "PENDING", "", null, "", "{\"status\":\"PENDING\"}")));
@@ -285,7 +285,7 @@ class ReconcilerIT {
         // wrote.
         ReconcilerProperties properties = new ReconcilerProperties(
                 Duration.ofSeconds(30), 50,
-                Duration.ofMinutes(1), Duration.ofHours(1), Duration.ofHours(24));
+                Duration.ofMinutes(1), Duration.ofHours(1), Duration.ofHours(24), Duration.ofMinutes(2));
         AdjustableClock clock = new AdjustableClock(Instant.now().truncatedTo(ChronoUnit.SECONDS));
         Reconciler reconciler = reconcilerWith(properties, operatorAnswering(new ProviderStatus(
                 PaymentState.PENDING, "PENDING", "", null, "", "{\"status\":\"PENDING\"}")), clock);
@@ -327,7 +327,7 @@ class ReconcilerIT {
         // branch.
         ReconcilerProperties properties = new ReconcilerProperties(
                 Duration.ofSeconds(30), 50,
-                Duration.ofSeconds(30), Duration.ofMinutes(10), Duration.ofSeconds(1));
+                Duration.ofSeconds(30), Duration.ofMinutes(10), Duration.ofSeconds(1), Duration.ofMinutes(2));
         Reconciler reconciler = reconcilerWith(properties, operatorAnswering(new ProviderStatus(
                 PaymentState.PENDING, "PENDING", "", null, "", "{\"status\":\"PENDING\"}")));
 
@@ -351,7 +351,7 @@ class ReconcilerIT {
     @DisplayName("an escalated payment that a later callback moves between non-terminal states stays escalated, and is still not claimed")
     void an_escalated_payment_that_hops_stays_escalated_and_is_not_claimed() throws Exception {
         ReconcilerProperties properties = new ReconcilerProperties(
-                Duration.ofSeconds(30), 50, Duration.ofMinutes(10), Duration.ofMinutes(10), Duration.ofSeconds(1));
+                Duration.ofSeconds(30), 50, Duration.ofMinutes(10), Duration.ofMinutes(10), Duration.ofSeconds(1), Duration.ofMinutes(2));
         ProviderAdapter silentOperator = mock(ProviderAdapter.class);
         when(silentOperator.query(any(), any())).thenThrow(new ProviderUnavailableException("silent"));
         Reconciler reconciler = reconcilerWith(properties, registryFor(silentOperator));
@@ -398,7 +398,7 @@ class ReconcilerIT {
         // pass is the one that escalates.
         ReconcilerProperties properties = new ReconcilerProperties(
                 Duration.ofSeconds(30), 50,
-                Duration.ofMinutes(10), Duration.ofMinutes(10), Duration.ofSeconds(1));
+                Duration.ofMinutes(10), Duration.ofMinutes(10), Duration.ofSeconds(1), Duration.ofMinutes(2));
         Reconciler reconciler = reconcilerWith(properties, operatorThatIsSilent());
 
         ReferenceId reference = anUnknownPaymentDueForReconciliation();
@@ -440,7 +440,7 @@ class ReconcilerIT {
     @DisplayName("a reconciler query that still does not answer leaves the payment UNKNOWN, counts the attempt, and defers the next")
     void a_silent_query_defers_the_next_attempt() {
         ReconcilerProperties properties = new ReconcilerProperties(
-                Duration.ofSeconds(30), 50, Duration.ofMinutes(5), Duration.ofHours(1), Duration.ofHours(24));
+                Duration.ofSeconds(30), 50, Duration.ofMinutes(5), Duration.ofHours(1), Duration.ofHours(24), Duration.ofMinutes(2));
         Reconciler reconciler = reconcilerWith(properties, operatorThatIsSilent());
 
         ReferenceId reference = anUnknownPaymentDueForReconciliation();
@@ -463,7 +463,7 @@ class ReconcilerIT {
     void the_interval_doubles_then_holds_at_the_maximum() {
         ReconcilerProperties properties = new ReconcilerProperties(
                 Duration.ofSeconds(30), 50,
-                Duration.ofSeconds(1), Duration.ofSeconds(4), Duration.ofHours(1));
+                Duration.ofSeconds(1), Duration.ofSeconds(4), Duration.ofHours(1), Duration.ofMinutes(2));
         Instant t0 = Instant.now().truncatedTo(ChronoUnit.SECONDS);
         AdjustableClock clock = new AdjustableClock(t0);
         Reconciler reconciler = reconcilerWith(properties, operatorThatIsSilent(), clock);
@@ -494,7 +494,7 @@ class ReconcilerIT {
     @DisplayName("an escalated payment is not queried again by the reconciler, but a callback arriving later still resolves it")
     void an_escalated_payment_is_not_retried_but_a_later_callback_resolves_it() throws Exception {
         ReconcilerProperties properties = new ReconcilerProperties(
-                Duration.ofSeconds(30), 50, Duration.ofMinutes(10), Duration.ofMinutes(10), Duration.ofSeconds(1));
+                Duration.ofSeconds(30), 50, Duration.ofMinutes(10), Duration.ofMinutes(10), Duration.ofSeconds(1), Duration.ofMinutes(2));
         ProviderAdapter silentOperator = mock(ProviderAdapter.class);
         when(silentOperator.query(any(), any())).thenThrow(new ProviderUnavailableException("silent"));
         Reconciler reconciler = reconcilerWith(properties, registryFor(silentOperator));
@@ -597,7 +597,7 @@ class ReconcilerIT {
 
     private ReconcilerProperties defaults() {
         return new ReconcilerProperties(Duration.ofSeconds(30), 50,
-                Duration.ofMinutes(1), Duration.ofHours(1), Duration.ofHours(24));
+                Duration.ofMinutes(1), Duration.ofHours(1), Duration.ofHours(24), Duration.ofMinutes(2));
     }
 
     private Reconciler reconcilerWith(ReconcilerProperties properties, AdapterRegistry adapters) {
@@ -609,7 +609,7 @@ class ReconcilerIT {
         ReconciliationStore store = new PostgresReconciliationStore(jdbc, txManager, policy);
         SettlementService settlement = new SettlementService(payments, adapters, ledger,
                 new OutboxNotifier(new InMemoryOutbox(), new InMemoryWebhookEndpointStore(), new ObjectMapper()), txManager);
-        return new Reconciler(store, settlement, policy, properties, clock, new SimpleMeterRegistry());
+        return new Reconciler(payments, store, settlement, policy, properties, clock, new SimpleMeterRegistry(), txManager);
     }
 
     private static AdapterRegistry operatorThatIsSilent() {

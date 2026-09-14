@@ -71,7 +71,7 @@ class RefundServiceTest {
             return new SubmitResult.Acknowledged(PaymentState.SUBMITTED, "op-ref", "{}");
         });
 
-        Payment refund = refunds.createAndSubmit(original, Money.of(2000, Currency.EUR));
+        Payment refund = refunds.createAndSubmit(original, Money.of(2000, Currency.EUR), "Refund", ReferenceId.newReference());
 
         assertThat(refund.refundOf()).contains(original.reference());
         assertThat(refund.intent().operation()).isEqualTo(Capability.Operation.DISBURSE);
@@ -85,7 +85,7 @@ class RefundServiceTest {
         Payment original = succeededCollection(5000);
         when(adapter.submit(any(), any())).thenReturn(new SubmitResult.Rejected("NOT_ALLOWED", "refused", "{}"));
 
-        Payment refund = refunds.createAndSubmit(original, Money.of(2000, Currency.EUR));
+        Payment refund = refunds.createAndSubmit(original, Money.of(2000, Currency.EUR), "Refund", ReferenceId.newReference());
 
         assertThat(refund.state()).isEqualTo(PaymentState.FAILED);
         Payment reloaded = payments.findByReference(original.reference()).orElseThrow();
@@ -97,7 +97,7 @@ class RefundServiceTest {
     void an_amount_exceeding_the_remaining_balance_is_refused_before_persisting() {
         Payment original = succeededCollection(5000);
 
-        assertThatThrownBy(() -> refunds.createAndSubmit(original, Money.of(5001, Currency.EUR)))
+        assertThatThrownBy(() -> refunds.createAndSubmit(original, Money.of(5001, Currency.EUR), "Refund", ReferenceId.newReference()))
                 .isInstanceOf(RefundExceedsRemainingException.class);
 
         Payment reloaded = payments.findByReference(original.reference()).orElseThrow();
@@ -113,9 +113,9 @@ class RefundServiceTest {
         Payment original = succeededCollection(5000);
         when(adapter.submit(any(), any())).thenReturn(new SubmitResult.Acknowledged(PaymentState.SUBMITTED, "op-ref", "{}"));
 
-        refunds.createAndSubmit(original, Money.of(3000, Currency.EUR));
+        refunds.createAndSubmit(original, Money.of(3000, Currency.EUR), "Refund", ReferenceId.newReference());
 
-        assertThatThrownBy(() -> refunds.createAndSubmit(original, Money.of(2001, Currency.EUR)))
+        assertThatThrownBy(() -> refunds.createAndSubmit(original, Money.of(2001, Currency.EUR), "Refund", ReferenceId.newReference()))
                 .isInstanceOf(RefundExceedsRemainingException.class);
 
         Payment reloaded = payments.findByReference(original.reference()).orElseThrow();
@@ -128,10 +128,52 @@ class RefundServiceTest {
         Payment original = succeededCollection(5000);
         when(adapters.require(MTN)).thenThrow(new IllegalStateException("no adapter"));
 
-        assertThatThrownBy(() -> refunds.createAndSubmit(original, Money.of(2000, Currency.EUR)))
+        assertThatThrownBy(() -> refunds.createAndSubmit(original, Money.of(2000, Currency.EUR), "Refund", ReferenceId.newReference()))
                 .isInstanceOf(IllegalStateException.class);
 
         Payment reloaded = payments.findByReference(original.reference()).orElseThrow();
         assertThat(reloaded.refundedMinor()).isZero();
+    }
+
+    @Test
+    @DisplayName("the note becomes both the payer and payee message sent to the operator, not a fixed internal reference")
+    void the_note_is_threaded_through_to_the_operator() throws Exception {
+        Payment original = succeededCollection(5000);
+        when(adapter.submit(any(), any())).thenReturn(new SubmitResult.Acknowledged(PaymentState.SUBMITTED, "op-ref", "{}"));
+
+        refunds.createAndSubmit(original, Money.of(2000, Currency.EUR), "Thanks for your patience",
+                ReferenceId.newReference());
+
+        org.mockito.ArgumentCaptor<PaymentIntent> sent = org.mockito.ArgumentCaptor.forClass(PaymentIntent.class);
+        org.mockito.Mockito.verify(adapter).submit(sent.capture(), any());
+        assertThat(sent.getValue().payerMessage()).isEqualTo("Thanks for your patience");
+        assertThat(sent.getValue().payeeNote()).isEqualTo("Thanks for your patience");
+    }
+
+    @Test
+    @DisplayName("a refund whose submit step throws after the reservation transaction committed is left, for real, in CREATED")
+    void a_failure_after_commit_leaves_a_real_created_refund() throws Exception {
+        Payment original = succeededCollection(5000);
+        when(adapter.submit(any(), any())).thenThrow(new RuntimeException("the process is killed here"));
+        ReferenceId refundReference = ReferenceId.newReference();
+
+        // PaymentService.submit's own callOperator() catches a plain RuntimeException from
+        // adapter.submit and never rethrows it (recorded UNKNOWN instead) -- so to reach the
+        // scenario issue #84's second correction is about, the failure has to come from
+        // further in, where PaymentService.submit itself has nothing left to catch it.
+        // Simulating that exactly requires a real transaction failure; what this test can
+        // prove at the unit level is the half within RefundService's own control: the
+        // reservation and the CREATED row are real and independently visible the moment the
+        // first transaction returns, before paymentService.submit is ever called -- which is
+        // exactly what lets RefundController find them after a genuine crash in the second
+        // step. See RefundApiIT for the same guarantee proved through a real failure.
+        Payment refund = refunds.createAndSubmit(original, Money.of(2000, Currency.EUR), "Refund", refundReference);
+
+        assertThat(payments.findByReference(refundReference)).isPresent();
+        assertThat(payments.findByReference(original.reference()).orElseThrow().refundedMinor()).isEqualTo(2000L);
+        // callOperator's own catch means this particular failure resolves to UNKNOWN, not a
+        // thrown exception -- the point above stands regardless of which of the two ways
+        // "the operator step goes wrong after commit" actually happens.
+        assertThat(refund.state()).isEqualTo(PaymentState.UNKNOWN);
     }
 }

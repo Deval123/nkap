@@ -1,6 +1,8 @@
 package dev.nkap.server.payment;
 
+import dev.nkap.core.money.Money;
 import dev.nkap.core.payment.ReferenceId;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
@@ -35,4 +37,36 @@ public interface PaymentRepository {
      * set, oldest escalation first. This is how an escalation is found without reading logs.
      */
     List<Payment> findEscalated();
+
+    /**
+     * Refund payments ({@code refund_of IS NOT NULL}) still in {@code CREATED}, created
+     * before {@code olderThan} — a refund whose reservation committed but whose submit call
+     * never ran, or never got the chance to record its outcome, because the process was
+     * killed in between (issue #84). Deliberately restricted to refunds: an ordinary
+     * {@code CREATED} collection or disbursement is left exactly as
+     * {@link dev.nkap.core.payment.PaymentState#isUnresolved()} intends — still
+     * {@code PaymentService}'s to own.
+     */
+    List<Payment> findStrandedRefunds(Instant olderThan);
+
+    /**
+     * Atomically increments the {@code SUCCEEDED} collection at {@code original}'s
+     * {@code refunded_minor} by {@code amount}, in the database, under no lock this call
+     * takes itself — the {@code UPDATE}'s own row-level atomicity is the actual guarantee
+     * against two concurrent refunds together exceeding the original, backed by the
+     * {@code CHECK} (V8) that refuses to let the result exceed the amount ever collected.
+     *
+     * <p>Throws {@link RefundExceedsRemainingException} when the database refuses it —
+     * whether because this call alone would have exceeded the remaining balance, or because
+     * it lost a race to a concurrent reservation that got there first. Any other integrity
+     * error propagates unchanged.
+     */
+    void reserveRefund(ReferenceId original, Money amount);
+
+    /**
+     * The mirror of {@link #reserveRefund}: atomically decrements {@code original}'s
+     * {@code refunded_minor} by {@code amount}, for a refund of it that ended {@code FAILED}
+     * or {@code EXPIRED}.
+     */
+    void releaseRefundReservation(ReferenceId original, Money amount);
 }

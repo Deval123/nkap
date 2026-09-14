@@ -102,6 +102,21 @@ under test.
 | `GET /collection/v1_0/requesttopay/{ref}` | `200` with the payload above |
 | `GET` on a reference never submitted | `404` `{"code":"RESOURCE_NOT_FOUND"}` |
 
+**A query on a reference MTN never saw is `UNKNOWN`, not `FAILED` — and it stays `UNKNOWN`
+forever if MTN genuinely never received it.** `MtnCollectionsAdapter`/
+`MtnDisbursementsAdapter` map this `404` the same way for both products: not as a verdict,
+because a `404` moments after submission is indistinguishable from "the request has not
+propagated to whichever node answers reads yet" (see the code's own comment — "the least
+intuitive rule in the adapter"). There is no separate signal for "never existed" versus "not
+visible yet", so this project's rule — a timeout is never a failure — is applied here too.
+This matters for issue #84's refunds: a refund payment stranded in `CREATED` (the reservation
+committed, but the process was killed before the transfer was ever submitted) is swept to
+`UNKNOWN` after a grace period and queried like anything else. If MTN truly never received
+it, every query comes back `RESOURCE_NOT_FOUND` → `UNKNOWN`, forever — it does **not**
+self-heal to `FAILED`. It escalates once its window is spent, the same as any other stuck
+payment, and a human resolves it by hand once they have confirmed with MTN that the transfer
+never happened.
+
 ### What the simulator answers with
 
 The simulator errors in this same shape everywhere, so an adapter driven against it can

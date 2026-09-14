@@ -1,6 +1,9 @@
 package dev.nkap.server.payment;
 
+import dev.nkap.core.money.Money;
+import dev.nkap.core.payment.PaymentState;
 import dev.nkap.core.payment.ReferenceId;
+import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -41,5 +44,30 @@ public final class InMemoryPaymentRepository implements PaymentRepository {
                 .filter(payment -> payment.escalatedAt() != null && payment.state().isUnresolved())
                 .sorted(Comparator.comparing(Payment::escalatedAt))
                 .toList();
+    }
+
+    @Override
+    public List<Payment> findStrandedRefunds(Instant olderThan) {
+        return byReference.values().stream()
+                .filter(payment -> payment.refundOf().isPresent() && payment.state() == PaymentState.CREATED
+                        && payment.createdAt().isBefore(olderThan))
+                .sorted(Comparator.comparing(Payment::createdAt))
+                .toList();
+    }
+
+    @Override
+    public void reserveRefund(ReferenceId original, Money amount) {
+        // No concurrent writer to race here (this double is single-writer by construction —
+        // see the class javadoc), so the domain method's own check is the whole
+        // implementation; the real guarantee under concurrency is PostgresPaymentRepository's
+        // atomic UPDATE, proved against a real database.
+        findByReference(original).orElseThrow(() -> new IllegalStateException("no payment for reference " + original))
+                .reserveRefund(amount);
+    }
+
+    @Override
+    public void releaseRefundReservation(ReferenceId original, Money amount) {
+        findByReference(original).orElseThrow(() -> new IllegalStateException("no payment for reference " + original))
+                .releaseRefundReservation(amount);
     }
 }

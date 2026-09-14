@@ -15,6 +15,7 @@ import dev.nkap.server.payment.Payment;
 import dev.nkap.server.payment.PaymentRepository;
 import dev.nkap.server.payment.RefundService;
 import java.math.BigInteger;
+import java.util.Optional;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -37,10 +38,19 @@ import org.springframework.web.bind.annotation.RestController;
  * claim or payment exists — the same discipline {@code PaymentController} applies to a
  * currency or a country: the original must be a {@code SUCCEEDED} collection belonging to
  * this merchant, the request must not name its own destination, and the amount (defaulting
- * to the full remaining balance) must not exceed what this read says is left. The one rule
- * that <strong>does</strong> depend on concurrency — the cap under two refunds issued at
- * once — is re-checked under lock by {@link RefundService}, because this read is stale the
- * moment a concurrent request passes it too.
+ * to the full remaining balance) must not exceed what this (unlocked) read says is left —
+ * {@code original.reserveRefund}, a courtesy check whose exception
+ * ({@code RefundExceedsRemainingException}) {@code ApiExceptionHandler} already maps. The
+ * one rule that <strong>does</strong> depend on concurrency — the cap under two refunds
+ * issued at once — is enforced by {@link RefundService} with a single atomic database
+ * {@code UPDATE}, not a lock, because this read is stale the moment a concurrent request
+ * passes it too.
+ *
+ * <p>{@code RefundService.createAndSubmit} can commit a refund and then still throw — the
+ * operator call is a second step after the first transaction lands (see its own javadoc) —
+ * so unlike {@code PaymentController}, this class cannot assume every exception means
+ * nothing was persisted. {@link #proceed} checks for the refund's row before deciding whether
+ * to abandon the idempotency claim or complete it with what is actually there.
  */
 @RestController
 @RequestMapping("/payments/{reference}/refunds")
@@ -65,7 +75,7 @@ class RefundController {
             @RequestHeader(name = "Idempotency-Key", required = false) String idempotencyKey,
             @RequestBody(required = false) RefundRequest requestBody) {
 
-        RefundRequest request = requestBody == null ? new RefundRequest(null, null) : requestBody;
+        RefundRequest request = requestBody == null ? new RefundRequest(null, null, null) : requestBody;
 
         if (idempotencyKey == null || idempotencyKey.isBlank()) {
             throw new ApiException(HttpStatus.BAD_REQUEST, ProblemTypes.MISSING_IDEMPOTENCY_KEY,
@@ -109,17 +119,26 @@ class RefundController {
         if (!amount.isPositive()) {
             throw invalid("amount must be a positive number of minor units, was " + amount.amount());
         }
-        if (amount.compareTo(remaining) > 0) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, ProblemTypes.REFUND_EXCEEDS_REMAINING,
-                    "This refund would exceed what remains of the original",
-                    reference + " has " + remaining + " left to refund; this request was for " + amount + ".");
-        }
+        // Courtesy only, against this unlocked read: mutates original (this method's own
+        // local, never persisted) purely to reuse Payment.reserveRefund's arithmetic and
+        // message, and to fail fast for the common, non-racing case before a transaction is
+        // even opened. RefundExceedsRemainingException propagates straight to
+        // ApiExceptionHandler; it is not caught here. RefundService's atomic database UPDATE
+        // is what actually enforces this under concurrency, and it checks again regardless
+        // (issue #84).
+        original.reserveRefund(amount);
+
+        // "refund of <uuid>" as MTN's payer/payee message was an oversight -- an internal
+        // reference in English, not configurable, shown to a payer who may not read English
+        // or recognise a UUID. The caller may supply its own; otherwise a plain, fixed
+        // message with no internal identifier in it.
+        String note = request.note().isBlank() ? "Refund" : request.note();
 
         IdempotencyKey key = new IdempotencyKey(caller.merchantId(), idempotencyKey);
         RequestFingerprint fingerprint = RequestFingerprint.of(reference + ":" + canonical(request));
 
         return switch (idempotency.begin(key, fingerprint)) {
-            case IdempotentOutcome.Proceed ignored -> proceed(key, original, amount);
+            case IdempotentOutcome.Proceed ignored -> proceed(key, original, amount, note);
             case IdempotentOutcome.Replay replay -> replay(replay);
             case IdempotentOutcome.Conflict ignored -> throw new ApiException(HttpStatus.CONFLICT,
                     ProblemTypes.IDEMPOTENCY_KEY_REUSE, "Idempotency-Key reused with a different body",
@@ -131,18 +150,36 @@ class RefundController {
         };
     }
 
-    private ResponseEntity<String> proceed(IdempotencyKey key, Payment original, Money amount) {
+    private ResponseEntity<String> proceed(IdempotencyKey key, Payment original, Money amount, String note) {
+        ReferenceId refundReference = ReferenceId.newReference();
         Payment refund;
         try {
-            refund = refunds.createAndSubmit(original, amount);
-        } catch (RuntimeException failedBeforePersist) {
-            // RefundService.createAndSubmit only throws before it persists anything -- the
-            // same contract PaymentService.createAndSubmit documents. Release the claim so a
-            // retry is not blocked by a request nothing durable came of.
+            refund = refunds.createAndSubmit(original, amount, note, refundReference);
+        } catch (RuntimeException failed) {
+            // Unlike PaymentService.createAndSubmit, RefundService.createAndSubmit can
+            // commit the reservation and the refund's own CREATED row and *then* throw --
+            // submitting to the operator is a second step after that first transaction
+            // lands (see RefundService's javadoc). Abandoning the claim here on the
+            // assumption that nothing was persisted would let a retry create a SECOND
+            // refund, with a SECOND reservation, while the first sits stranded (issue #84's
+            // second correction). Check which actually happened.
+            Optional<Payment> stranded = repository.findByReference(refundReference);
+            if (stranded.isPresent()) {
+                // The refund is real and the caller is entitled to its reference. Complete
+                // the idempotency record with its current representation -- CREATED, most
+                // likely, rendered exactly like any other unresolved payment -- so a retry
+                // replays this answer instead of creating a second refund. Reconciler
+                // sweeps a refund left in CREATED past a grace period.
+                return respond(key, stranded.get());
+            }
             idempotency.abandon(key);
-            throw failedBeforePersist;
+            throw failed;
         }
 
+        return respond(key, refund);
+    }
+
+    private ResponseEntity<String> respond(IdempotencyKey key, Payment refund) {
         Rendered rendered = render(refund);
         idempotency.complete(key, envelope(rendered));
         return ResponseEntity.status(rendered.status())

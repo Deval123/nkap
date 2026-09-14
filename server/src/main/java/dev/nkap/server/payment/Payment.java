@@ -40,13 +40,19 @@ public final class Payment {
     private String providerTransactionId = "";
 
     // Meaningful only on a SUCCEEDED collection: the running total reserved or already paid
-    // out against it by a refund (ADR 0010). Reserved the moment a refund is created — see
-    // reserveRefund — not only once it settles, because an in-flight refund that later
-    // succeeds must not have let a second refund spend the same money in the meantime.
-    // Released only if that refund ends FAILED or EXPIRED (releaseRefundReservation); a
-    // SUCCEEDED refund, or one still unresolved, keeps its reservation forever. Zero on every
-    // payment that has never had a refund taken against it, which is every DISBURSE payment
-    // and every COLLECT payment nobody has refunded yet.
+    // out against it by a refund (ADR 0010). Reserved the moment a refund is created, not
+    // only once it settles, because an in-flight refund that later succeeds must not have
+    // let a second refund spend the same money in the meantime. Released only if that refund
+    // ends FAILED or EXPIRED; a SUCCEEDED refund, or one still unresolved, keeps its
+    // reservation forever. Zero on every payment that has never had a refund taken against
+    // it, which is every DISBURSE payment and every COLLECT payment nobody has refunded yet.
+    //
+    // This field is not the source of truth and PaymentRepository.save() does not persist
+    // it (issue #84's first correction): the true value lives in the database column of the
+    // same name, moved only by PaymentRepository.reserveRefund/releaseRefundReservation, each
+    // a single atomic UPDATE. This field mirrors that value only for an object just rehydrated
+    // from storage, or as a courtesy check's scratch pad (see reserveRefund) — never rely on
+    // it reflecting a concurrent write this object's own methods did not make.
     private long refundedMinor;
 
     // The reconciler's schedule. Meaningful while the payment is unresolved — SUBMITTED,
@@ -256,19 +262,23 @@ public final class Payment {
     }
 
     /**
-     * Reserves {@code amount} against this payment before any refund of it is submitted to
-     * the operator — a refund counts against the cap from the moment it is created, not only
-     * once it settles (rule 5 of issue #84): otherwise two refunds for half the remaining
-     * amount could both pass this check while both are still in flight, and both then
-     * succeed. Throws {@link RefundExceedsRemainingException} rather than let the running
-     * total pass what was ever collected.
+     * Checks {@code amount} against what this payment has left to refund, and — if it
+     * fits — mutates this object's own {@code refundedMinor} to reflect the reservation.
+     * Throws {@link RefundExceedsRemainingException} rather than let the running total pass
+     * what was ever collected.
      *
-     * <p>This is the application-level half of the guard. The caller holds this payment's
-     * row locked ({@code SELECT … FOR UPDATE}) for the duration of the check-and-increment,
-     * the same lock the settlement path already takes — but the actual backstop against two
-     * concurrent writers is the database {@code CHECK} on {@code refunded_minor} (V8), not
-     * this method: an application check alone is exactly the shape of bug that refunds a
-     * merchant twice.
+     * <p><strong>This is a courtesy, not the rule.</strong> It used to be described as the
+     * guard against two concurrent refunds together exceeding the original; it is not, and
+     * making it one would require every caller to remember a lock this method cannot enforce
+     * on their behalf. Call it on an unlocked, possibly stale snapshot — {@code
+     * RefundController}'s own read, say — and it gives the common, non-racing case a precise
+     * message before a single database write happens. It proves nothing about what a
+     * concurrent refund is doing at the same moment, and this object's mutated field is never
+     * itself persisted as the source of truth: {@code PaymentRepository.reserveRefund} is a
+     * separate, atomic {@code UPDATE … SET refunded_minor = refunded_minor + ?} in the
+     * database, refused at commit by the {@code CHECK} (V8) if it would exceed the amount
+     * ever collected — that is what actually makes two concurrent refunds impossible, and it
+     * is checked again, independently, no matter what this method already decided.
      */
     public void reserveRefund(Money amount) {
         if (!amount.isPositive()) {
@@ -282,11 +292,14 @@ public final class Payment {
     }
 
     /**
-     * Releases {@code amount} previously reserved by a refund that turned out not to move
-     * money — {@code FAILED} or {@code EXPIRED}. Never called for a refund that
-     * {@code SUCCEEDED} or is still unresolved (including {@code UNKNOWN}): an escalated
-     * refund keeps holding its reservation, because un-reserving it on a guess would let the
-     * same money leave twice if it later turns out to have gone through after all.
+     * The in-memory mirror of {@link #reserveRefund}, kept for the same reason and subject
+     * to the same caveat: this object's own {@code refundedMinor} is not what gets persisted.
+     * {@code PaymentRepository.releaseRefundReservation} — a single atomic {@code UPDATE …
+     * SET refunded_minor = refunded_minor - ?} — is. Meaningful for a refund that ended
+     * {@code FAILED} or {@code EXPIRED}; never called for one that {@code SUCCEEDED} or is
+     * still unresolved (including {@code UNKNOWN}) — an escalated refund keeps holding its
+     * reservation, because un-reserving it on a guess would let the same money leave twice if
+     * it later turns out to have gone through after all.
      */
     public void releaseRefundReservation(Money amount) {
         refundedMinor = Math.subtractExact(refundedMinor, amount.amount());

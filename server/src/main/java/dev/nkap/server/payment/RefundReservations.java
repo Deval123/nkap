@@ -16,17 +16,14 @@ final class RefundReservations {
     }
 
     /**
-     * Releases {@code refund}'s reserved amount on the collection it refunds, under that
-     * collection's own row lock — the caller already holds an open transaction, the same one
-     * {@code refund}'s own terminal transition is being saved in.
+     * Releases {@code refund}'s reserved amount on the collection it refunds — a single
+     * atomic {@code UPDATE} ({@link PaymentRepository#releaseRefundReservation}), not a
+     * load-mutate-save of a locked copy: the same reasoning as
+     * {@link PaymentRepository#reserveRefund}, so this call cannot itself become the
+     * lost-update bug the reservation side was fixed for (issue #84).
      */
     static void release(PaymentRepository payments, Payment refund) {
-        refund.refundOf().ifPresent(originalReference -> {
-            Payment original = payments.findByReferenceForUpdate(originalReference).orElseThrow(() ->
-                    new IllegalStateException(refund.reference() + " is a refund of " + originalReference
-                            + ", but that payment no longer exists"));
-            original.releaseRefundReservation(refund.intent().amount());
-            payments.save(original);
-        });
+        refund.refundOf().ifPresent(originalReference ->
+                payments.releaseRefundReservation(originalReference, refund.intent().amount()));
     }
 }

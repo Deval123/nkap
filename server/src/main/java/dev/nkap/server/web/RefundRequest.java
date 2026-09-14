@@ -15,10 +15,17 @@ import java.math.BigInteger;
  * bindable, specifically so a caller who copies {@link CreatePaymentRequest}'s shape out of
  * habit and includes a destination gets a {@code 400} naming why, instead of the field being
  * silently ignored and teaching them it works (issue #84, {@code docs/positioning.md}).
+ *
+ * <p>{@code note} becomes MTN's payer and payee message for the transfer, shown to the payer
+ * on their handset. Omitted, it defaults to a plain, fixed {@code "Refund"} rather than an
+ * internal reference — an earlier version of this fixed a message containing the original
+ * collection's raw UUID, in English, with no way to change it; that was an oversight, not a
+ * decision, and this field is the fix.
  */
-public record RefundRequest(BigInteger amount, String counterpartyMsisdn) {
+public record RefundRequest(BigInteger amount, String counterpartyMsisdn, String note) {
 
     public RefundRequest {
         counterpartyMsisdn = counterpartyMsisdn == null ? "" : counterpartyMsisdn;
+        note = note == null ? "" : note;
     }
 }

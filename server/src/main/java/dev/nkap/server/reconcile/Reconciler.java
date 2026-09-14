@@ -1,6 +1,9 @@
 package dev.nkap.server.reconcile;
 
+import dev.nkap.core.payment.PaymentState;
 import dev.nkap.server.payment.ConfirmationOutcome;
+import dev.nkap.server.payment.Payment;
+import dev.nkap.server.payment.PaymentRepository;
 import dev.nkap.server.payment.PaymentTransition;
 import dev.nkap.server.payment.SettlementService;
 import dev.nkap.server.reconcile.ReconciliationStore.Claim;
@@ -14,6 +17,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
 import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * Nothing stays unresolved forever.
@@ -54,26 +59,48 @@ import org.springframework.scheduling.annotation.Scheduled;
  * <p>Built and scheduled by {@link ReconcilerConfiguration}, which is switched off by
  * {@code nkap.reconciler.enabled=false} — the integration tests that are not about the
  * reconciler set that and drive {@link #runOnce()} by hand instead of waiting for a tick.
+ *
+ * <p><strong>A second, narrower job: a refund stranded in {@code CREATED} (issue #84's
+ * second correction).</strong> {@code RefundService} commits a refund's reservation and its
+ * {@code CREATED} row in one transaction, then calls the operator in a second step; if the
+ * process is killed in between, or that second step fails after the first already
+ * committed, the row is left in {@code CREATED} holding a reservation nothing will ever
+ * release, because {@code PaymentState.isUnresolved()} deliberately excludes {@code CREATED}
+ * and this reconciler would otherwise never notice it. Every pass first sweeps refund
+ * payments ({@code refund_of IS NOT NULL}) still {@code CREATED} past
+ * {@code nkap.reconciler.stranded-refund-grace} and moves each to {@code UNKNOWN} — a legal
+ * transition {@code PaymentState} already allows — from where the ordinary claim loop below
+ * chases it exactly like any other unresolved payment. An ordinary {@code CREATED} collection
+ * or disbursement is left alone: it was never inert in the way a stranded refund now is, and
+ * widening what {@code isUnresolved()} covers is a larger, separate behaviour change this fix
+ * does not make. See {@code docs/providers/mtn.md} for what a query on a reference the
+ * operator never saw actually returns, and why that means a genuinely stranded refund
+ * escalates rather than resolving itself.
  */
 public class Reconciler {
 
     private static final Logger log = LoggerFactory.getLogger(Reconciler.class);
 
+    private final PaymentRepository payments;
     private final ReconciliationStore store;
     private final SettlementService settlement;
     private final ReconciliationPolicy policy;
     private final ReconcilerProperties properties;
     private final Clock clock;
     private final MeterRegistry meterRegistry;
+    private final TransactionTemplate tx;
 
-    public Reconciler(ReconciliationStore store, SettlementService settlement, ReconciliationPolicy policy,
-                      ReconcilerProperties properties, Clock clock, MeterRegistry meterRegistry) {
+    public Reconciler(PaymentRepository payments, ReconciliationStore store, SettlementService settlement,
+                      ReconciliationPolicy policy, ReconcilerProperties properties, Clock clock,
+                      MeterRegistry meterRegistry, PlatformTransactionManager txManager) {
+        this.payments = payments;
         this.store = store;
         this.settlement = settlement;
         this.policy = policy;
         this.properties = properties;
         this.clock = clock;
         this.meterRegistry = meterRegistry;
+        this.tx = new TransactionTemplate(txManager);
     }
 
     @Scheduled(fixedDelayString = "${nkap.reconciler.interval}")
@@ -96,6 +123,7 @@ public class Reconciler {
         String passId = UUID.randomUUID().toString();
         try (var ignored = MDC.putCloseable("reconcilerPass", passId)) {
             Instant now = clock.instant();
+            sweepStrandedRefunds(now);
             List<Claim> claims = store.claimDue(properties.batchSize(), now);
             log.debug("reconciler pass {} claimed {} payment(s)", passId, claims.size());
             for (Claim claim : claims) {
@@ -111,6 +139,31 @@ public class Reconciler {
                 }
             }
             return claims.size();
+        }
+    }
+
+    /**
+     * Moves every refund still {@code CREATED} past the grace period to {@code UNKNOWN},
+     * one row lock at a time — see the class javadoc for why this exists at all. Each
+     * transition is a fresh {@code findByReferenceForUpdate} and a re-check of the state,
+     * not the snapshot {@code findStrandedRefunds} returned: a refund that resolved in the
+     * moment between that read and this write is left alone rather than forced backwards.
+     */
+    private void sweepStrandedRefunds(Instant now) {
+        Instant olderThan = now.minus(properties.strandedRefundGrace());
+        for (Payment stale : payments.findStrandedRefunds(olderThan)) {
+            tx.executeWithoutResult(status -> {
+                Payment locked = payments.findByReferenceForUpdate(stale.reference()).orElse(null);
+                if (locked == null || locked.state() != PaymentState.CREATED) {
+                    return;
+                }
+                locked.applyTransition(PaymentState.UNKNOWN, PaymentTransition.Cause.RECONCILER, "",
+                        "stranded in CREATED past " + properties.strandedRefundGrace()
+                                + " -- the operator may or may not have received it", "");
+                payments.save(locked);
+                log.warn("refund {} was stranded in CREATED and moved to UNKNOWN for this reconciler to chase",
+                        stale.reference());
+            });
         }
     }
 

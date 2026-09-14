@@ -8,13 +8,17 @@
 -- ordinary disbursement.
 --
 -- refunded_minor: the running total reserved or already paid out against a COLLECT payment
--- by refunds of it. Incremented under the row's own SELECT ... FOR UPDATE lock the moment a
--- refund is created -- see Payment.reserveRefund -- before the operator is ever asked, and
--- released only if that refund ends FAILED or EXPIRED (Payment.releaseRefundReservation).
--- The CHECK below is the actual guarantee that a merchant is never refunded past what they
--- were ever paid: the application re-derives and checks this same number under the same
--- lock, but two concurrent writers that both slipped past that check -- the exact bug this
--- column exists to make impossible -- would still be caught here, at commit.
+-- by refunds of it. Moved the moment a refund is created -- before the operator is ever
+-- asked -- by PaymentRepository.reserveRefund, a single `UPDATE ... SET refunded_minor =
+-- refunded_minor + ?`; released only if that refund ends FAILED or EXPIRED, by the mirror
+-- `... - ?` (releaseRefundReservation). Neither takes a row lock of its own. The CHECK below
+-- is what actually makes two concurrent refunds together exceeding the original impossible:
+-- PostgreSQL's own per-row atomicity for a read-modify-write inside one UPDATE statement
+-- serialises the two increments, and the CHECK refuses whichever one would push the result
+-- past amount_minor. (An earlier version of this column read the value in Java, computed
+-- the new total, and wrote it back as an absolute value under an explicit `SELECT ... FOR
+-- UPDATE` -- correct only as long as every writer remembered to take that lock, and silently
+-- wrong, past the cap this CHECK exists to enforce, the moment one did not.)
 --
 -- Hand-written inverse: db/rollback/V8__refunds.sql, exercised by MigrationRollbackIT.
 

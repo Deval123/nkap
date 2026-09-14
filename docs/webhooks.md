@@ -3,7 +3,10 @@
 What Nkap sends a merchant when a payment reaches a verdict, and the contract that comes
 with it. The mechanics — the outbox, the relay, the retry policy — are in ADR 0003 and the
 javadoc of `dev.nkap.server.outbox`; this file is what an integrator needs, not how it is
-built.
+built. `docs/integration-guide.md`'s own webhook section runs the recipe below against a real
+delivery rather than only describing it; `docs/openapi.yaml` covers the two admin routes
+(`GET /webhooks/events/dead-lettered`, `POST /webhooks/events/{eventId}/replay`) this file
+mentions but does not itself specify.
 
 ## What is sent, and when
 
@@ -67,7 +70,12 @@ you, since a refund's `operation` is `DISBURSE` like any other transfer out:
 }
 ```
 
-**`id` is the field to deduplicate on.** See the next section for why it has to be.
+**The body's `id` is the field to deduplicate on — not the `Nkap-Event-Id` header, even
+though it carries the same value on every genuine delivery.** Only the body is signed:
+a header can be changed by anything between Nkap and a receiver without touching
+`Nkap-Signature` at all, so a dedup check keyed on it is a dedup check an attacker can walk
+straight past by rewriting one header. See the next section for why deduplication has to
+happen at all.
 
 ## At-least-once, and no ordering
 
@@ -83,18 +91,38 @@ that "the request I got most recently is the newest fact" — check `GET
 /payments/{reference}` if an event's relative ordering matters, since that read always
 reflects the current state, not the state at the time some particular event was queued.
 
-*(This same pair of facts — retries mean duplicates, and there is no ordering guarantee —
-belongs in the eventual integration guide, issue #65, as more than a cross-reference: an
-integrator reading a runnable example should see the deduplication check written out, not
-just told it exists.)*
+`docs/integration-guide.md`'s own webhook section shows the deduplication check written out
+and actually run — a real duplicate delivery, forced with `POST
+/webhooks/events/{eventId}/replay`, correctly skipped the second time — rather than only this
+paragraph telling you it exists.
 
 ## Verifying a signature
 
-Every request carries an `Nkap-Signature` header:
+Every request carries three headers — found while writing `docs/integration-guide.md` against
+a real delivery (issue #88), where the other two were missing from this file entirely:
 
 ```
+Nkap-Event-Id: 3fbf6f2e-2f42-4e6a-9d0b-6d4b6a9c2b41
+Nkap-Event-Type: payment.succeeded
 Nkap-Signature: t=1757602327,v1=5257a869e7bfce951fbb7d3fb8fe28c3b4b9c3a2b2e0d3a1f4b8c9c0d1e2f3a4
 ```
+
+`Nkap-Event-Id` and `Nkap-Event-Type` are conveniences — the same values as the body's own
+`id` and `type` fields, available before you parse it, for routing or logging. **They are not
+signed and not a substitute for verifying the body** — a receiver that trusts them without
+checking `Nkap-Signature` is trusting whatever put them on the wire, not Nkap.
+
+**That exclusion is deliberate, not an oversight left for later** (raised and settled in
+review of issue #88): the signed material stays `"{t}.{body}"` and nothing else, on purpose.
+`id` and `type` are already inside the signed body, so adding the header copies to the
+signature would tell a verifier nothing it cannot already get by checking the signature and
+reading the body — the only thing it would add is one more field every independent
+implementation of this recipe has to canonicalise byte-for-byte the way Nkap's own signer
+does. That is exactly where separately-written verifiers drift apart in practice — one
+whitespace choice, one field-ordering choice, one encoding choice out of step with the
+sender — and a signature scheme that is easy to implement subtly wrong is worse than one
+with less in it: a receiver whose check silently stops verifying still looks like a receiver
+that verifies. Fewer inputs to the HMAC is the safer default, not a missing feature.
 
 `t` is the Unix timestamp (seconds) the request was signed at. `v1` is the hex-encoded
 HMAC-SHA256 of `"{t}.{body}"` (the timestamp, a literal `.`, then the raw request body),

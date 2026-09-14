@@ -18,6 +18,18 @@ RUN --mount=type=cache,target=/root/.m2 \
 
 # ---- run ----------------------------------------------------------------------------
 FROM eclipse-temurin:21.0.5_11-jre-alpine
+
+# Set by the release workflow (--build-arg), empty on a local `docker build`. See
+# server/Dockerfile's own comment and .github/workflows/release.yml.
+ARG NKAP_VERSION=""
+ARG NKAP_REVISION=""
+
+LABEL org.opencontainers.image.source="https://github.com/deval123/nkap" \
+      org.opencontainers.image.revision="${NKAP_REVISION}" \
+      org.opencontainers.image.version="${NKAP_VERSION}" \
+      org.opencontainers.image.licenses="Apache-2.0" \
+      org.opencontainers.image.description="Scriptable fake MTN MoMo operator for testing against Nkap or your own integration."
+
 WORKDIR /app
 COPY --from=build /src/extracted/dependencies/ ./
 COPY --from=build /src/extracted/spring-boot-loader/ ./

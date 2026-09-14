@@ -1,10 +1,16 @@
 # `docker compose up` — PostgreSQL, the simulator and the gateway, built from source.
 #
-# This is the clone path: you check out the repository and build. Pulling a published
-# image is a separate roadmap line. Once the stack is up, run the demo:
+# This is the clone path: you check out the repository and build, and it wires in the
+# simulator so trying Nkap needs no MTN account. Once the stack is up, run the demo:
 #
 #     docker compose up --build -d
 #     ./examples/demo.sh
+#
+# If you are running Nkap for real instead of trying it, this is not that file: see
+# `nkap-standalone.compose.yaml` and the README's "Run it without cloning" (issue #86) — it
+# names published images instead of building, provisions no API key, and never runs a
+# simulator anywhere near a process that moves real money. Nothing here is meant to be
+# copied into a real deployment as a shortcut.
 #
 # Nothing in this file is a secret. The MTN values are placeholders that point the
 # gateway at the simulator; a real deployment supplies its own through the environment.
@@ -12,8 +18,15 @@
 # Callers are authenticated (issue #59): POST /payments needs an API key. Keys are
 # provisioned by a host-side command, never a route. The `key-init` service below runs
 # that command once, before the gateway starts, to create ONE obviously-named demo key
-# --- `nkap_demo-key-not-for-production` for merchant `acme` --- so the demo has a
-# credential. A real deployment provisions its own with:
+# --- `nkap_demo-key-not-for-production-000000000000000` for merchant `acme` --- so the demo
+# has a credential. It is fixed and obviously fake rather than generated (`--nkap.apikey.token`
+# names it explicitly) purely so this file's own key-init log and `examples/demo.sh`'s default
+# `DEMO_KEY` can agree on it without either reading the other's output. `--nkap.apikey.token`
+# (`ApiKeyStore.provisionWithToken`) refuses anything that is not even the right shape --
+# `ApiKeys.newToken()`'s prefix, length and alphabet, a floor that catches a truncated value
+# or a short passphrase, not proof that whatever passes carries real entropy -- so this exact
+# string is deliberately padded out to that shape, with the fake part spelled out in the part
+# of it a human reads. A real deployment provisions its own, unfixed, with:
 #
 #     docker compose run --rm gateway --nkap.apikey.create --nkap.apikey.merchant=<id>
 #
@@ -76,7 +89,7 @@ services:
       - "--nkap.apikey.create"
       - "--nkap.apikey.merchant=acme"
       - "--nkap.apikey.label=demo"
-      - "--nkap.apikey.token=nkap_demo-key-not-for-production"
+      - "--nkap.apikey.token=nkap_demo-key-not-for-production-000000000000000"
     restart: "no"
 
   # One-shot: provision a demo webhook endpoint, then exit. Same shape as key-init, and the

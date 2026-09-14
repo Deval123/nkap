@@ -1,0 +1,155 @@
+# Nkap, from published images -- no checkout, no build (issue #86).
+#
+#     curl -fsSL -o nkap-standalone.compose.yaml \
+#       https://raw.githubusercontent.com/deval123/nkap/v1.0.0/nkap-standalone.compose.yaml
+#     export NKAP_VERSION=1.0.0 NKAP_DB_PASSWORD=... NKAP_MERCHANT_ID=...
+#     docker compose -f nkap-standalone.compose.yaml up -d
+#     docker compose -f nkap-standalone.compose.yaml logs key-init   # your API key -- once
+#
+# This file is for an operator running Nkap for real, against MTN. It is not the demo:
+# `compose.yaml` in the repository (`git clone` + `docker compose up --build` +
+# `examples/demo.sh`) is a faster, more complete way to see Nkap work, and it already exists
+# -- it builds from source, wires in the scriptable simulator, and needs no MTN account at
+# all. This file exists for the moment after that: you know what Nkap does and you want to
+# run it, so it names published images instead of building, and it touches nothing this
+# gateway will actually settle money through without you saying so explicitly.
+#
+# Three rules follow from that, in descending order of what they cost when wrong:
+#
+#   1. No API key is provisioned here for you -- and this file cannot take one from you
+#      either, unlike an earlier version of it. `ApiKeys`'s javadoc justifies a fast, unsalted
+#      hash on a stored key carrying 256 bits of entropy, which is only actually true of a
+#      token this project generated -- an operator-chosen value read from an environment
+#      variable carries whatever entropy the operator happened to pick, and
+#      `ApiKeyStore.provisionWithToken`'s own shape check (`ApiKeys.isWellFormed`) cannot tell
+#      the difference: it is a floor that catches a truncated value or a short passphrase, not
+#      proof that whatever passes is actually random -- a human can pad a chosen string out to
+#      the right shape, and `compose.yaml`'s own demo token does exactly that, on purpose.
+#      Rather than lean on that check, this file sidesteps the question entirely: it never
+#      offered you the variable to set. `key-init` below runs `--nkap.apikey.create` with no
+#      `--token`, so the gateway generates one and prints it -- read it once from
+#      `docker compose logs key-init`; only its hash is ever stored, and there is no command
+#      or route that shows it to you again. `compose.yaml`'s own demo key is fixed instead of
+#      generated, because a demo needs `examples/demo.sh` to know it in advance without
+#      reading a log -- that key is deliberately, visibly fake, and this is the one file in
+#      this project that should never have anything like it. NKAP_MERCHANT_ID is still
+#      required -- compose refuses to start anything and names the missing variable, rather
+#      than guessing which merchant the first key belongs to.
+#
+#      `key-init` mints a *new* key every time it runs, which is every fresh `up` after a
+#      `down` (a one-shot service that already exited is not re-run by `up` alone). The
+#      previous key keeps working -- there is no revocation yet (see the roadmap's security
+#      notes) -- so repeated cycling piles up unused keys rather than replacing one. Leave the
+#      stack running if you only want the one, or provision by hand instead (see the README)
+#      and delete this service.
+#   2. Nothing here overrides `application.yml`'s cadence. `compose.yaml` sets a PT2S MTN
+#      timeout and a three-second reconciler loop so the demo resolves while someone is
+#      watching a terminal; carried into a real deployment, that hammers MTN and burns the
+#      escalation window in minutes. Every setting this file is silent on is already right
+#      for production -- see application.yml's own comments for why each default is what it
+#      is.
+#   3. No simulator is anywhere in this file, on purpose. A stranger trying Nkap without an
+#      MTN account wants the simulator; an operator running Nkap for real must never have it
+#      reachable from the same process that moves real money. Rather than one file switching
+#      between those two audiences -- which is how a simulator ends up in production -- this
+#      file only ever serves the second one. The first is `compose.yaml` and
+#      `examples/demo.sh`, which already exist; if you want the simulator on its own, without
+#      the gateway at all, see the README's "The simulator on its own" section.
+#
+# PostgreSQL's data directory is a named volume (`db-data`) -- unlike compose.yaml, which is
+# torn down with `-v` after every demo, this file is meant to keep running.
+
+name: nkap
+
+services:
+  db:
+    image: postgres:16.6-alpine
+    environment:
+      POSTGRES_DB: nkap
+      POSTGRES_USER: nkap
+      POSTGRES_PASSWORD: ${NKAP_DB_PASSWORD:?set a database password}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nkap -d nkap"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  # One-shot: mints exactly one API key, for the merchant you name, and prints it -- then
+  # exits. No --nkap.apikey.token: the gateway generates the value, which is the only way
+  # ApiKeys's fast, unsalted hash is safe to store (see this file's own header). Read the key
+  # from `docker compose logs key-init`; it is shown once and cannot be recovered, only
+  # replaced by provisioning another. This service is not idempotent the way a fixed-token
+  # one would be -- see the header for what re-running it does.
+  key-init:
+    image: ghcr.io/deval123/nkap-gateway:${NKAP_VERSION:?set the Nkap version to deploy, e.g. 1.0.0 -- see https://github.com/deval123/nkap/releases}
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NKAP_DB_URL: jdbc:postgresql://db:5432/nkap
+      NKAP_DB_USER: nkap
+      NKAP_DB_PASSWORD: ${NKAP_DB_PASSWORD:?set a database password}
+      # A one-shot command has no use for the reconciler's scheduler, and no business
+      # touching MTN at all -- but application.yml itself defaults the first installation's
+      # country to "cm" (issue #82 pre-dates issue #86 and this is the only slot that
+      # behaves this way), so leaving it unset still builds an adapter, just one with no
+      # base-url -- and MtnProfile refuses to construct from a null one. Blanking the
+      # country here, regardless of what the gateway service below is configured with,
+      # keeps this command doing only what it says: writing a row for one API key.
+      NKAP_PROVIDER_MTN_CM_COUNTRY: ""
+      NKAP_RECONCILER_ENABLED: "false"
+    command:
+      - "--nkap.apikey.create"
+      - "--nkap.apikey.merchant=${NKAP_MERCHANT_ID:?set an id for the merchant the first API key belongs to}"
+      - "--nkap.apikey.label=initial"
+    restart: "no"
+
+  gateway:
+    image: ghcr.io/deval123/nkap-gateway:${NKAP_VERSION:?set the Nkap version to deploy, e.g. 1.0.0 -- see https://github.com/deval123/nkap/releases}
+    depends_on:
+      db:
+        condition: service_healthy
+      key-init:
+        condition: service_completed_successfully
+    ports:
+      - "8080:8080"
+    environment:
+      NKAP_DB_URL: jdbc:postgresql://db:5432/nkap
+      NKAP_DB_USER: nkap
+      NKAP_DB_PASSWORD: ${NKAP_DB_PASSWORD:?set a database password}
+
+      # One MTN installation. Every value below defaults to blank, which is
+      # application.yml's own convention for "not configured" -- MtnConfiguration builds no
+      # adapter for a blank country, and the gateway starts fine with none at all (you can
+      # provision an API key and check /actuator/health before you have MTN credentials in
+      # hand). Fill these in with your real subscription key, API user and API key -- never
+      # commit them, and never pass them any other way than through this environment. For a
+      # second country in the same deployment, or a disbursement product on this one, see
+      # docs/providers/mtn.md and application.yml's own nkap.provider.mtn.installations.
+      NKAP_PROVIDER_MTN_CM_BASE_URL: ${NKAP_PROVIDER_MTN_CM_BASE_URL:-}
+      NKAP_PROVIDER_MTN_CM_TARGET_ENVIRONMENT: ${NKAP_PROVIDER_MTN_CM_TARGET_ENVIRONMENT:-}
+      NKAP_PROVIDER_MTN_CM_SUBSCRIPTION_KEY: ${NKAP_PROVIDER_MTN_CM_SUBSCRIPTION_KEY:-}
+      NKAP_PROVIDER_MTN_CM_API_USER: ${NKAP_PROVIDER_MTN_CM_API_USER:-}
+      NKAP_PROVIDER_MTN_CM_API_KEY: ${NKAP_PROVIDER_MTN_CM_API_KEY:-}
+      NKAP_PROVIDER_MTN_CM_CURRENCY: ${NKAP_PROVIDER_MTN_CM_CURRENCY:-XAF}
+      NKAP_PROVIDER_MTN_CM_COUNTRY: ${NKAP_PROVIDER_MTN_CM_COUNTRY:-}
+      # Disbursements (refunds included) are a separate MTN product with its own
+      # credentials. Leave unset if this deployment only collects.
+      NKAP_PROVIDER_MTN_CM_DISBURSEMENT_SUBSCRIPTION_KEY: ${NKAP_PROVIDER_MTN_CM_DISBURSEMENT_SUBSCRIPTION_KEY:-}
+      NKAP_PROVIDER_MTN_CM_DISBURSEMENT_API_USER: ${NKAP_PROVIDER_MTN_CM_DISBURSEMENT_API_USER:-}
+      NKAP_PROVIDER_MTN_CM_DISBURSEMENT_API_KEY: ${NKAP_PROVIDER_MTN_CM_DISBURSEMENT_API_KEY:-}
+    # Health answers on its own port (9464, application.yml) -- published only from inside
+    # the compose network here, same as compose.yaml. If you put a reverse proxy in front of
+    # 8080, do not also expose 9464 to it: it carries payments-by-state, reconciler passes
+    # and the suspense balance, which is exactly the business volume the API's own auth
+    # exists to gate.
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:9464/actuator/health"]
+      interval: 3s
+      timeout: 3s
+      retries: 40
+
+volumes:
+  db-data:

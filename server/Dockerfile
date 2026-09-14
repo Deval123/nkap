@@ -24,6 +24,21 @@ RUN --mount=type=cache,target=/root/.m2 \
 
 # ---- run ----------------------------------------------------------------------------
 FROM eclipse-temurin:21.0.5_11-jre-alpine
+
+# Set by the release workflow (--build-arg), empty on a local `docker build` -- a label with
+# an empty value is still valid OCI, just not useful, which is the correct fallback for a
+# build nobody intends to publish. See .github/workflows/release.yml.
+ARG NKAP_VERSION=""
+ARG NKAP_REVISION=""
+
+# `docker inspect` should answer "where did this come from" without a search -- this sits in
+# a payment path, and that is the minimum a reader is owed (issue #86).
+LABEL org.opencontainers.image.source="https://github.com/deval123/nkap" \
+      org.opencontainers.image.revision="${NKAP_REVISION}" \
+      org.opencontainers.image.version="${NKAP_VERSION}" \
+      org.opencontainers.image.licenses="Apache-2.0" \
+      org.opencontainers.image.description="Nkap gateway: REST API, ledger, reconciler and webhooks for MTN MoMo."
+
 WORKDIR /app
 # Ordered most- to least-stable, so an application change invalidates only the last COPY.
 COPY --from=build /src/extracted/dependencies/ ./

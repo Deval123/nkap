@@ -74,6 +74,19 @@ Semantic versioning, and a tag is a promise rather than a bookmark.
   never in a patch. From 1.0.0 it takes a major release, which is the discipline that
   makes third-party adapters possible.
 - Releases are cut from `main` only, and only when the conformance kit passes.
+- Pushing an annotated `vX.Y.Z` tag runs `.github/workflows/release.yml`: the full reactor
+  build, then `ghcr.io/deval123/nkap-gateway` and `ghcr.io/deval123/nkap-simulator` published
+  for `linux/amd64` and `linux/arm64`, tagged `X.Y.Z` and the moving `latest` — never on a
+  push to `main`, and never a rolling `X.Y` or `X` tag (until 1.0.0, a minor release can
+  break `provider-api`; a tag that moves across one silently is the wrong default for a
+  payments gateway). The workflow then pulls what it just published, from a job with no
+  registry credentials, and runs `examples/demo.sh` against `nkap-standalone.compose.yaml` —
+  the file a real deployment downloads. A publish nobody can pull, or that only works from a
+  clone, fails the build. GHCR packages default to private on their first publish and there
+  is no supported way to flip that from the workflow alone (see the workflow's own comment);
+  after the very first tagged release, a maintainer sets both packages to public once, by
+  hand, in their package settings — the pull-and-verify step above is what catches this being
+  forgotten.
 
 `v1.0.0` is the first release, and its scope is fixed in
 [`docs/roadmap/v1.0.0-mtn-end-to-end.md`](docs/roadmap/v1.0.0-mtn-end-to-end.md): MTN,

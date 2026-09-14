@@ -21,11 +21,12 @@
 # --- `nkap_demo-key-not-for-production-000000000000000` for merchant `acme` --- so the demo
 # has a credential. It is fixed and obviously fake rather than generated (`--nkap.apikey.token`
 # names it explicitly) purely so this file's own key-init log and `examples/demo.sh`'s default
-# `DEMO_KEY` can agree on it without either reading the other's output; `--nkap.apikey.token`
-# still refuses anything that does not carry real entropy (`ApiKeyStore.provisionWithToken`),
-# so this exact string is deliberately shaped like a value `ApiKeys.newToken()` could have
-# produced, with the fake part spelled out in the part of it a human reads. A real deployment
-# provisions its own, unfixed, with:
+# `DEMO_KEY` can agree on it without either reading the other's output. `--nkap.apikey.token`
+# (`ApiKeyStore.provisionWithToken`) refuses anything that is not even the right shape --
+# `ApiKeys.newToken()`'s prefix, length and alphabet, a floor that catches a truncated value
+# or a short passphrase, not proof that whatever passes carries real entropy -- so this exact
+# string is deliberately padded out to that shape, with the fake part spelled out in the part
+# of it a human reads. A real deployment provisions its own, unfixed, with:
 #
 #     docker compose run --rm gateway --nkap.apikey.create --nkap.apikey.merchant=<id>
 #

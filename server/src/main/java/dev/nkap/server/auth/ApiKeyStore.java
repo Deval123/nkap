@@ -36,13 +36,15 @@ public interface ApiKeyStore {
      * with that token already exists, it is returned unchanged, so re-running the demo's
      * key-provisioning step does not fail.
      *
-     * <p>{@code token} must have the shape {@link ApiKeys#newToken()} produces — this is not
-     * a route for a human-chosen secret. {@code ApiKeys}'s javadoc justifies a fast, unsalted
-     * hash entirely on the premise that a stored key already carries 256 bits of entropy;
-     * accepting an arbitrary string here would store it under that same premise while making
-     * it false. A caller that needs a fixed, obviously-fake value for a demo cannot use this
-     * method for that value directly — see {@code compose.yaml}'s own key-init for how it
-     * still gets one.
+     * <p>{@code token} must have the shape {@link ApiKeys#newToken()} produces — the right
+     * prefix, length and alphabet. That is a floor, not proof of entropy: it catches a
+     * truncated value or a short human passphrase, but nothing stops a caller from padding a
+     * chosen string out to the right shape, which is exactly what {@code compose.yaml}'s own
+     * demo token does, on purpose, to use this very method. {@code ApiKeys}'s javadoc
+     * justifies a fast, unsalted hash on a stored key carrying 256 bits of entropy — this
+     * check only ever makes that true for a token that genuinely came from
+     * {@link ApiKeys#newToken()}; it cannot make it true of whatever a caller hands in, only
+     * reject what is obviously not that.
      */
     Provisioned provisionWithToken(String token, String merchantId, boolean admin, String label);
 

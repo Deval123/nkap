@@ -20,11 +20,14 @@ import java.util.regex.Pattern;
  * nothing to slow down. A fast hash is the correct tool. The lookup is by exact hash match,
  * so it is also constant-time in the database's index, not a scan of every row.
  *
- * <p>That premise only holds for a token this class produced. {@link #isWellFormed} is what
- * lets a caller taking a token from the outside — {@link PostgresApiKeyStore#provisionWithToken}
- * does, for {@code --nkap.apikey.token} — refuse one that does not carry the entropy the
- * javadoc above promises, rather than hash and store whatever it was handed (issue #86's
- * correction).
+ * <p>That premise only holds for a token this class produced. {@link #isWellFormed} lets a
+ * caller taking a token from the outside — {@link PostgresApiKeyStore#provisionWithToken}
+ * does, for {@code --nkap.apikey.token} — reject one that is obviously not that: the wrong
+ * length, the wrong prefix, drawn from the wrong alphabet. It is a floor, not a substitute
+ * for the premise above: nothing stops a human from padding a chosen string out to this
+ * exact shape ({@code compose.yaml}'s own demo token does, on purpose), so a token that
+ * passes is not thereby known to carry any entropy at all — only a token this class actually
+ * produced is (issue #86's correction).
  */
 final class ApiKeys {
 
@@ -47,10 +50,14 @@ final class ApiKeys {
     }
 
     /**
-     * Whether {@code token} could have come from {@link #newToken}: the right prefix, the
-     * right length, drawn from base64url's alphabet. Not a guarantee it did — that would need
-     * storing the plaintext, which this project never does — only that it is not a guessable
-     * string a human chose, which is the one thing a fast, unsalted hash requires to be safe.
+     * Whether {@code token} has the shape {@link #newToken} produces: the right prefix, the
+     * right length, drawn from base64url's alphabet. A floor, not a guarantee of entropy —
+     * it catches a truncated token, a bare merchant name, or a short human passphrase, but a
+     * string deliberately padded out to this exact shape passes just as a generated one does
+     * ({@code compose.yaml}'s own demo token, {@code
+     * nkap_demo-key-not-for-production-000000000000000}, is exactly that, on purpose). Only a
+     * token this class actually produced is known to carry the 256 bits this class's own
+     * javadoc relies on.
      */
     static boolean isWellFormed(String token) {
         return token != null && WELL_FORMED.matcher(token).matches();

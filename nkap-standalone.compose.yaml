@@ -18,19 +18,23 @@
 #
 #   1. No API key is provisioned here for you -- and this file cannot take one from you
 #      either, unlike an earlier version of it. `ApiKeys`'s javadoc justifies a fast, unsalted
-#      hash entirely on a stored key already carrying 256 bits of entropy; an operator-chosen
-#      value read from an environment variable carries whatever entropy the operator happened
-#      to pick, which defeats that justification silently -- `ApiKeyStore.provisionWithToken`
-#      now refuses such a token outright, but this file never offered you that variable to set
-#      in the first place. `key-init` below runs `--nkap.apikey.create` with no `--token`, so
-#      the gateway generates one and prints it -- read it once from `docker compose logs
-#      key-init`; only its hash is ever stored, and there is no command or route that shows it
-#      to you again. `compose.yaml`'s own demo key is fixed instead, because a demo needs
-#      `examples/demo.sh` to know it in advance without reading a log -- that key is
-#      deliberately, visibly fake, and this is the one file in this project that should never
-#      have anything like it. NKAP_MERCHANT_ID is still required -- compose refuses to start
-#      anything and names the missing variable, rather than guessing which merchant the first
-#      key belongs to.
+#      hash on a stored key carrying 256 bits of entropy, which is only actually true of a
+#      token this project generated -- an operator-chosen value read from an environment
+#      variable carries whatever entropy the operator happened to pick, and
+#      `ApiKeyStore.provisionWithToken`'s own shape check (`ApiKeys.isWellFormed`) cannot tell
+#      the difference: it is a floor that catches a truncated value or a short passphrase, not
+#      proof that whatever passes is actually random -- a human can pad a chosen string out to
+#      the right shape, and `compose.yaml`'s own demo token does exactly that, on purpose.
+#      Rather than lean on that check, this file sidesteps the question entirely: it never
+#      offered you the variable to set. `key-init` below runs `--nkap.apikey.create` with no
+#      `--token`, so the gateway generates one and prints it -- read it once from
+#      `docker compose logs key-init`; only its hash is ever stored, and there is no command
+#      or route that shows it to you again. `compose.yaml`'s own demo key is fixed instead of
+#      generated, because a demo needs `examples/demo.sh` to know it in advance without
+#      reading a log -- that key is deliberately, visibly fake, and this is the one file in
+#      this project that should never have anything like it. NKAP_MERCHANT_ID is still
+#      required -- compose refuses to start anything and names the missing variable, rather
+#      than guessing which merchant the first key belongs to.
 #
 #      `key-init` mints a *new* key every time it runs, which is every fresh `up` after a
 #      `down` (a one-shot service that already exited is not re-run by `up` alone). The

@@ -53,11 +53,13 @@ public final class PostgresApiKeyStore implements ApiKeyStore {
         Objects.requireNonNull(token, "token");
         if (!ApiKeys.isWellFormed(token)) {
             // ApiKeys's own javadoc justifies a fast, unsalted hash on the premise that a
-            // key generated here already carries 256 bits of entropy. That premise is only
-            // true of a token this project generated -- refusing anything else here is what
-            // keeps it true no matter which caller reaches this method (issue #86's
-            // correction: an operator-supplied token was, briefly, the documented
-            // production path).
+            // key generated here already carries 256 bits of entropy -- true only of a token
+            // this project generated. isWellFormed is a floor, not a substitute for that: it
+            // rejects what is obviously not a generated token (the wrong length, the wrong
+            // prefix) but cannot certify that whatever passes is actually random -- a human
+            // can pad a chosen string out to this exact shape, and compose.yaml's own demo
+            // token does, on purpose (issue #86's correction: an operator-supplied token was,
+            // briefly, the documented production path).
             throw new IllegalArgumentException(
                     "token does not have the shape ApiKeys.newToken() produces (" + ApiKeys.PREFIX
                             + " followed by 43 base64url characters) -- provision without a token"

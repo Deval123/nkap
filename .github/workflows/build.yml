@@ -63,6 +63,19 @@ jobs:
           docker rm -f guide-webhook-receiver 2>/dev/null || true
           docker compose down -v
 
+  # The version and "does latest move" decision release.yml delegates to
+  # .github/scripts/compute-release-tags.sh (issue #103) is the one part of the release path
+  # that used to be untestable without an actual tag push or workflow_dispatch run -- three
+  # lines of shell wrong by one character, found only by firing the workflow for real. This
+  # job is that test instead: no tag, no registry, no Docker, just the script's own rule
+  # (a real tag push with no pre-release suffix moves latest; nothing else does) asserted
+  # directly. Fast enough to run on every push and pull request, unlike `helm` or `demo`.
+  release-tags:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - run: ./.github/scripts/compute-release-tags.test.sh
+
   # A chart CI never renders is a chart nobody has checked since the day it was written --
   # the same "something not exercised by CI stops being true" reasoning as `demo` and
   # `integration-guide` above, applied to charts/nkap. This does not install into a real

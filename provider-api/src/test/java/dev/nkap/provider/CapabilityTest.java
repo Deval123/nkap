@@ -51,7 +51,7 @@ class CapabilityTest {
             }
 
             @Override
-            public ProviderStatus query(ReferenceId reference, Capability.Operation capability) {
+            public ProviderStatus query(QuerySubject subject, Capability.Operation capability) {
                 throw new UnsupportedOperationException("not needed for this test");
             }
 

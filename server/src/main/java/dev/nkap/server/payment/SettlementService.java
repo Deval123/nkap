@@ -13,6 +13,7 @@ import dev.nkap.provider.Capability;
 import dev.nkap.provider.ProviderId;
 import dev.nkap.provider.ProviderStatus;
 import dev.nkap.provider.ProviderUnavailableException;
+import dev.nkap.provider.QuerySubject;
 import dev.nkap.server.outbox.OutboxNotifier;
 import dev.nkap.server.provider.AdapterRegistry;
 import java.time.Instant;
@@ -115,8 +116,12 @@ public class SettlementService {
             try {
                 // The capability travels with the reference (ADR 0008): the payment records
                 // its operation and this method has the payment in hand, so the adapter is
-                // not left to look it up.
-                status = adapters.require(providerId).query(reference, peek.intent().operation());
+                // not left to look it up. Same reasoning for the provider's own reference
+                // (issue #96): submit() persisted it on the payment, and it is passed as
+                // recorded rather than assumed blank -- MTN ignores it, an operator whose
+                // status call needs a token it issued would not be able to.
+                status = adapters.require(providerId)
+                        .query(new QuerySubject(reference, peek.providerReference()), peek.intent().operation());
             } catch (ProviderUnavailableException noAnswer) {
                 log.info("{} for {}: the confirming query did not answer, changing nothing: {}",
                         cause, reference, noAnswer.getMessage());

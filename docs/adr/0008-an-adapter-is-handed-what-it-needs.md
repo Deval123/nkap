@@ -119,3 +119,45 @@ was done under it is not part of its identity.
 **Wait for a second operator to confirm the shape.** That is precisely the reasoning ADR
 0005 rejected. The contract is cheapest to change when one adapter implements it, and a
 second operator arriving is the moment it stops being cheap.
+
+## Amendment, 2026-09-14 — a second case, found by reading rather than implementing
+
+The rule this ADR states — an adapter is handed everything it needs to translate — caught a
+second violation before a second adapter existed to implement it: reviewing Orange Money's
+documented API against `provider-api` (issue #96,
+[`docs/providers/orange-money.md`](../providers/orange-money.md)) found that `query` supplies
+the reference Nkap chose but not the provider's own reference, and Orange's documented
+`transactionstatus` appears to need the latter (`pay_token`) as well. MTN never needed this
+because for MTN the reference Nkap chose *is* the key the operator is asked about — a
+property of MTN, not of operators, which the contract had encoded as if it were the latter.
+
+**`query` now also takes a `QuerySubject`** (`reference`, `providerReference`), replacing the
+bare `ReferenceId` it took before. `providerReference` is exactly what
+`SubmitResult.Acknowledged.providerReference()` returned at submission, which the gateway
+already persists; the caller passes it because it already has it, the same reasoning this ADR
+gives for `capability`. MTN ignores it — `requesttopay`'s `202` carries no body, so it is
+always blank for MTN — and the conformance kit gained a rule asserting `query` is handed
+whatever `submit` recorded, passing trivially for MTN and meant to hold for whichever adapter
+first has a reason to disagree.
+
+This is the harder version of the window this ADR opened: the first violation was found by
+implementing a second product against one operator; this one was found by reading a second
+operator's documentation, with no adapter here to implement it against and no way to observe
+the fact directly. The window this ADR names — "while there is one adapter to change with
+it" — does not close at the next slice. It closes at `v1.0.0`, because after the tag every
+signature change breaks every external adapter, which is the whole point of inviting them.
+Waiting for Orange's own adapter to confirm the shape would be the exact reasoning already
+rejected above, applied a second time to evidence that is admittedly weaker (third-party
+clients, not Orange's own reference — see `docs/providers/orange-money.md`'s own caveat).
+
+**`parseCallback` is not amended, and that is a considered gap, not an oversight.** Orange's
+notification token appears to be issued per payment, so verifying a callback would mean
+already knowing which payment it concerns — and `parseCallback` exists precisely because the
+gateway does not know that until something has parsed the callback. That is a circularity,
+not a missing argument: nothing can be added to `parseCallback`'s signature that would not
+require the answer `parseCallback` is being asked to produce. Recorded here, deliberately
+unsolved, as the open question a future redirect-style operator will force back onto this
+ADR: how does a gateway authenticate a notification whose verification secret is scoped to
+the one payment the notification has not yet identified. `ProviderAdapter.parseCallback`'s
+own javadoc names this as a case distinct from "do not add a capability to complete the
+symmetry" with `query`, so the two are not read as the same warning.

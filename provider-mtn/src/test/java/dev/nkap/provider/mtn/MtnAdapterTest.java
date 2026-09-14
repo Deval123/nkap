@@ -10,6 +10,7 @@ import dev.nkap.core.payment.ReferenceId;
 import dev.nkap.provider.Capability;
 import dev.nkap.provider.PaymentIntent;
 import dev.nkap.provider.ProviderId;
+import dev.nkap.provider.QuerySubject;
 import dev.nkap.provider.mtn.StubMtn.StubResponse;
 import java.lang.reflect.Constructor;
 import java.time.Duration;
@@ -75,7 +76,7 @@ class MtnAdapterTest {
             assertThatThrownBy(() -> facade.submit(intent(Capability.Operation.DISBURSE), ReferenceId.newReference()))
                     .isInstanceOf(IllegalStateException.class)
                     .hasMessageContaining("disbursement");
-            assertThatThrownBy(() -> facade.query(ReferenceId.newReference(), Capability.Operation.DISBURSE))
+            assertThatThrownBy(() -> facade.query(QuerySubject.of(ReferenceId.newReference()), Capability.Operation.DISBURSE))
                     .isInstanceOf(IllegalStateException.class);
             // capabilities() still lists BALANCE and HOLDER_VALIDATION (Collections offers
             // both), but asking for DISBURSE's own refuses the same way query() does: the
@@ -101,8 +102,8 @@ class MtnAdapterTest {
             MtnAdapter facade = facadeAt(mtn, true);
             ReferenceId ref = ReferenceId.newReference();
 
-            facade.query(ref, Capability.Operation.DISBURSE);
-            facade.query(ref, Capability.Operation.COLLECT);
+            facade.query(QuerySubject.of(ref), Capability.Operation.DISBURSE);
+            facade.query(QuerySubject.of(ref), Capability.Operation.COLLECT);
 
             // The same reference, two capabilities, two different product URLs — asserted on
             // the outgoing path, not on any mock.
@@ -125,7 +126,7 @@ class MtnAdapterTest {
             facade.submit(intent(Capability.Operation.COLLECT), ReferenceId.newReference());
             facade.submit(intent(Capability.Operation.DISBURSE), ReferenceId.newReference());
             facade.submit(intent(Capability.Operation.COLLECT), ReferenceId.newReference());   // reuses the collections token
-            assertThat(facade.query(ReferenceId.newReference(), Capability.Operation.DISBURSE).state())
+            assertThat(facade.query(QuerySubject.of(ReferenceId.newReference()), Capability.Operation.DISBURSE).state())
                     .isEqualTo(PaymentState.SUCCEEDED);                                // reuses the disbursements token
 
             assertThat(mtn.countPath("/collection/token/")).as("two collections calls, one token").isEqualTo(1);

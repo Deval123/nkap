@@ -9,6 +9,7 @@ import dev.nkap.core.payment.ReferenceId;
 import dev.nkap.provider.Capability;
 import dev.nkap.provider.PaymentIntent;
 import dev.nkap.provider.ProviderStatus;
+import dev.nkap.provider.QuerySubject;
 import dev.nkap.provider.SubmitResult;
 import java.io.IOException;
 import java.net.URI;
@@ -69,7 +70,7 @@ class MtnSandboxIT {
         SubmitResult submitted = adapter.submit(intent, reference);
         System.out.println("submit  " + reference + " -> " + submitted);
 
-        ProviderStatus status = adapter.query(reference, Capability.Operation.COLLECT);
+        ProviderStatus status = adapter.query(QuerySubject.of(reference), Capability.Operation.COLLECT);
         System.out.println("query   " + reference + " -> " + status.state()
                 + " (" + status.providerStatusCode() + ")");
 

@@ -75,6 +75,24 @@ several currencies are supported, conversion is not, because conversion needs a 
 date, a position account and a revaluation policy, and a first release that invents any of
 those is a ledger that lies.
 
+**1.0.0 does not carry redirect-style operators.** MTN's `requesttopay` pushes to the
+payer's handset; the merchant receives only an acknowledgement, and the payment happens or
+does not without anything further from the merchant's side. Orange Money's documented
+merchant flow is different in kind, not degree: the response carries a payment URL — or, in
+newer Sonatel offers, a QR code or a deeplink — and no payment happens until the payer is
+sent there. `SubmitResult.Acknowledged`, `ProviderStatus` and the HTTP API's
+`PaymentResponse` have nowhere to carry that artefact, so an adapter for a redirect-style
+operator cannot return the one thing without which no payment occurs — found reviewing
+Orange's documented API against `provider-api` (issue #95;
+[`docs/providers/orange-money.md`](providers/orange-money.md) is the review). Every operator
+this release targets pushes to the payer, and a field only a hypothetical adapter would ever
+fill is a contract shaped by speculation, not by a fact this repository has observed.
+Carrying one properly would mean a payer-facing artefact on `SubmitResult.Acknowledged`, a
+field in `PaymentResponse`, a description in `docs/openapi.yaml` and a section in the
+integration guide — and settling whether it is always a URL, since a QR code or a deeplink
+is not a URL a browser follows. That is a slice of its own, for whoever picks up a
+redirect-style operator; 1.0.0 does not guess its shape in advance of needing it.
+
 **Callers authenticate with an API key; the transport is the deployment's job.** A merchant
 backend sends `Authorization: Bearer <key>`; the key is compared against a stored SHA-256,
 the merchant is the one that key identifies — never a request-body field — and a merchant

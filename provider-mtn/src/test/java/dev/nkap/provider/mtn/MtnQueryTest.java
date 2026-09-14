@@ -9,6 +9,7 @@ import dev.nkap.core.payment.ReferenceId;
 import dev.nkap.provider.Capability;
 import dev.nkap.provider.PaymentIntent;
 import dev.nkap.provider.ProviderStatus;
+import dev.nkap.provider.QuerySubject;
 import dev.nkap.provider.SubmitResult;
 import dev.nkap.provider.mtn.StubMtn.StubResponse;
 import java.net.URI;
@@ -47,7 +48,7 @@ class MtnQueryTest {
                          "amount":"50.00","currency":"EUR"}"""));
             MtnCollectionsAdapter adapter = new MtnCollectionsAdapter(profileAt(mtn.baseUrl()), Duration.ofSeconds(3));
 
-            ProviderStatus status = adapter.query(ReferenceId.newReference(), Capability.Operation.COLLECT);
+            ProviderStatus status = adapter.query(QuerySubject.of(ReferenceId.newReference()), Capability.Operation.COLLECT);
 
             assertThat(status.state()).isEqualTo(PaymentState.SUCCEEDED);
             assertThat(status.transactionId()).contains("1510430965");
@@ -65,7 +66,7 @@ class MtnQueryTest {
                          "payer":{"partyIdType":"MSISDN","partyId":"46733123453"},"status":"PENDING"}"""));
             MtnCollectionsAdapter adapter = new MtnCollectionsAdapter(profileAt(mtn.baseUrl()), Duration.ofSeconds(3));
 
-            ProviderStatus status = adapter.query(ReferenceId.newReference(), Capability.Operation.COLLECT);
+            ProviderStatus status = adapter.query(QuerySubject.of(ReferenceId.newReference()), Capability.Operation.COLLECT);
 
             assertThat(status.state()).isEqualTo(PaymentState.PENDING);
             assertThat(status.transactionId()).isEmpty();

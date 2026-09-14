@@ -21,6 +21,7 @@ import dev.nkap.provider.ProviderAdapter;
 import dev.nkap.provider.ProviderId;
 import dev.nkap.provider.ProviderStatus;
 import dev.nkap.provider.ProviderUnavailableException;
+import dev.nkap.provider.QuerySubject;
 import dev.nkap.server.outbox.InMemoryOutbox;
 import dev.nkap.server.outbox.OutboxNotifier;
 import dev.nkap.server.support.LogCapture;
@@ -153,12 +154,29 @@ class SettlementServiceTest {
         settlement.confirm(MTN, collection.reference(), PaymentTransition.Cause.CALLBACK);
         settlement.confirm(MTN, disbursement.reference(), PaymentTransition.Cause.CALLBACK);
 
-        verify(adapter).query(collection.reference(), Capability.Operation.COLLECT);
-        verify(adapter).query(disbursement.reference(), Capability.Operation.DISBURSE);
+        verify(adapter).query(QuerySubject.of(collection.reference()), Capability.Operation.COLLECT);
+        verify(adapter).query(QuerySubject.of(disbursement.reference()), Capability.Operation.DISBURSE);
         // ...and never the other way round: a captured-any assertion would pass even if both
         // queries went out under one capability.
-        verify(adapter, never()).query(collection.reference(), Capability.Operation.DISBURSE);
-        verify(adapter, never()).query(disbursement.reference(), Capability.Operation.COLLECT);
+        verify(adapter, never()).query(QuerySubject.of(collection.reference()), Capability.Operation.DISBURSE);
+        verify(adapter, never()).query(QuerySubject.of(disbursement.reference()), Capability.Operation.COLLECT);
+    }
+
+    @Test
+    @DisplayName("the confirming query carries whatever provider reference was recorded at submission (issue #96)")
+    void the_query_carries_the_payments_own_provider_reference() throws Exception {
+        // ADR 0008, amendment: query is handed the provider's own reference, exactly as
+        // submit() recorded it on the payment -- not a blank one the adapter has to tolerate
+        // and not one this method invents. MTN never records one (its 202 carries no body),
+        // but an operator whose status call needs a token it issued would need this exact
+        // value, unchanged, to be on the payment before this method ever runs.
+        Payment payment = persisted(PaymentState.SUBMITTED);
+        payment.recordProviderReference("op-ref-123");
+        when(adapter.query(any(), any())).thenReturn(status(PaymentState.SUCCEEDED, "SUCCESSFUL"));
+
+        settlement.confirm(MTN, payment.reference(), PaymentTransition.Cause.CALLBACK);
+
+        verify(adapter).query(new QuerySubject(payment.reference(), "op-ref-123"), Capability.Operation.COLLECT);
     }
 
     @Test

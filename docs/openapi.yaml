@@ -1,7 +1,17 @@
 openapi: 3.1.0
 info:
   title: Nkap
-  version: "0.1.0"
+  # Not checked against the POMs' own version, on purpose, not by oversight (issue #106
+  # considered it and decided against, for this slice): OpenApiSpecIT already verifies
+  # paths, methods, status codes and fields against the running application, which is what
+  # a caller actually depends on -- this string has no consumer and no functional effect.
+  # Wiring it to ${project.version} would mean introducing Maven resource filtering or the
+  # spring-boot-maven-plugin's build-info goal into this build, neither configured today,
+  # for a field a human already has open and edits by hand at the exact moment they change
+  # every POM in the same release commit (CONTRIBUTING.md's own release sequence). Worth
+  # automating the day this project releases often enough that a human is no longer reading
+  # this file closely each time; not yet.
+  version: "1.0.0"
   description: |
     A self-hosted mobile money gateway with a real double-entry ledger — MTN MoMo first,
     others through the same `ProviderAdapter` contract. See `README.md` for what Nkap is and

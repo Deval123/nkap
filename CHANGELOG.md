@@ -6,13 +6,15 @@ All notable changes to Nkap are documented here. The format follows
 
 ## [Unreleased]
 
-## [1.0.0]
+## [1.0.0] - 2026-09-14
 
 <!--
-  Dated only once the v1.0.0 tag is actually pushed -- an entry dated in advance is a small
-  lie this repository has spent a week not telling. See CLAUDE.md's versioning section and
-  PLAN.md for #104: the tag, the version bump and this date are one deliberate act, not
-  three separate ones.
+  #104 deliberately left this undated -- an entry dated in advance is a small lie this
+  repository has spent a week not telling. #106 is the release commit the v1.0.0 tag points
+  at, so the wrinkle that instruction was waiting for has arrived: dating this afterwards
+  would leave the released tree containing an undated entry, disagreeing with its own
+  release. The date above is the day this commit merges, and the tag follows the same day --
+  not the rule being broken, the rule meeting the moment it was written for.
 -->
 
 There is no previous release, so nothing here has *changed* — this entry says what 1.0.0

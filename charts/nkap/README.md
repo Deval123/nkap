@@ -114,6 +114,21 @@ before-hook-creation` only removes a *previous* run, and a `post-install` hook n
 again on the same release) specifically so you have the chance to read it, not because
 leaving it forever is recommended.
 
+**If the Job fails, do not raise `backoffLimit`.** It is `0` on purpose, not a cautious
+default: `keyInit` is handed no `--nkap.apikey.token`, so it is not idempotent the way a
+retried HTTP request is — every attempt mints a brand new key. And the failure it would
+retry on is the most likely one in this chart's own default topology: this chart deploys no
+PostgreSQL and this Job does not wait for one to answer, so a first `helm install` racing a
+database still coming up fails right here, as the common case, not an edge case. Setting
+`backoffLimit: 3` to paper over that turns one ordinary startup race into up to four live
+keys, three of them printed only into the logs of pods that already failed — logs nobody
+reads, because the Job looks broken rather than provisioned, and that your cluster's own log
+retention may garbage-collect before anyone does. There is no revocation command in this
+project (`docs/security-notes.md`) — only a direct database delete — so an unnoticed extra
+key stays valid indefinitely, not until someone happens to clean it up. **When this Job
+fails: fix database reachability and reinstall, or set `keyInit.enabled: false` and
+provision out-of-band** (see above) — never retry your way past it.
+
 ### 2. What runs the migrations when there is more than one replica?
 
 **Nothing separate — Flyway still runs at startup, in every pod, exactly as it does today.**

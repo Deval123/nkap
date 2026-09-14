@@ -31,6 +31,21 @@ metadata:
     helm.sh/hook-weight: "0"
     helm.sh/hook-delete-policy: before-hook-creation
 spec:
+  # 0, not Kubernetes' own default of 6, and this is load-bearing, not a cautious default.
+  # This Job is handed no --nkap.apikey.token, so it is not idempotent the way a retried
+  # HTTP request is: every run mints a brand new key. And the failure it would retry on is
+  # the most likely one in this chart's own default topology -- this chart deploys no
+  # PostgreSQL and this Job does not wait for one to answer, so a first install racing a
+  # database still coming up fails right here, every time, not as an edge case. Raising this
+  # looks like resilience and is the opposite of it: backoffLimit: 3 turns one ordinary
+  # startup race into up to four live keys, three of them printed only into the logs of pods
+  # that already failed -- logs nobody reads because the Job looks broken, not provisioned,
+  # and that your cluster's own log retention may garbage-collect before anyone does. There
+  # is no revocation command in this project (docs/security-notes.md) -- only a direct
+  # database delete -- so an unnoticed extra key stays valid indefinitely, not until someone
+  # happens to clean it up. See charts/nkap/README.md's API-key exposure section for what to
+  # do instead when this Job fails: fix database reachability and reinstall, or set
+  # keyInit.enabled: false and provision out-of-band.
   backoffLimit: 0
   template:
     metadata:

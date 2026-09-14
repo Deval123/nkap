@@ -57,7 +57,7 @@ payment (see `docs/adr/0002-scenarios-are-timelines.md`):
   (`UNKNOWN_REFERENCE`). See [Callbacks](#callbacks).
 
 Every field is optional and defaults sensibly: an empty document is the happy path
-(accepted on submission, `SUCCESSFUL` on the next query). A scenario file declares only
+(accepted on submission, `SUCCESSFUL` on the next query). The posted document declares only
 what it changes.
 
 ### Error bodies
@@ -311,5 +311,8 @@ left to be discovered. To replay the same reference, `DELETE /_nkap/state` first
 
 ## What is not here yet
 
-The individual scenario files of issues #4–#8 are configuration written against this
-mechanism, one per pull request. Loading scenarios from YAML is issue #10.
+The individual scenarios of issues #4–#8 are JSON documents posted against this mechanism,
+one per pull request — declared in each issue's own tests, not committed as files, since
+nothing here reads a scenario from disk. A file the standalone simulator reads at startup,
+so `docker run` alone produces a misbehaving simulator without a caller posting first, was
+considered and declined for 1.0.0 — see the roadmap and #99.

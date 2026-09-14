@@ -1,6 +1,6 @@
-# The first ten issues
+# The first nine issues
 
-All ten live in the `simulator` module. This is deliberate: they need no operator
+All nine live in the `simulator` module. This is deliberate: they need no operator
 account, no credentials, and no knowledge of double-entry bookkeeping — only the ability
 to make a fake server behave badly on command. They are the most accessible contributions
 this project will ever offer, and each one directly enables a conformance test.
@@ -94,17 +94,6 @@ Issue a bearer token with a very short life and reject subsequent calls with 401
 expires, requiring the client to renew and retry with the same reference.
 
 **Done when** token lifetime is configurable down to a couple of seconds.
-
----
-
-### 10. Scenarios as declarative files
-
-Load scenarios from a YAML file instead of code, so a contributor can add a failure mode
-without writing Java, and so a project using Nkap can commit its own scenarios alongside
-its tests.
-
-**Done when** issues 2 through 9 are all expressible in YAML and the built-in ones are
-loaded from files.
 
 ---
 

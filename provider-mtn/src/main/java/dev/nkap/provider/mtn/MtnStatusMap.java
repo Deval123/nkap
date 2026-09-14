@@ -28,7 +28,11 @@ import java.util.Set;
  */
 final class MtnStatusMap {
 
-    /** Codes from ADR 0004. A test asserts every one of these is a key of {@link #TABLE}. */
+    /**
+     * Codes from ADR 0004. A test asserts every one of these is a key of {@link #TABLE}, and
+     * a separate test (issue #92) asserts {@code docs/providers/mtn.md} marks exactly these
+     * codes, and no others, as documented by MTN.
+     */
     static final Set<String> DOCUMENTED_CODES = Set.of(
             "SUCCESSFUL",
             "PENDING",
@@ -45,7 +49,16 @@ final class MtnStatusMap {
             "INTERNAL_PROCESSING_ERROR",
             "RESOURCE_NOT_FOUND");
 
-    private static final Map<String, PaymentState> TABLE = Map.ofEntries(
+    /**
+     * Package-private, not private, so {@code MtnStatusMappingDocTest} (issue #92) can read
+     * it directly and check {@code docs/providers/mtn.md}'s table against it in both
+     * directions, the same discipline {@code CurrencyTest} applies to {@code Currency} and
+     * {@code ConfigurationReferenceTest} applies to {@code application.yml}. Widening
+     * visibility for a same-package test is not a change in what this class exposes to
+     * anything that actually calls it — {@link #stateFor} and {@link #isKnown} are still the
+     * only way another package reaches this data.
+     */
+    static final Map<String, PaymentState> TABLE = Map.ofEntries(
             Map.entry("SUCCESSFUL", SUCCEEDED),
             Map.entry("PENDING", PENDING),
             Map.entry("EXPIRED", EXPIRED),

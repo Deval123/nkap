@@ -1,0 +1,20 @@
+{{/*
+Traffic only: the API, port 8080. This is the Service an Ingress fronts. It never carries
+9464 -- see templates/service-metrics.yaml and charts/nkap/README.md's "The management
+port" for why that is a separate resource, off by default, rather than a second port here.
+*/}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "nkap.fullname" . }}
+  labels:
+    {{- include "nkap.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - port: {{ .Values.service.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "nkap.selectorLabels" . | nindent 4 }}

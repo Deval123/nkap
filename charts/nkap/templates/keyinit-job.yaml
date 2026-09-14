@@ -1,0 +1,58 @@
+{{/*
+Provisions the first API key, once, the same command nkap-standalone.compose.yaml's own
+key-init service runs -- `--nkap.apikey.create` starts the same jar with no web server
+(NkapServerApplication routes an offline command that way), writes one row holding only the
+key's hash, prints the key itself to stdout, and exits.
+
+A `post-install` hook, not `post-upgrade`: this runs exactly once, on `helm install`, never
+again on `helm upgrade` -- re-running it on every upgrade would mint a *new* key each time,
+compose's own documented behaviour for a service meant to be re-run by hand, not a chart's
+default. See charts/nkap/README.md for how to provision an additional key later, and for
+"Where does the first API key appear, and who else can read it?" -- read that before you
+install, not after: the key is printed to this Job's pod logs, which is a different, more
+persistent exposure than a compose file's local `docker compose logs key-init`.
+
+`helm.sh/hook-delete-policy: before-hook-creation` keeps this Job (and the key still sitting
+in its logs) around after a successful install, so `kubectl logs` can still read it -- it is
+only removed the next time this hook would run, i.e. never for keyInit, since a
+`post-install` hook never re-runs on the same release. Delete the Job yourself once you have
+read and stored the key, if your log retention policy makes that the safer choice.
+*/}}
+{{- if .Values.keyInit.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "nkap.fullname" . }}-key-init
+  labels:
+    {{- include "nkap.labels" . | nindent 4 }}
+    app.kubernetes.io/component: key-init
+  annotations:
+    helm.sh/hook: post-install
+    helm.sh/hook-weight: "0"
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        {{- include "nkap.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: key-init
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: key-init
+          image: {{ printf "%s:%s" .Values.image.repository (required "image.tag is required -- set it to a real release, e.g. \"1.0.0\" (see https://github.com/deval123/nkap/releases)" .Values.image.tag) }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            {{- include "nkap.env" . | nindent 12 }}
+            # A one-shot provisioning command has no use for either scheduler -- see
+            # nkap-standalone.compose.yaml's own key-init service for the identical reasoning.
+            - name: NKAP_RECONCILER_ENABLED
+              value: "false"
+            - name: NKAP_WEBHOOKS_ENABLED
+              value: "false"
+          args:
+            - "--nkap.apikey.create"
+            - {{ printf "--nkap.apikey.merchant=%s" (required "keyInit.merchantId is required when keyInit.enabled is true -- set it to the merchant the first API key belongs to, or set keyInit.enabled to false and provision out-of-band" .Values.keyInit.merchantId) | quote }}
+            - {{ printf "--nkap.apikey.label=%s" (.Values.keyInit.label | default "initial") | quote }}
+{{- end }}

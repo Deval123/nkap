@@ -1,0 +1,77 @@
+{{/*
+The gateway. Flyway migrates at startup, in every pod, the same as every compose file in
+this repository -- there is no separate migration Job. That is a deliberate choice, not an
+omission: see charts/nkap/README.md's "What runs the migrations" section for why this is
+safe (Flyway's own lock) and what it costs during a rolling upgrade (the old and the new
+image briefly run against the same schema).
+*/}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "nkap.fullname" . }}
+  labels:
+    {{- include "nkap.labels" . | nindent 4 }}
+spec:
+  # More than one replica is safe -- see charts/nkap/README.md's "Is more than one replica
+  # safe at all?" before changing this from the default of 1, not because the default is
+  # itself a caution: it names the mechanism (SELECT ... FOR UPDATE SKIP LOCKED, and the
+  # payment row lock settlement takes) so the claim can be checked, not just believed.
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "nkap.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "nkap.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      containers:
+        - name: gateway
+          image: {{ printf "%s:%s" .Values.image.repository (required "image.tag is required -- set it to a real release, e.g. \"1.0.0\" (see https://github.com/deval123/nkap/releases)" .Values.image.tag) }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8080
+            - name: management
+              containerPort: 9464
+          env:
+            {{- include "nkap.env" . | nindent 12 }}
+          # /actuator/health is on the management port, not the API's -- the same reason
+          # this port is never in the traffic Service (see service.yaml and
+          # charts/nkap/README.md's "The management port"). Probing it here reaches it from
+          # inside the pod, where it is reachable regardless of what any Service exposes.
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: management
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: management
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          {{- with .Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

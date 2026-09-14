@@ -1,0 +1,105 @@
+# Default values for the nkap chart. See charts/nkap/README.md before installing --
+# especially "The credential rule" and the three questions a Kubernetes deployment forces
+# that a compose file never did.
+#
+# The env var names this chart sets on the gateway container are deliberately the same ones
+# nkap-standalone.compose.yaml and application.yml already use (NKAP_DB_URL,
+# NKAP_PROVIDER_MTN_<COUNTRY>_*, and so on) -- a reader who knows one already knows the other.
+
+image:
+  repository: ghcr.io/deval123/nkap-gateway
+  # No default. nkap-standalone.compose.yaml requires NKAP_VERSION the same way
+  # ($NKAP_VERSION:?set the Nkap version to deploy) -- a chart that defaulted to "latest" or
+  # to some fixed version would drift from what it actually installs the moment either one
+  # changes. Set to a real release, e.g. "1.0.0" -- see
+  # https://github.com/deval123/nkap/releases.
+  tag: ""
+  pullPolicy: IfNotPresent
+
+replicaCount: 1
+
+service:
+  # Traffic only: the API, port 8080. This is the only Service an Ingress should ever
+  # front -- see metrics.service below and charts/nkap/README.md's "The management port"
+  # section for why 9464 is never in it.
+  type: ClusterIP
+  port: 8080
+
+metrics:
+  service:
+    # A second, separate Service for a Prometheus scrape target on the management port
+    # (9464 -- payments-by-state, reconciler passes, escalations, and the suspense balance
+    # in a real currency; application.yml's own comment explains why this port is never
+    # published anywhere else in this repository). Off by default, on purpose: turning it on
+    # is a deliberate choice about who else can reach a scrape network, not something a
+    # chart should default to. If you turn it on, keep it off any Ingress and reachable only
+    # from your scrape network.
+    enabled: false
+    port: 9464
+
+database:
+  # Bring your own PostgreSQL. This chart does not deploy one -- see charts/nkap/README.md
+  # for why (the short version: nkap-standalone.compose.yaml's own db service is a
+  # convenience for trying the gateway, never a production database, and this chart does not
+  # repeat that shortcut as if it were one).
+  host: "" # required, e.g. "postgresql.default.svc.cluster.local" or a managed host
+  port: 5432
+  name: nkap
+  username: nkap
+  # The password is never a value in this file, or in any values file -- see "The credential
+  # rule" in charts/nkap/README.md. Create the Secret yourself, e.g.:
+  #   kubectl create secret generic nkap-db --from-literal=password='...'
+  # and name it (and, if you used a different key than "password", the key) here.
+  existingSecret: "" # required: the Secret's name
+  existingSecretPasswordKey: password
+
+provider:
+  # GET /balance and GET /account-holders/{msisdn} are not per-country routes (issue #82);
+  # this is the installation they route to, by ProviderId ("mtn-" + an installation's own
+  # country below). Only meaningful once at least one installation is configured; see
+  # docs/providers/mtn.md.
+  default: ""
+  mtn:
+    # One entry per country -- its own portal, its own subscription keys, its own currency.
+    # Empty by default: the gateway starts with no MTN adapter configured, which is enough
+    # to provision an API key and check /actuator/health before any MTN credential exists
+    # (nkap-standalone.compose.yaml makes the same point, the same way). Every credential
+    # field below is a Secret reference, never a value -- see "The credential rule" in
+    # charts/nkap/README.md. Example, one collections-only installation for Cameroon:
+    #
+    # installations:
+    #   - country: cm
+    #     currency: XAF
+    #     baseUrl: "https://momodeveloper.mtn.com"
+    #     targetEnvironment: mtncameroon
+    #     requestTimeout: PT20S
+    #     existingSecret: nkap-mtn-cm
+    #     subscriptionKeySecretKey: subscription-key
+    #     apiUserSecretKey: api-user
+    #     apiKeySecretKey: api-key
+    #     # Disbursements are a separate MTN product with their own credentials (issue #62).
+    #     # Omit this block entirely if this installation only collects.
+    #     disbursement:
+    #       existingSecret: nkap-mtn-cm-disbursement
+    #       subscriptionKeySecretKey: subscription-key
+    #       apiUserSecretKey: api-user
+    #       apiKeySecretKey: api-key
+    installations: []
+
+keyInit:
+  # Provisions the first API key, once, as a post-install hook. Read
+  # "Where does the first API key appear, and who else can read it?" in
+  # charts/nkap/README.md before you install: the key is printed to this Job's pod logs,
+  # which is a different exposure than a compose file's local `docker compose logs`.
+  enabled: true
+  merchantId: "" # required if enabled: the merchant the first key belongs to
+  label: initial
+
+resources: {}
+
+podAnnotations: {}
+podLabels: {}
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

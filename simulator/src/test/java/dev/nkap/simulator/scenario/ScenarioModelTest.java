@@ -11,8 +11,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 /**
- * The scenario model is the in-memory shape and the file shape at once (ADR
- * 0002). These pin down that a scenario file may declare only what it changes.
+ * The scenario model is the in-memory shape and the posted-document shape at once (ADR
+ * 0002). These pin down that a posted document may declare only what it changes.
  */
 class ScenarioModelTest {
 

@@ -3,6 +3,7 @@ package dev.nkap.server.reconcile;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 
+import dev.nkap.server.payment.PaymentRepository;
 import dev.nkap.server.payment.SettlementService;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
@@ -28,6 +29,7 @@ class ReconcilerWiringTest {
             .withBean(JdbcTemplate.class, () -> mock(JdbcTemplate.class))
             .withBean(PlatformTransactionManager.class, () -> mock(PlatformTransactionManager.class))
             .withBean(SettlementService.class, () -> mock(SettlementService.class))
+            .withBean(PaymentRepository.class, () -> mock(PaymentRepository.class))
             .withBean(MeterRegistry.class, SimpleMeterRegistry::new)
             .withPropertyValues(
                     "nkap.reconciler.interval=30s",

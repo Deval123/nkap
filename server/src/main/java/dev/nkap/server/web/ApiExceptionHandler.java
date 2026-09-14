@@ -1,6 +1,7 @@
 package dev.nkap.server.web;
 
 import dev.nkap.provider.ProviderUnavailableException;
+import dev.nkap.server.payment.RefundExceedsRemainingException;
 import dev.nkap.server.provider.NoAdapterConfiguredException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -75,6 +76,16 @@ class ApiExceptionHandler {
                 "This reads live from the operator, and it did not answer. That is not a "
                         + "failed read -- it is not known, and the same request can be retried.",
                 ProblemTypes.OPERATOR_DID_NOT_ANSWER);
+    }
+
+    @ExceptionHandler(RefundExceedsRemainingException.class)
+    ProblemDetail onRefundExceedsRemaining(RefundExceedsRemainingException e) {
+        // Reached only when a concurrent refund won the race the controller's own (unlocked)
+        // check could not see coming -- Payment.reserveRefund re-checks this under the
+        // original's row lock and this is what it throws when the running total would pass
+        // what was ever collected (issue #84).
+        return problem(HttpStatus.BAD_REQUEST, "This refund would exceed what remains of the original",
+                e.getMessage(), ProblemTypes.REFUND_EXCEEDS_REMAINING);
     }
 
     @ExceptionHandler(NoAdapterConfiguredException.class)

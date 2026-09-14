@@ -119,4 +119,61 @@ class OutboxNotifierTest {
         assertThat(outbox.events()).extracting(e -> e.id().toString())
                 .noneMatch(id -> id.equals(first.reference().toString()) || id.equals(second.reference().toString()));
     }
+
+    // --- refunds get their own event type (issue #84) --------------------------------------
+
+    private static Payment refundIn(PaymentState state) {
+        ReferenceId original = ReferenceId.newReference();
+        PaymentIntent intent = new PaymentIntent(Capability.Operation.DISBURSE, Money.of(2000, Currency.EUR),
+                "46733123453", "refund", "refund of " + original, Map.of());
+        Payment refund = Payment.createRefund(ReferenceId.newReference(), MTN, "merchant-1", intent, original);
+        refund.applyTransition(PaymentState.SUBMITTED, PaymentTransition.Cause.SUBMIT_RESPONSE, "", "", "");
+        if (state != PaymentState.SUBMITTED) {
+            refund.applyTransition(state, PaymentTransition.Cause.QUERY, "CODE", "", "");
+        }
+        return refund;
+    }
+
+    @Test
+    @DisplayName("a SUCCEEDED refund writes a refund.succeeded event, not payment.succeeded, carrying the original's reference")
+    void a_succeeded_refund_writes_its_own_event_type() {
+        endpoints.provision("merchant-1", "https://merchant.example/hooks");
+        Payment refund = refundIn(PaymentState.SUCCEEDED);
+
+        notifier.notifyIfTerminal(refund);
+
+        assertThat(outbox.events()).singleElement().satisfies(event -> {
+            assertThat(event.eventType()).isEqualTo("refund.succeeded");
+            assertThat(event.payload()).contains(refund.refundOf().orElseThrow().toString());
+        });
+    }
+
+    @Test
+    @DisplayName("a FAILED refund writes a refund.failed event")
+    void a_failed_refund_writes_its_own_event_type() {
+        endpoints.provision("merchant-1", "https://merchant.example/hooks");
+
+        notifier.notifyIfTerminal(refundIn(PaymentState.FAILED));
+
+        assertThat(outbox.events()).singleElement()
+                .satisfies(event -> assertThat(event.eventType()).isEqualTo("refund.failed"));
+    }
+
+    @Test
+    @DisplayName("a plain disbursement's event carries an empty refundOf")
+    void a_plain_disbursement_carries_no_refund_of() {
+        endpoints.provision("merchant-1", "https://merchant.example/hooks");
+        PaymentIntent intent = new PaymentIntent(Capability.Operation.DISBURSE, Money.of(5000, Currency.EUR),
+                "46733123453", "payout", "payout", Map.of());
+        Payment disbursement = Payment.create(ReferenceId.newReference(), MTN, "merchant-1", intent);
+        disbursement.applyTransition(PaymentState.SUBMITTED, PaymentTransition.Cause.SUBMIT_RESPONSE, "", "", "");
+        disbursement.applyTransition(PaymentState.SUCCEEDED, PaymentTransition.Cause.QUERY, "SUCCESSFUL", "", "");
+
+        notifier.notifyIfTerminal(disbursement);
+
+        assertThat(outbox.events()).singleElement().satisfies(event -> {
+            assertThat(event.eventType()).isEqualTo("payment.succeeded");
+            assertThat(event.payload()).contains("\"refundOf\":\"\"");
+        });
+    }
 }

@@ -10,6 +10,7 @@ import dev.nkap.core.payment.PaymentState;
 import dev.nkap.core.payment.ReferenceId;
 import dev.nkap.provider.ProviderId;
 import dev.nkap.server.payment.ConfirmationOutcome;
+import dev.nkap.server.payment.PaymentRepository;
 import dev.nkap.server.payment.SettlementService;
 import dev.nkap.server.reconcile.ReconciliationStore.Claim;
 import dev.nkap.server.support.LogCapture;
@@ -21,6 +22,7 @@ import java.time.ZoneOffset;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.transaction.PlatformTransactionManager;
 
 /**
  * The reconciler's own log correlation: every line one pass emits carries that pass's id as
@@ -32,15 +34,16 @@ import org.junit.jupiter.api.Test;
  */
 class ReconcilerTest {
 
+    private final PaymentRepository payments = mock(PaymentRepository.class);
     private final ReconciliationStore store = mock(ReconciliationStore.class);
     private final SettlementService settlement = mock(SettlementService.class);
     private final ReconciliationPolicy policy = new ReconciliationPolicy(
             Duration.ofMinutes(1), Duration.ofHours(1), Duration.ofHours(24));
     private final ReconcilerProperties properties = new ReconcilerProperties(
-            Duration.ofSeconds(30), 100, Duration.ofMinutes(1), Duration.ofHours(1), Duration.ofHours(24));
+            Duration.ofSeconds(30), 100, Duration.ofMinutes(1), Duration.ofHours(1), Duration.ofHours(24), Duration.ofMinutes(2));
     private final Instant now = Instant.parse("2026-01-01T00:00:00Z");
-    private final Reconciler reconciler = new Reconciler(
-            store, settlement, policy, properties, Clock.fixed(now, ZoneOffset.UTC), new SimpleMeterRegistry());
+    private final Reconciler reconciler = new Reconciler(payments, store, settlement, policy, properties,
+            Clock.fixed(now, ZoneOffset.UTC), new SimpleMeterRegistry(), mock(PlatformTransactionManager.class));
 
     @Test
     @DisplayName("every log line from one pass carries the same reconcilerPass field — including the settlement line the pass triggers")

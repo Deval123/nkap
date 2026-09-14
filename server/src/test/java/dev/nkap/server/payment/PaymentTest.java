@@ -120,7 +120,7 @@ class PaymentTest {
         // attempt is scheduled half an hour out.
         Payment payment = Payment.rehydrate(ReferenceId.newReference(), ProviderId.of("mtn"), "merchant-1", intent,
                 PaymentState.UNKNOWN, "", "", createdAt, createdAt, List.of(),
-                7, nextAttemptDue, escalatedAt, becameUnresolved);
+                7, nextAttemptDue, escalatedAt, becameUnresolved, null, 0L);
 
         payment.applyTransition(PaymentState.PENDING, PaymentTransition.Cause.RECONCILER, "PENDING", "", "");
 
@@ -158,5 +158,90 @@ class PaymentTest {
         assertThatThrownBy(() -> payment.history().clear())
                 .isInstanceOf(UnsupportedOperationException.class);
         assertThat(payment.history()).hasSize(1);
+    }
+
+    // --- refunds (issue #84) --------------------------------------------------------------
+
+    @Test
+    @DisplayName("a plain payment refunds nothing: refundOf is empty and the full amount remains refundable")
+    void a_plain_payment_is_not_a_refund() {
+        Payment payment = newPayment();
+
+        assertThat(payment.refundOf()).isEmpty();
+        assertThat(payment.refundedMinor()).isZero();
+        assertThat(payment.refundableRemaining()).isEqualTo(Money.of(5000, Currency.EUR));
+    }
+
+    @Test
+    @DisplayName("createRefund makes a DISBURSE payment naming the collection it refunds, never a third Capability.Operation")
+    void create_refund_makes_a_disburse_payment() {
+        ReferenceId original = ReferenceId.newReference();
+        PaymentIntent refundIntent = new PaymentIntent(Capability.Operation.DISBURSE, Money.of(2000, Currency.EUR),
+                "46733123453", "refund", "refund of " + original, Map.of());
+
+        Payment refund = Payment.createRefund(ReferenceId.newReference(), ProviderId.of("mtn"), "merchant-1",
+                refundIntent, original);
+
+        assertThat(refund.refundOf()).contains(original);
+        assertThat(refund.intent().operation()).isEqualTo(Capability.Operation.DISBURSE);
+        assertThat(refund.state()).isEqualTo(PaymentState.CREATED);
+    }
+
+    @Test
+    @DisplayName("reserveRefund lowers what is left to refund by the reserved amount")
+    void reserve_refund_lowers_the_remaining_balance() {
+        Payment payment = newPayment();
+
+        payment.reserveRefund(Money.of(2000, Currency.EUR));
+
+        assertThat(payment.refundedMinor()).isEqualTo(2000L);
+        assertThat(payment.refundableRemaining()).isEqualTo(Money.of(3000, Currency.EUR));
+    }
+
+    @Test
+    @DisplayName("reserveRefund throws rather than let the running total pass what was ever collected")
+    void reserve_refund_refuses_to_exceed_the_original_amount() {
+        Payment payment = newPayment();
+        payment.reserveRefund(Money.of(4000, Currency.EUR));
+
+        assertThatThrownBy(() -> payment.reserveRefund(Money.of(1001, Currency.EUR)))
+                .isInstanceOf(RefundExceedsRemainingException.class);
+        assertThat(payment.refundedMinor())
+                .as("a refused reservation changes nothing")
+                .isEqualTo(4000L);
+    }
+
+    @Test
+    @DisplayName("reserveRefund rejects a non-positive amount")
+    void reserve_refund_rejects_a_non_positive_amount() {
+        Payment payment = newPayment();
+
+        assertThatThrownBy(() -> payment.reserveRefund(Money.of(0, Currency.EUR)))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThat(payment.refundedMinor()).isZero();
+    }
+
+    @Test
+    @DisplayName("releaseRefundReservation gives the amount back, for a refund that ended FAILED or EXPIRED")
+    void release_refund_reservation_restores_the_balance() {
+        Payment payment = newPayment();
+        payment.reserveRefund(Money.of(2000, Currency.EUR));
+
+        payment.releaseRefundReservation(Money.of(2000, Currency.EUR));
+
+        assertThat(payment.refundedMinor()).isZero();
+        assertThat(payment.refundableRemaining()).isEqualTo(Money.of(5000, Currency.EUR));
+    }
+
+    @Test
+    @DisplayName("a second reservation succeeds once the first is released, even though together they exceed the amount")
+    void reservation_and_release_compose_across_two_refunds() {
+        Payment payment = newPayment();
+        payment.reserveRefund(Money.of(4000, Currency.EUR));   // refund A: in flight
+        payment.releaseRefundReservation(Money.of(4000, Currency.EUR)); // refund A: FAILED, released
+
+        payment.reserveRefund(Money.of(4000, Currency.EUR));   // refund B: now fits again
+
+        assertThat(payment.refundedMinor()).isEqualTo(4000L);
     }
 }

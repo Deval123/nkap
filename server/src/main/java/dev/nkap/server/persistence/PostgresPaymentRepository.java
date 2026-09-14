@@ -13,6 +13,7 @@ import dev.nkap.provider.ProviderId;
 import dev.nkap.server.payment.Payment;
 import dev.nkap.server.payment.PaymentRepository;
 import dev.nkap.server.payment.PaymentTransition;
+import dev.nkap.server.payment.RefundExceedsRemainingException;
 import java.sql.ResultSet;
 import java.time.Instant;
 import java.time.OffsetDateTime;
@@ -23,6 +24,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import org.postgresql.util.PSQLException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 
@@ -38,15 +41,32 @@ import org.springframework.jdbc.core.RowMapper;
  * <p>{@code findByReferenceForUpdate} adds {@code FOR UPDATE}: inside the transaction that
  * does a read-decide-write, it holds the payment's row until commit, which is the
  * serialisation the submit and callback paths share.
+ *
+ * <p>{@code reserveRefund} and {@code releaseRefundReservation} take no lock of their own and
+ * need none: each is a single {@code UPDATE … SET refunded_minor = refunded_minor ± ?}, and
+ * PostgreSQL's own per-row atomicity for a read-modify-write inside one statement is what
+ * makes two concurrent refunds against the same collection impossible, backed by the
+ * {@code CHECK} (V8) that refuses a result over the amount ever collected. This replaced an
+ * earlier version that read {@code refunded_minor} in Java, computed the new total, and wrote
+ * it back as an absolute value under an explicit {@code FOR UPDATE} — safe only as long as
+ * every writer remembered to take that lock, and silently wrong (a lost update, under the
+ * cap it exists to enforce) the moment one did not.
  */
 public final class PostgresPaymentRepository implements PaymentRepository {
 
+    // refunded_minor is deliberately absent from the SET list below (issue #84's first
+    // correction). save() writes whatever Payment.refundedMinor() happens to hold at the
+    // moment it is called, which is a stale, possibly-lagging snapshot for any caller that
+    // loaded the row without a lock -- writing it here would let such a caller silently
+    // erase a concurrent reservation. reserveRefund/releaseRefundReservation below are the
+    // only writers of that column, each a single atomic UPDATE in the database.
     private static final String UPSERT_PAYMENT = """
             INSERT INTO payment (reference, provider, merchant_id, operation, amount_minor, currency,
                                  counterparty_msisdn, payer_message, payee_note, provider_options,
                                  state, provider_reference, provider_transaction_id, created_at, updated_at,
-                                 reconcile_attempts, reconcile_due_at, escalated_at, unresolved_since)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                 reconcile_attempts, reconcile_due_at, escalated_at, unresolved_since,
+                                 refund_of, refunded_minor)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT (reference) DO UPDATE SET
                 state = EXCLUDED.state,
                 provider_reference = EXCLUDED.provider_reference,
@@ -57,6 +77,17 @@ public final class PostgresPaymentRepository implements PaymentRepository {
                 escalated_at = EXCLUDED.escalated_at,
                 unresolved_since = EXCLUDED.unresolved_since
             """;
+
+    private static final String RESERVE_REFUND = """
+            UPDATE payment SET refunded_minor = refunded_minor + ? WHERE reference = ?
+            """;
+
+    private static final String RELEASE_REFUND_RESERVATION = """
+            UPDATE payment SET refunded_minor = refunded_minor - ? WHERE reference = ?
+            """;
+
+    /** The name V8 gives the CHECK that refuses to let refunded_minor exceed amount_minor. */
+    private static final String REFUNDED_WITHIN_AMOUNT_CONSTRAINT = "payment_refunded_within_amount";
 
     private static final String INSERT_TRANSITION = """
             INSERT INTO payment_transition (payment_reference, seq, from_state, to_state, occurred_at,
@@ -96,7 +127,9 @@ public final class PostgresPaymentRepository implements PaymentRepository {
                 payment.reconcileAttempts(),
                 atUtc(payment.reconcileDueAt()),
                 atUtc(payment.escalatedAt()),
-                atUtc(payment.unresolvedSince()));
+                atUtc(payment.unresolvedSince()),
+                payment.refundOf().map(ReferenceId::value).orElse(null),
+                payment.refundedMinor());
 
         List<PaymentTransition> history = payment.history();
         for (int seq = 0; seq < history.size(); seq++) {
@@ -137,6 +170,53 @@ public final class PostgresPaymentRepository implements PaymentRepository {
         return escalated;
     }
 
+    @Override
+    public List<Payment> findStrandedRefunds(Instant olderThan) {
+        List<UUID> references = jdbc.queryForList(
+                "SELECT reference FROM payment WHERE refund_of IS NOT NULL AND state = 'CREATED' "
+                        + "AND created_at < ? ORDER BY created_at",
+                UUID.class, OffsetDateTime.ofInstant(olderThan, ZoneOffset.UTC));
+        List<Payment> stranded = new ArrayList<>(references.size());
+        for (UUID reference : references) {
+            load(new ReferenceId(reference), false).ifPresent(stranded::add);
+        }
+        return stranded;
+    }
+
+    @Override
+    public void reserveRefund(ReferenceId original, Money amount) {
+        try {
+            int updated = jdbc.update(RESERVE_REFUND, amount.amount(), original.value());
+            if (updated == 0) {
+                throw new IllegalStateException("no payment for reference " + original);
+            }
+        } catch (DataIntegrityViolationException violation) {
+            if (violates(violation, REFUNDED_WITHIN_AMOUNT_CONSTRAINT)) {
+                throw new RefundExceedsRemainingException(original, amount);
+            }
+            throw violation;
+        }
+    }
+
+    @Override
+    public void releaseRefundReservation(ReferenceId original, Money amount) {
+        jdbc.update(RELEASE_REFUND_RESERVATION, amount.amount(), original.value());
+    }
+
+    /**
+     * Whether {@code violation} is PostgreSQL's own {@code CHECK} refusal, named — not a
+     * message pattern, which would break the moment the wording changes, and not "any
+     * integrity error", which would also swallow a duplicate reference or a foreign-key
+     * violation that must abort the transaction instead (the same discipline
+     * {@code SettlementService.settle} applies to {@code DuplicateLedgerEntryException}).
+     */
+    private static boolean violates(DataIntegrityViolationException violation, String constraintName) {
+        Throwable cause = violation.getMostSpecificCause();
+        return cause instanceof PSQLException psql
+                && psql.getServerErrorMessage() != null
+                && constraintName.equals(psql.getServerErrorMessage().getConstraint());
+    }
+
     private Optional<Payment> load(ReferenceId reference, boolean forUpdate) {
         Objects.requireNonNull(reference, "reference");
         String sql = "SELECT * FROM payment WHERE reference = ?" + (forUpdate ? " FOR UPDATE" : "");
@@ -172,7 +252,9 @@ public final class PostgresPaymentRepository implements PaymentRepository {
                 row.reconcileAttempts,
                 row.reconcileDueAt,
                 row.escalatedAt,
-                row.unresolvedSince));
+                row.unresolvedSince,
+                row.refundOf == null ? null : new ReferenceId(row.refundOf),
+                row.refundedMinor));
     }
 
     private static OffsetDateTime atUtc(Instant instant) {
@@ -200,7 +282,8 @@ public final class PostgresPaymentRepository implements PaymentRepository {
             String counterpartyMsisdn, String payerMessage, String payeeNote, String providerOptions,
             String state, String providerReference, String providerTransactionId,
             Instant createdAt, Instant updatedAt,
-            int reconcileAttempts, Instant reconcileDueAt, Instant escalatedAt, Instant unresolvedSince) {
+            int reconcileAttempts, Instant reconcileDueAt, Instant escalatedAt, Instant unresolvedSince,
+            UUID refundOf, long refundedMinor) {
     }
 
     private static final RowMapper<Row> ROW_MAPPER = (ResultSet rs, int rowNum) -> new Row(
@@ -221,7 +304,9 @@ public final class PostgresPaymentRepository implements PaymentRepository {
             rs.getInt("reconcile_attempts"),
             instantOrNull(rs.getObject("reconcile_due_at", OffsetDateTime.class)),
             instantOrNull(rs.getObject("escalated_at", OffsetDateTime.class)),
-            instantOrNull(rs.getObject("unresolved_since", OffsetDateTime.class)));
+            instantOrNull(rs.getObject("unresolved_since", OffsetDateTime.class)),
+            (UUID) rs.getObject("refund_of"),
+            rs.getLong("refunded_minor"));
 
     private static Instant instantOrNull(OffsetDateTime value) {
         return value == null ? null : value.toInstant();

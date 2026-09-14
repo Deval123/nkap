@@ -3,19 +3,26 @@ package dev.nkap.server.reconcile;
 import java.time.Duration;
 import java.util.Objects;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.boot.context.properties.bind.DefaultValue;
 
 /**
  * How the reconciler paces itself. Bound from {@code nkap.reconciler.*}; the defaults and
  * what each one costs when it is wrong are in {@code application.yml}.
  *
- * @param interval    how often the scheduled pass runs
- * @param batchSize   how many due payments one pass claims — a bound so a backlog cannot
- *                    turn one pass into a storm of operator calls
- * @param backoffBase the delay before the first retry; each subsequent retry doubles it
- * @param backoffMax  the ceiling on a single interval, so backoff does not grow without limit
- * @param window      wall-clock time a payment may stay {@code UNKNOWN} before it is escalated
- *                    to a human — measured from when it became {@code UNKNOWN}, not from the
- *                    number of passes that have run
+ * @param interval           how often the scheduled pass runs
+ * @param batchSize          how many due payments one pass claims — a bound so a backlog
+ *                           cannot turn one pass into a storm of operator calls
+ * @param backoffBase        the delay before the first retry; each subsequent retry doubles it
+ * @param backoffMax         the ceiling on a single interval, so backoff does not grow without limit
+ * @param window             wall-clock time a payment may stay {@code UNKNOWN} before it is
+ *                           escalated to a human — measured from when it became
+ *                           {@code UNKNOWN}, not from the number of passes that have run
+ * @param strandedRefundGrace how long a refund may sit in {@code CREATED} — its reservation
+ *                           committed, but the process killed before the operator was ever
+ *                           asked, or before that call's outcome was recorded — before this
+ *                           reconciler moves it to {@code UNKNOWN} and starts chasing it
+ *                           (issue #84's second correction). Ordinary {@code CREATED}
+ *                           payments are untouched; see {@link Reconciler}'s own javadoc.
  */
 @ConfigurationProperties("nkap.reconciler")
 public record ReconcilerProperties(
@@ -23,13 +30,15 @@ public record ReconcilerProperties(
         int batchSize,
         Duration backoffBase,
         Duration backoffMax,
-        Duration window) {
+        Duration window,
+        @DefaultValue("2m") Duration strandedRefundGrace) {
 
     public ReconcilerProperties {
         requirePositive(interval, "interval");
         requirePositive(backoffBase, "backoffBase");
         requirePositive(backoffMax, "backoffMax");
         requirePositive(window, "window");
+        requirePositive(strandedRefundGrace, "strandedRefundGrace");
         if (batchSize <= 0) {
             throw new IllegalArgumentException("nkap.reconciler.batch-size must be positive, was " + batchSize);
         }

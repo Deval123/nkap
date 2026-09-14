@@ -11,6 +11,11 @@ A webhook fires for a **terminal outcome**: `payment.succeeded`, `payment.failed
 `payment.expired`. That is the verdict a merchant is waiting for — the same three states
 `GET /payments/{reference}` reports once it stops needing to be polled.
 
+A refund (`POST /payments/{reference}/refunds`, ADR 0010) is a payment and fires the same
+way, but under its own type — `refund.succeeded`, `refund.failed`, `refund.expired` — never
+`payment.*`. A merchant must be able to tell "your refund went through" from "your
+disbursement went through" without inspecting any other field.
+
 An escalated payment does **not** produce a webhook. Escalation means the reconciler gave
 up retrying automatically and paged a human — it is an operator event, not a merchant one,
 and "we do not know yet" is not something a merchant's system can act on by receiving it
@@ -30,15 +35,37 @@ twice a day.
   "state": "SUCCEEDED",
   "providerCode": "SUCCESSFUL",
   "providerTransactionId": "628f36",
-  "occurredAt": "2026-09-11T14:32:07.123Z"
+  "occurredAt": "2026-09-11T14:32:07.123Z",
+  "refundOf": ""
 }
 ```
 
 `reference` is the same value `GET /payments/{reference}` takes — a webhook is a push of
 the same fact a poll would eventually see, not a separate model. `amountMinor` is an
 integer count of minor units, the same rule as everywhere else in this project: never a
-decimal. `providerTransactionId` is set only for `payment.succeeded`; a failure or
+decimal. `providerTransactionId` is set only for a `*.succeeded` event; a failure or
 expiry has no operator transaction to point to.
+
+`refundOf` is `""` for every event that is not a refund's. A `refund.succeeded` event carries
+the original collection's own reference there — the same one `operation` alone cannot tell
+you, since a refund's `operation` is `DISBURSE` like any other transfer out:
+
+```json
+{
+  "id": "9c1a1f7e-6b2a-4a1e-8d9c-2f6e7a1b3c4d",
+  "type": "refund.succeeded",
+  "reference": "7a2e0c1f-5b4a-4d3e-9c8b-1a2b3c4d5e6f",
+  "provider": "mtn",
+  "operation": "DISBURSE",
+  "amountMinor": 2000,
+  "currency": "EUR",
+  "state": "SUCCEEDED",
+  "providerCode": "SUCCESSFUL",
+  "providerTransactionId": "628f41",
+  "occurredAt": "2026-09-13T09:12:44.501Z",
+  "refundOf": "b3f1c9d2-8b7a-4b2e-9e2a-1f6c8a9d0b3e"
+}
+```
 
 **`id` is the field to deduplicate on.** See the next section for why it has to be.
 

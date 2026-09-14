@@ -88,6 +88,15 @@ nkap:
     # time. It is a deadline for a human to look, not a verdict: the payment stays UNKNOWN
     # either way, and a later callback or query can still resolve it.
     window: 24h
+    # How long a refund (issue #84) may sit in CREATED -- its reservation on the original
+    # committed, but the process was killed before the transfer was ever submitted, or
+    # before that call's outcome was recorded -- before this reconciler moves it to UNKNOWN
+    # and starts chasing it the same as any other unresolved payment. Ordinary CREATED
+    # payments are untouched; this is refund-specific. Generous on purpose: a submit call
+    # normally resolves in seconds, so nothing legitimate is ever this slow, and being slow
+    # to notice a genuine crash costs nothing a stuck refund was not already going to sit
+    # through — it is otherwise inert forever.
+    stranded-refund-grace: 2m
   webhooks:
     # The outbox relay and its scheduler (issue #77). Off means events pile up, signed and
     # ready, but never sent — only for a deployment that runs the relay as a separate

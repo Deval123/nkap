@@ -95,6 +95,21 @@ class SettlementTransactionIT {
             public java.util.List<Payment> findEscalated() {
                 return realRepo.findEscalated();
             }
+
+            @Override
+            public java.util.List<Payment> findStrandedRefunds(java.time.Instant olderThan) {
+                return realRepo.findStrandedRefunds(olderThan);
+            }
+
+            @Override
+            public void reserveRefund(ReferenceId original, Money amount) {
+                realRepo.reserveRefund(original, amount);
+            }
+
+            @Override
+            public void releaseRefundReservation(ReferenceId original, Money amount) {
+                realRepo.releaseRefundReservation(original, amount);
+            }
         };
 
         ProviderAdapter adapter = mock(ProviderAdapter.class);

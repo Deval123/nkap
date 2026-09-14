@@ -93,6 +93,15 @@ gets its own paragraph rather than an implicit "well, obviously" next to the API
 above. Secrets are provisioned the way keys are: a host-side command, shown once, never a
 route (`docs/webhooks.md`).
 
+**A refund's destination is never a request field.** `POST /payments/{reference}/refunds`
+always sends money back to the original collection's own payer; there is no way to name a
+different one. A refund endpoint that accepted a destination would be a funds-transfer API
+to an arbitrary phone number, authenticated by nothing stronger than a merchant's API key —
+and keys are stored hashed precisely because a leak is assumed, not ruled out. The request
+body still declares a `counterpartyMsisdn` field, so a caller who supplies one anyway (out of
+habit, copying `POST /payments`'s shape) gets a `400` naming why, rather than have the field
+silently ignored and learn that it works (ADR 0010).
+
 **The callback endpoint stays unauthenticated, on purpose.** The operator sends no
 credential Nkap can verify, and the path is safe because it only ever triggers a confirming
 `adapter.query` and believes nothing in the payload — the argument is written out in

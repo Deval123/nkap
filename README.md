@@ -245,6 +245,18 @@ docker compose -f nkap-standalone.compose.yaml run --rm gateway \
   --nkap.apikey.create --nkap.apikey.merchant=<id>
 ```
 
+## Running on Kubernetes
+
+[`charts/nkap`](charts/nkap) is a Helm chart for the gateway, from the same published image —
+`values.yaml` never accepts a credential value, not the database password, not an MTN
+subscription key, api user or api key: every one is the *name* of a `Secret` you create
+yourself, and rendering fails, naming what is missing, exactly the way
+`nkap-standalone.compose.yaml`'s `${VAR:?message}` does. **Read
+[`charts/nkap/README.md`](charts/nkap/README.md) before installing** — it answers three
+questions a compose file never had to: where the first API key appears and who else can read
+it, what runs the migrations with more than one replica, and whether more than one replica is
+safe at all.
+
 ## The simulator on its own
 
 The most numerous audience for this project is people integrating against MTN directly, who

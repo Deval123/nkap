@@ -1,0 +1,27 @@
+{{/*
+Separate on purpose, and off by default: the management port (9464) carries
+payments-by-state, reconciler passes, escalations and the suspense balance in a real
+currency -- application.yml's own comment explains why no compose file in this repository
+publishes it, and this chart holds the same line. Turning this on is a deliberate choice to
+make it reachable from wherever your Prometheus scrapes from; it is never the Service an
+Ingress fronts (that is templates/service.yaml), and the label below marks it as what it is
+so a reader of `kubectl get svc` does not mistake it for a second way to reach the API.
+*/}}
+{{- if .Values.metrics.service.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "nkap.fullname" . }}-metrics
+  labels:
+    {{- include "nkap.labels" . | nindent 4 }}
+    app.kubernetes.io/component: metrics
+spec:
+  type: ClusterIP
+  ports:
+    - port: {{ .Values.metrics.service.port }}
+      targetPort: management
+      protocol: TCP
+      name: management
+  selector:
+    {{- include "nkap.selectorLabels" . | nindent 4 }}
+{{- end }}

@@ -108,16 +108,24 @@ than a silence a reader has to interpret for themselves:
   escalations, and the suspense balance in a real currency, unauthenticated by convention on
   the assumption that only a scraper on an internal network ever reaches it
   (`application.yml`'s own comment, and `docs/configuration-reference.md`'s row for it).
+  `charts/nkap`, the Helm chart, holds the same line: the `Service` an `Ingress` fronts
+  exposes only the API port, and a metrics `Service` on `9464` exists only if turned on by
+  name (`charts/nkap/README.md`, "The management port").
 - **Database access.** Whoever can read `webhook_endpoint` can forge notifications (§1
   above); whoever can write to `api_key` or the ledger tables bypasses every invariant this
   project enforces in application code. Database credentials and network reachability are
   entirely the operator's to control — Nkap assumes a database it can trust, not one it
   defends against.
-- **Who can reach the Docker daemon on the host.** Anything that can run a container on the
-  same host Nkap does can mount its volumes, read its environment, or run
-  `--nkap.apikey.create` itself. The provisioning commands in this document are safe because
-  they require exactly that level of access already; a host where that access is not
-  itself controlled has no security boundary left for Nkap's own commands to matter.
+- **Who can reach the Docker daemon on the host — or, in a cluster, read pod logs or exec
+  into a pod.** Anything that can run a container on the same host Nkap does can mount its
+  volumes, read its environment, or run `--nkap.apikey.create` itself; the Kubernetes
+  equivalent is anyone who can `kubectl logs` or `kubectl exec` in the namespace Nkap runs
+  in, or read the `Secret`s `charts/nkap` references. The provisioning commands in this
+  document are safe because they require exactly that level of access already — but a
+  cluster's own log pipeline can carry that access further than a single host's would, which
+  is exactly the exposure `charts/nkap/README.md` names for the first API key
+  (`key-init`'s pod logs are, by default, wherever your cluster ships pod logs, not only
+  where you happened to run `kubectl logs`).
 
 ## Not in this slice
 

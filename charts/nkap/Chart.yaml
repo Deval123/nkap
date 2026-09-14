@@ -1,0 +1,25 @@
+apiVersion: v2
+name: nkap
+description: >-
+  Nkap: a self-hosted mobile money gateway with a double-entry ledger, an operator
+  reconciler, and signed webhooks. This chart deploys the gateway only -- PostgreSQL is the
+  operator's own, the same way nkap-standalone.compose.yaml's db service is not something a
+  real deployment is meant to keep using unmodified. See charts/nkap/README.md before
+  installing: three questions this chart forces that nothing before it did, and the
+  credential rule that is not negotiable.
+type: application
+version: 0.1.0
+# Documentation only -- there is no default image.tag (see values.yaml), so this is not a
+# default anything installs. It names the release this chart was written for.
+appVersion: "1.0.0"
+home: https://github.com/deval123/nkap
+sources:
+  - https://github.com/deval123/nkap
+keywords:
+  - payments
+  - mobile-money
+  - mtn-momo
+  - ledger
+maintainers:
+  - name: Deval123
+    url: https://github.com/deval123

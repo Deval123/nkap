@@ -1,0 +1,35 @@
+Nkap is installed.
+
+{{- if .Values.keyInit.enabled }}
+
+Your first API key was printed once, to the key-init Job's own pod logs -- it cannot be
+recovered, only replaced by provisioning another. Read it now:
+
+  kubectl logs -n {{ .Release.Namespace }} job/{{ include "nkap.fullname" . }}-key-init
+
+If your cluster ships pod logs anywhere (a log aggregator, a SIEM), that key is now wherever
+those logs went -- see "Where does the first API key appear, and who else can read it?" in
+this chart's README for what to do about it (rotate after reading, or provision out-of-band
+next time and set keyInit.enabled to false).
+{{- else }}
+
+keyInit.enabled is false: no API key was provisioned. Provision one from a one-off pod
+running the same image, e.g.:
+
+  kubectl run nkap-apikey-init --rm -it --restart=Never \
+    --image={{ .Values.image.repository }}:{{ .Values.image.tag }} \
+    --env=NKAP_DB_URL="jdbc:postgresql://{{ .Values.database.host }}:{{ .Values.database.port }}/{{ .Values.database.name }}" \
+    --env=NKAP_DB_USER={{ .Values.database.username }} \
+    --env=NKAP_DB_PASSWORD=<from your database Secret> \
+    -- --nkap.apikey.create --nkap.apikey.merchant=<id>
+{{- end }}
+
+Check it answers:
+
+  kubectl port-forward -n {{ .Release.Namespace }} svc/{{ include "nkap.fullname" . }} 8080:{{ .Values.service.port }}
+  curl -H "Authorization: Bearer <the key>" http://localhost:8080/payments
+
+Before you rely on this deployment, read charts/nkap/README.md's three questions -- where
+the first API key appears, what runs the migrations with more than one replica, and whether
+more than one replica is safe at all -- and the credential rule above them, which this
+chart enforces at render time but is worth understanding, not just satisfying.

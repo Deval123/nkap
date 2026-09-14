@@ -62,3 +62,81 @@ jobs:
         run: |
           docker rm -f guide-webhook-receiver 2>/dev/null || true
           docker compose down -v
+
+  # A chart CI never renders is a chart nobody has checked since the day it was written --
+  # the same "something not exercised by CI stops being true" reasoning as `demo` and
+  # `integration-guide` above, applied to charts/nkap. This does not install into a real
+  # cluster; charts/nkap/README.md's own "What CI checks, and what it does not" section says
+  # so and names exactly what that leaves unproven, rather than letting the gap go unsaid.
+  helm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: azure/setup-helm@v4
+        with:
+          version: "v4.3.0"
+
+      - run: helm lint charts/nkap -f charts/nkap/ci/values-test.yaml
+
+      # Rendering with no values at all must fail, naming what is missing, rather than
+      # producing a Deployment whose Secret references point at nothing -- the credential
+      # rule charts/nkap/README.md states is only real if this is what actually happens.
+      - name: Assert rendering fails, naming what is missing, when no credentials are supplied
+        run: |
+          if helm template ci-test charts/nkap >/tmp/should-fail.out 2>/tmp/should-fail.err; then
+            echo "::error::helm template succeeded with no values supplied at all -- it must fail and name what is missing"
+            exit 1
+          fi
+          if ! grep -q "is required" /tmp/should-fail.err; then
+            echo "::error::helm template failed, but not with a message naming what is required:"
+            cat /tmp/should-fail.err
+            exit 1
+          fi
+
+      - name: Render with test values (Secret names only, no credential values)
+        run: helm template ci-test charts/nkap -f charts/nkap/ci/values-test.yaml > /tmp/rendered.yaml
+
+      - name: Assert the traffic Service exposes 8080 and never the management port
+        run: |
+          service="$(helm template ci-test charts/nkap -f charts/nkap/ci/values-test.yaml -s templates/service.yaml)"
+          if ! grep -q "port: 8080" <<< "$service"; then
+            echo "::error::the traffic Service does not expose 8080"
+            exit 1
+          fi
+          if grep -q "9464" <<< "$service"; then
+            echo "::error::the traffic Service exposes the management port (9464) -- see charts/nkap/README.md's \"The management port\""
+            exit 1
+          fi
+
+      - name: Assert both probes target the management port, not the traffic port
+        run: |
+          deployment="$(helm template ci-test charts/nkap -f charts/nkap/ci/values-test.yaml -s templates/deployment.yaml)"
+          probe_count="$(grep -c 'port: management' <<< "$deployment")"
+          if [ "$probe_count" -lt 2 ]; then
+            echo "::error::expected both livenessProbe and readinessProbe to target the management port; found ${probe_count} reference(s)"
+            exit 1
+          fi
+          if ! grep -q 'containerPort: 9464' <<< "$deployment"; then
+            echo "::error::the management container port is not 9464"
+            exit 1
+          fi
+
+      # Every credential-bearing variable must be a Secret reference, never a literal --
+      # checked structurally (the line right after every "- name: <VAR>" must be
+      # "valueFrom:", for every occurrence: the same variable is set in both the Deployment
+      # and the key-init Job), not by guessing at what a leaked value would look like.
+      - name: Assert every credential env var is sourced from a Secret, never inline
+        run: |
+          for var in NKAP_DB_PASSWORD \
+                     NKAP_PROVIDER_MTN_CM_SUBSCRIPTION_KEY NKAP_PROVIDER_MTN_CM_API_USER NKAP_PROVIDER_MTN_CM_API_KEY \
+                     NKAP_PROVIDER_MTN_CM_DISBURSEMENT_SUBSCRIPTION_KEY NKAP_PROVIDER_MTN_CM_DISBURSEMENT_API_USER NKAP_PROVIDER_MTN_CM_DISBURSEMENT_API_KEY; do
+            next_lines="$(awk -v v="- name: ${var}" '{ line=$0; gsub(/^[ \t]+/, "", line); if (line == v) { getline nxt; gsub(/^[ \t]+/, "", nxt); print nxt } }' /tmp/rendered.yaml)"
+            if [ -z "$next_lines" ]; then
+              echo "::error::${var} was not found in the rendered output at all"
+              exit 1
+            fi
+            if grep -qv '^valueFrom:$' <<< "$next_lines"; then
+              echo "::error::${var} is not sourced from a Secret in every occurrence (found: $(tr '\n' '|' <<< "$next_lines"))"
+              exit 1
+            fi
+          done

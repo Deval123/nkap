@@ -1,0 +1,24 @@
+# Values for `helm template`/`helm lint` in CI: real-looking Secret *names*, no credential
+# values -- the whole point of the credential rule this chart enforces. Not meant to be
+# installed anywhere.
+image:
+  tag: "1.0.0"
+
+database:
+  host: postgresql.default.svc.cluster.local
+  existingSecret: nkap-db
+
+provider:
+  default: mtn-cm
+  mtn:
+    installations:
+      - country: cm
+        currency: XAF
+        baseUrl: "https://momodeveloper.mtn.com"
+        targetEnvironment: mtncameroon
+        existingSecret: nkap-mtn-cm
+        disbursement:
+          existingSecret: nkap-mtn-cm-disbursement
+
+keyInit:
+  merchantId: acme

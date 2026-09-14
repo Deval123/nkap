@@ -1,0 +1,72 @@
+# Overlay used only by .github/workflows/release.yml's `verify-pull` job, layered on top of
+# nkap-standalone.compose.yaml with `-f nkap-standalone.compose.yaml -f
+# .github/release-check.compose.yaml`. It is never downloaded by a user and never referenced
+# from the README -- its whole job is to add back, for one CI run, exactly the two things the
+# standalone file deliberately does not have (a simulator, and a provisioned webhook
+# endpoint), so that examples/demo.sh -- unmodified, same script the clone path runs -- can
+# exercise the published images end to end (issue #86).
+#
+# Compose merges a mapping-form `depends_on` across files by key, so re-declaring `gateway`
+# here only adds `simulator` and `webhook-init` to the dependencies nkap-standalone.compose.yaml
+# already gives it (`db`, `key-init`); nothing here replaces those.
+
+services:
+  simulator:
+    image: ghcr.io/deval123/nkap-simulator:${NKAP_VERSION:?set the version being verified}
+    ports:
+      - "8081:8081"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8081/_nkap/scenarios"]
+      interval: 2s
+      timeout: 3s
+      retries: 40
+
+  # examples/demo.sh asserts this row exists. compose.yaml provisions the same thing for the
+  # clone path's demo; this reproduces it for the published-image path without teaching
+  # nkap-standalone.compose.yaml itself to provision anything beyond the one API key an
+  # operator explicitly asked for.
+  webhook-init:
+    image: ghcr.io/deval123/nkap-gateway:${NKAP_VERSION:?set the version being verified}
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NKAP_DB_URL: jdbc:postgresql://db:5432/nkap
+      NKAP_DB_USER: nkap
+      NKAP_DB_PASSWORD: ${NKAP_DB_PASSWORD:?set a database password}
+      # See nkap-standalone.compose.yaml's key-init for why this is blanked explicitly
+      # rather than left to application.yml's own default.
+      NKAP_PROVIDER_MTN_CM_COUNTRY: ""
+      NKAP_RECONCILER_ENABLED: "false"
+      NKAP_WEBHOOKS_ENABLED: "false"
+    command:
+      - "--nkap.webhook.create"
+      - "--nkap.webhook.merchant=${NKAP_MERCHANT_ID:?set the merchant id being verified}"
+      - "--nkap.webhook.url=https://example.invalid/hooks"
+      - "--nkap.webhook.secret=whsec_release-check-not-for-production"
+    restart: "no"
+
+  gateway:
+    depends_on:
+      simulator:
+        condition: service_healthy
+      webhook-init:
+        condition: service_completed_successfully
+    environment:
+      # Points the one MTN installation nkap-standalone.compose.yaml declares (with blank
+      # defaults) at the simulator above, so demo.sh's scripted scenario is what the gateway
+      # actually calls -- the same placeholders compose.yaml uses, since nothing here talks
+      # to a real operator.
+      NKAP_PROVIDER_MTN_CM_BASE_URL: http://simulator:8081
+      NKAP_PROVIDER_MTN_CM_TARGET_ENVIRONMENT: sandbox
+      NKAP_PROVIDER_MTN_CM_SUBSCRIPTION_KEY: placeholder-not-a-real-subscription-key
+      NKAP_PROVIDER_MTN_CM_API_USER: placeholder-not-a-real-api-user
+      NKAP_PROVIDER_MTN_CM_API_KEY: placeholder-not-a-real-api-key
+      NKAP_PROVIDER_MTN_CM_COUNTRY: cm
+      # demo.sh watches this run in CI, not a person at a terminal, so it does not need the
+      # demo's fast cadence -- only a bound so the job does not hang. 40 * 2s reconciler
+      # attempts comfortably covers demo.sh's own 40 * 2s poll loop.
+      NKAP_PROVIDER_MTN_CM_REQUEST_TIMEOUT: PT5S
+      NKAP_RECONCILER_INTERVAL: PT5S
+      NKAP_RECONCILER_BACKOFF_BASE: PT5S
+      NKAP_RECONCILER_BACKOFF_MAX: PT10S

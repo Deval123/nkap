@@ -1,10 +1,16 @@
 # `docker compose up` — PostgreSQL, the simulator and the gateway, built from source.
 #
-# This is the clone path: you check out the repository and build. Pulling a published
-# image is a separate roadmap line. Once the stack is up, run the demo:
+# This is the clone path: you check out the repository and build, and it wires in the
+# simulator so trying Nkap needs no MTN account. Once the stack is up, run the demo:
 #
 #     docker compose up --build -d
 #     ./examples/demo.sh
+#
+# If you are running Nkap for real instead of trying it, this is not that file: see
+# `nkap-standalone.compose.yaml` and the README's "Run it without cloning" (issue #86) — it
+# names published images instead of building, provisions no API key, and never runs a
+# simulator anywhere near a process that moves real money. Nothing here is meant to be
+# copied into a real deployment as a shortcut.
 #
 # Nothing in this file is a secret. The MTN values are placeholders that point the
 # gateway at the simulator; a real deployment supplies its own through the environment.

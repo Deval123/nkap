@@ -1,0 +1,182 @@
+name: release
+
+# Separate from build.yml for the reason build.yml's own comment gives about its `demo`
+# job: a publish failure should name itself, not get lost in an unrelated job's log.
+#
+# Triggers on an annotated `v*` tag, and nowhere else -- `latest` must follow releases, never
+# `main`, or it is a development build wearing the name people reach for by default on a
+# payments gateway. `workflow_dispatch` exists only so this workflow can be exercised by hand
+# (issue #86's own pull request describes exactly what that did and did not prove) -- it never
+# moves `latest`, so a manual run can never overwrite the tag a real release owns.
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      test_version:
+        description: >
+          Version to build and push for a manual test run (e.g. 0.0.0-dispatch-test).
+          Required here only -- a real tag push derives the version from the tag itself.
+        required: true
+
+permissions:
+  contents: read
+
+env:
+  GATEWAY_IMAGE: ghcr.io/deval123/nkap-gateway
+  SIMULATOR_IMAGE: ghcr.io/deval123/nkap-simulator
+
+jobs:
+  # The conformance kit and the full reactor are what CONTRIBUTING.md says a release may be
+  # cut from ("only when the conformance kit passes"); this job makes that a check rather
+  # than a promise, in case a tag is ever pushed at a commit build.yml never ran against.
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+      - run: mvn -B --no-transfer-progress clean verify -Dnkap.docker.required=true
+
+  publish:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v5
+
+      # A tag push names the version; workflow_dispatch (testing only) supplies its own.
+      # Docker image tags are conventionally unprefixed ("1.0.0"), even though the git tag
+      # itself carries the "v" CONTRIBUTING.md asks for.
+      - name: Compute the version to publish
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            version="${{ inputs.test_version }}"
+          else
+            version="${GITHUB_REF_NAME#v}"
+          fi
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # `latest` moves only on a real tag push -- see the workflow-level comment on why a
+      # workflow_dispatch test run must never touch it.
+      - name: Tags for this build
+        id: tags
+        run: |
+          version="${{ steps.version.outputs.version }}"
+          {
+            echo "gateway<<EOF"
+            echo "${GATEWAY_IMAGE}:${version}"
+            [ "${{ github.event_name }}" = "push" ] && echo "${GATEWAY_IMAGE}:latest"
+            echo "EOF"
+            echo "simulator<<EOF"
+            echo "${SIMULATOR_IMAGE}:${version}"
+            [ "${{ github.event_name }}" = "push" ] && echo "${SIMULATOR_IMAGE}:latest"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      # linux/arm64 is not a nicety: a large part of this project's audience is on ARM
+      # hardware, and an amd64-only image turns "two commands" into an emulation warning and
+      # a slow start. NKAP_VERSION/NKAP_REVISION feed the OCI labels both Dockerfiles declare
+      # -- see their own comments for why `docker inspect` should answer "where did this come
+      # from" without a search.
+      - name: Build and push the gateway
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: server/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.tags.outputs.gateway }}
+          build-args: |
+            NKAP_VERSION=${{ steps.version.outputs.version }}
+            NKAP_REVISION=${{ github.sha }}
+
+      - name: Build and push the simulator
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: simulator/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.tags.outputs.simulator }}
+          build-args: |
+            NKAP_VERSION=${{ steps.version.outputs.version }}
+            NKAP_REVISION=${{ github.sha }}
+
+      # GHCR packages default to private, and there is no supported GITHUB_TOKEN-only API to
+      # flip that (checked before writing this workflow: the REST API has no "set container
+      # package visibility" endpoint, and the one that exists needs a personal access token,
+      # which this project's whole security story says does not belong in repository
+      # settings). The first publish needs one manual, one-time step: on
+      # github.com/users/deval123/packages/container/<name>, Package settings -> Danger Zone
+      # -> Change visibility -> Public, for both packages. `verify-pull` below is what catches
+      # this being forgotten -- it fails loudly on an anonymous pull instead of shipping a
+      # publish nobody can use.
+
+  # A green publish nobody can pull is the exact failure this slice must not ship, so this
+  # job pulls what `publish` just pushed from a job with no registry credentials -- no
+  # docker/login-action step, and `permissions` below grants nothing on packages, so even an
+  # action that tried to authenticate with GITHUB_TOKEN would have nothing to authenticate
+  # with. It then brings up nkap-standalone.compose.yaml -- the same file a real operator
+  # downloads -- and runs examples/demo.sh against it unmodified, the same script the clone
+  # path in build.yml's `demo` job runs. The one addition, .github/release-check.compose.yaml,
+  # exists only to lay the simulator and a webhook endpoint alongside it for this one CI run;
+  # see that file's own comment for why that is not the standalone file's job.
+  verify-pull:
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      NKAP_VERSION: ${{ needs.publish.outputs.version }}
+      NKAP_DB_PASSWORD: release-check-not-for-production
+      NKAP_MERCHANT_ID: acme
+      # Reused, on purpose, from compose.yaml's own demo key: this stack is torn down at the
+      # end of this job and never reachable from outside the runner, so it carries the exact
+      # same risk profile as the clone-path demo it stands in for -- not the risk this slice
+      # exists to prevent, which is this value ending up in a file a stranger downloads.
+      NKAP_API_KEY: nkap_demo-key-not-for-production
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Pull the images with no registry credentials at all
+        run: |
+          docker pull "${GATEWAY_IMAGE}:${NKAP_VERSION}"
+          docker pull "${SIMULATOR_IMAGE}:${NKAP_VERSION}"
+
+      - name: Bring up the standalone file, plus the release-check overlay
+        run: |
+          docker compose \
+            -f nkap-standalone.compose.yaml -f .github/release-check.compose.yaml \
+            up -d --wait --wait-timeout 240
+
+      - name: Run the quick-start demo against the published images
+        run: DEMO_KEY="$NKAP_API_KEY" ./examples/demo.sh
+
+      - name: Stack logs
+        if: failure()
+        run: |
+          docker compose -f nkap-standalone.compose.yaml -f .github/release-check.compose.yaml logs
+
+      - name: Tear down
+        if: always()
+        run: |
+          docker compose -f nkap-standalone.compose.yaml -f .github/release-check.compose.yaml down -v

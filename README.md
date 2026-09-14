@@ -135,9 +135,11 @@ ORDER BY escalated_at;
 milliseconds, without a container or a database — which is what makes an outside
 contribution to the ledger reviewable.
 
-## Quick start
+## Quick start (the contributor's path)
 
-Requires Docker. No JDK.
+Requires Docker. No JDK. This builds Nkap from source, which is right for trying the code
+before you change it — if you just want to run Nkap, see
+[Run it without cloning](#run-it-without-cloning) below.
 
 ```bash
 git clone https://github.com/Deval123/nkap
@@ -174,8 +176,96 @@ From a cold clone — no build cache, base images not yet pulled — `docker com
 --build` takes about half a minute on a fast connection; most of the variable part is the
 one-time download of the build's dependencies (~1000 artifacts) inside the image, so a
 slow link makes the first run longer. Later runs reuse the layers. The demo itself
-finishes in about five seconds. `compose.yaml` builds from source — a published image you
-can pull without a checkout is a later step on the [roadmap](#roadmap).
+finishes in about five seconds. `compose.yaml` builds from source, on purpose — it is the
+fastest way to see a change you just made in `server/src` take effect, without deciding
+what to publish first.
+
+## Run it without cloning
+
+**You clone to contribute, you pull an image to use.** Every tagged release publishes
+[`ghcr.io/deval123/nkap-gateway`](https://github.com/deval123/nkap/pkgs/container/nkap-gateway)
+and
+[`ghcr.io/deval123/nkap-simulator`](https://github.com/deval123/nkap/pkgs/container/nkap-simulator) —
+public, no login needed to pull, `linux/amd64` and `linux/arm64` — tagged with the exact
+version and with a moving `latest` that always points at the newest release, never at `main`.
+`docker inspect ghcr.io/deval123/nkap-gateway:latest` names the exact commit and version it
+was built from.
+
+This is for running Nkap for real, against your own MTN credentials — not for trying it. If
+you have not run Nkap before, the [quick start](#quick-start-the-contributors-path) above is a
+better first stop: it needs no MTN account, it is faster to get a payment moving through, and
+it is the same gateway. Once you know what Nkap does and you are ready to point it at MTN,
+come back here.
+
+```bash
+curl -fsSL -o nkap-standalone.compose.yaml \
+  https://raw.githubusercontent.com/deval123/nkap/v1.0.0/nkap-standalone.compose.yaml
+```
+
+Pinned to a tag, not to `main`, so the file you get and the images it names are the same
+release — substitute the release you actually want; see
+[Releases](https://github.com/deval123/nkap/releases) for the list.
+
+This file provisions no API key and starts nothing without one — deriving a key from
+`compose.yaml`, the obvious shortcut, would put `nkap_demo-key-not-for-production`, published
+in this public repository, in front of a real gateway. It also changes none of
+`application.yml`'s cadence: `compose.yaml`'s fast timeouts exist to make a demo watchable in
+one sitting, and would hammer a real MTN account and burn the reconciler's escalation window
+in minutes if carried here. And it never runs a simulator — an operator deploying Nkap for
+real must never have one reachable from the same process that moves real money; see the file's
+own comment for the rest of that reasoning.
+
+```bash
+export NKAP_VERSION=1.0.0                 # the release you downloaded the file for
+export NKAP_DB_PASSWORD=$(openssl rand -hex 32)
+export NKAP_MERCHANT_ID=your-merchant-id
+export NKAP_API_KEY=$(openssl rand -hex 32)
+docker compose -f nkap-standalone.compose.yaml up -d
+```
+
+Any variable left unset fails fast with a one-line message naming it, before any container
+starts. Once it is up, fill in your real MTN credentials the same way — the file lists every
+variable it reads, each defaulting to unconfigured rather than to a placeholder — and
+provision additional API keys the same way `compose.yaml`'s own comment describes:
+
+```bash
+docker compose -f nkap-standalone.compose.yaml run --rm gateway \
+  --nkap.apikey.create --nkap.apikey.merchant=<id>
+```
+
+## The simulator on its own
+
+The most numerous audience for this project is people integrating against MTN directly, who
+will never run the gateway at all. If that is you, and you want to test the cases that
+actually break in production — a timeout, a duplicate callback, a flapping status — the
+simulator is the most useful single piece of Nkap, and it needs nothing else:
+
+```bash
+docker run -p 8081:8081 ghcr.io/deval123/nkap-simulator
+```
+
+Script it, then point whatever you are testing at `http://localhost:8081` in place of MTN's
+own base URL:
+
+```bash
+curl -X POST http://localhost:8081/_nkap/scenarios \
+  -H 'Content-Type: application/json' \
+  -d '{
+        "rules": [{
+          "scenario": {
+            "name": "times-out-then-succeeds",
+            "onSubmit": { "outcome": "NO_RESPONSE" },
+            "onQuery": [{ "status": "SUCCESSFUL" }]
+          }
+        }]
+      }'
+```
+
+**The simulator is not MTN.** [`docs/providers/mtn.md`](docs/providers/mtn.md) separates what
+was actually observed against MTN's sandbox from what this project chose to model where MTN's
+own behaviour is undocumented or untested; the simulator implements the second column, and a
+mismatch between the two is a bug in the simulator or the doc, not in MTN. Read that file for
+what it imitates before you trust an integration test that only ever ran against this.
 
 ## Build
 

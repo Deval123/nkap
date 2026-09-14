@@ -36,3 +36,29 @@ jobs:
       - name: Tear down
         if: always()
         run: docker compose down -v
+
+  # docs/integration-guide.md is documentation this repository executes rather than merely
+  # publishes (issue #88) -- the same "something not exercised by CI stops working without
+  # anyone noticing" reasoning as `demo` above, and a separate job for the same reason `demo`
+  # is separate from `build`: a guide that stops matching the API should fail on its own line,
+  # not get lost inside an unrelated job's log. examples/run-integration-guide.sh extracts and
+  # runs every ```bash block in the guide, in order, against a real stack; it needs a fresh
+  # one of its own (a stray webhook-receiver container or a merchant with the demo's own
+  # already-used idempotency keys is a mess `demo`'s own teardown should not have to know
+  # about).
+  integration-guide:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Build the images and start the stack
+        run: docker compose up --build -d --wait --wait-timeout 240
+      - name: Run the integration guide
+        run: ./examples/run-integration-guide.sh
+      - name: Stack logs
+        if: failure()
+        run: docker compose logs
+      - name: Tear down
+        if: always()
+        run: |
+          docker rm -f guide-webhook-receiver 2>/dev/null || true
+          docker compose down -v

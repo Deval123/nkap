@@ -3,7 +3,10 @@
 What Nkap sends a merchant when a payment reaches a verdict, and the contract that comes
 with it. The mechanics — the outbox, the relay, the retry policy — are in ADR 0003 and the
 javadoc of `dev.nkap.server.outbox`; this file is what an integrator needs, not how it is
-built.
+built. `docs/integration-guide.md`'s own webhook section runs the recipe below against a real
+delivery rather than only describing it; `docs/openapi.yaml` covers the two admin routes
+(`GET /webhooks/events/dead-lettered`, `POST /webhooks/events/{eventId}/replay`) this file
+mentions but does not itself specify.
 
 ## What is sent, and when
 
@@ -83,18 +86,26 @@ that "the request I got most recently is the newest fact" — check `GET
 /payments/{reference}` if an event's relative ordering matters, since that read always
 reflects the current state, not the state at the time some particular event was queued.
 
-*(This same pair of facts — retries mean duplicates, and there is no ordering guarantee —
-belongs in the eventual integration guide, issue #65, as more than a cross-reference: an
-integrator reading a runnable example should see the deduplication check written out, not
-just told it exists.)*
+`docs/integration-guide.md`'s own webhook section shows the deduplication check written out
+and actually run — a real duplicate delivery, forced with `POST
+/webhooks/events/{eventId}/replay`, correctly skipped the second time — rather than only this
+paragraph telling you it exists.
 
 ## Verifying a signature
 
-Every request carries an `Nkap-Signature` header:
+Every request carries three headers — found while writing `docs/integration-guide.md` against
+a real delivery (issue #88), where the other two were missing from this file entirely:
 
 ```
+Nkap-Event-Id: 3fbf6f2e-2f42-4e6a-9d0b-6d4b6a9c2b41
+Nkap-Event-Type: payment.succeeded
 Nkap-Signature: t=1757602327,v1=5257a869e7bfce951fbb7d3fb8fe28c3b4b9c3a2b2e0d3a1f4b8c9c0d1e2f3a4
 ```
+
+`Nkap-Event-Id` and `Nkap-Event-Type` are conveniences — the same values as the body's own
+`id` and `type` fields, available before you parse it, for routing or logging. **They are not
+signed and not a substitute for verifying the body** — a receiver that trusts them without
+checking `Nkap-Signature` is trusting whatever put them on the wire, not Nkap.
 
 `t` is the Unix timestamp (seconds) the request was signed at. `v1` is the hex-encoded
 HMAC-SHA256 of `"{t}.{body}"` (the timestamp, a literal `.`, then the raw request body),

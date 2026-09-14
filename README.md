@@ -278,6 +278,16 @@ own behaviour is undocumented or untested; the simulator implements the second c
 mismatch between the two is a bug in the simulator or the doc, not in MTN. Read that file for
 what it imitates before you trust an integration test that only ever ran against this.
 
+## Integration guide and API reference
+
+[`docs/integration-guide.md`](docs/integration-guide.md) is for making your own backend talk
+to Nkap: getting a key, the first collection, what to do with `UNKNOWN`, receiving and
+verifying a webhook, a refund and what its cap refuses, and the errors an integration
+actually hits. [`docs/openapi.yaml`](docs/openapi.yaml) is the same API as a schema — every
+path, method, status code and field. Both are checked against the running application on
+every build (`OpenApiSpecIT`, `examples/run-integration-guide.sh`), not merely written once
+and left to drift.
+
 ## Build
 
 Requires JDK 21 and Maven 3.9+.

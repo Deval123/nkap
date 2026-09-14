@@ -140,6 +140,13 @@ a 202 really is empty, and a non-answer really is nothing at all.
 The `/_nkap/` control plane deliberately keeps its own error shape: it does not imitate MTN,
 and a contributor who mistyped a scenario is better served by a 400 naming the field.
 
+**The simulator never sends `financialTransactionId`, on any status, scripted or not** —
+`RequestToPayController.status` (and its disbursement equivalent) answers with only
+`{status, reason}`. Real MTN sends it once a payment settles (see *Quirks that cost time*
+above). The consequence a reader hits directly: `GET /payments/{reference}` and every webhook
+for a payment settled against the simulator carry `providerTransactionId: ""`, even for
+`SUCCEEDED` — not a Nkap bug, and not something the simulator was asked to model here.
+
 ## Disbursements
 
 Not observed against a real MTN — mapped from the documented shape and driven through the

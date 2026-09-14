@@ -1,0 +1,767 @@
+openapi: 3.1.0
+info:
+  title: Nkap
+  version: "0.1.0"
+  description: |
+    A self-hosted mobile money gateway with a real double-entry ledger — MTN MoMo first,
+    others through the same `ProviderAdapter` contract. See `README.md` for what Nkap is and
+    `docs/positioning.md` for what it deliberately is not.
+
+    **This file is hand-written, not generated, and that is a decision, not an oversight**
+    (issue #88). A schema can say what a field is called and what type it holds; it cannot
+    say that a `202` with `state: UNKNOWN` is not a failure to retry, that idempotency is
+    two-sided, or that a refund reserves its amount before the operator is ever asked. Those
+    facts are exactly as load-bearing as the shapes, so they live here too, in the
+    `description` of the operation or field they govern — not only in `docs/integration-guide.md`,
+    which shows the same facts as runnable commands rather than prose.
+
+    **This file is checked, not trusted.** `OpenApiSpecIT` (`server/src/test`) parses it
+    against the running application on every build: every path and method here must be a real
+    Spring MVC mapping and vice versa, every documented status code must be one an actual call
+    can produce, and every field this file marks `required` in a response must actually be
+    present. A renamed field or a changed status code fails that test, not this file's
+    prose — the same reason `examples/demo.sh` is asserted rather than merely described.
+
+    **Publication is this file, in the repository.** It is not served from any port — the API
+    port publishes shapes nobody asked it to serve, and the management port is deliberately
+    the only port besides 8080 this deployment exposes (`docs/positioning.md`). If a future
+    slice serves this file, it belongs on the management port, for the same reason
+    `/actuator/health` does and `/v3/api-docs` should not.
+  license:
+    name: Apache-2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0
+externalDocs:
+  description: The integration guide — the same API, shown as commands rather than a schema.
+  url: ../integration-guide.md
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: payments
+    description: >
+      Create, read and refund payments. A refund is a payment (ADR 0010): it is created,
+      submitted, polled and notified exactly like a collection or a disbursement, so it
+      shares this tag rather than getting its own.
+  - name: operator reads
+    description: >
+      Live reads against the operator, on every call — never cached, never Nkap's own stored
+      state. `GET /payments/{reference}` is deliberately not in this group: it never calls
+      the operator, because a read that hits a third party is a read that can time out.
+  - name: webhooks
+    description: >
+      The admin side of outgoing webhook delivery: what failed, and resending it by hand.
+      Provisioning an endpoint is a host-side command, not a route — see
+      `docs/webhooks.md` — so it has no path here.
+  - name: statements
+    description: The read side of statement reconciliation. There is no write route; see the path's own description for why.
+  - name: operator callbacks
+    description: >
+      Where the operator, not a merchant, sends requests. Unauthenticated by design; see the
+      path's own description.
+
+paths:
+  /payments:
+    post:
+      operationId: createPayment
+      tags: [payments]
+      summary: Create a payment and submit it to the operator
+      description: |
+        Creates a `COLLECT` (take money from `counterpartyMsisdn`) or `DISBURSE` (send money
+        to it) and submits it before answering — there is no separate "create" and "submit"
+        step, because a payment that exists but was never sent is a state this API does not
+        have a use for.
+
+        **The response status is the whole point of this endpoint.** `201 Created` means the
+        operator answered — `SUBMITTED`, `PENDING`, or already a terminal state.
+        `202 Accepted` means it did not: `state` is `UNKNOWN`, and that is not an error to
+        retry, log as a failure, or tell a payer about. It means exactly what it says — the
+        outcome is not yet known — and it resolves itself: Nkap's own reconciler keeps asking
+        the operator on a backoff, and a webhook (`docs/webhooks.md`) fires the moment it
+        reaches `SUCCEEDED`, `FAILED` or `EXPIRED`. Poll `GET /payments/{reference}` or wait
+        for that webhook; do not resubmit the same intent under a new `Idempotency-Key`, which
+        would be a second real payment.
+
+        **`Idempotency-Key` is two-sided, not a dedup cache.** The same key with the same
+        request body always replays the first response verbatim (`201`/`202`, unchanged) — no
+        second submission reaches the operator, which is what makes retrying a request whose
+        response was lost in transit safe. The same key with a *different* body is `409`: this
+        API refuses to guess which of two different requests you meant, rather than silently
+        picking one.
+
+        **The merchant is the API key's, never a field in this body.** There is no
+        `merchantId` here on purpose — see `CreatePaymentRequest`'s own description.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePaymentRequest"
+      responses:
+        "201":
+          description: >
+            The operator answered. `state` is `SUBMITTED`, `PENDING`, or already terminal
+            (`SUCCEEDED`, `FAILED`, `EXPIRED`) for an operator that settles synchronously.
+          headers:
+            Location:
+              $ref: "#/components/headers/Location"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PaymentResponse" }
+        "202":
+          description: >
+            The operator did not answer in time. `state` is `UNKNOWN` — not known, not
+            failed. See this operation's own description for what to do next.
+          headers:
+            Location:
+              $ref: "#/components/headers/Location"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PaymentResponse" }
+        "400":
+          description: >
+            The request is malformed or names something this deployment cannot serve —
+            `missing-idempotency-key`, `malformed-request` (unreadable body, or a fractional
+            `amount`), `invalid-request` (a required field is missing or not a value the
+            domain accepts), `unserved-currency` (this installation settles a different
+            currency), or `unconfigured-country` (no installation answers this `country`).
+            Nothing is created and no `Idempotency-Key` claim is left behind — the same key
+            works again once the request is fixed.
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "409":
+          description: >
+            `idempotency-key-reuse` (the same key, a different body) or `request-in-progress`
+            (an earlier request with this key has not finished yet — retry once it has).
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+
+  /payments/{reference}:
+    get:
+      operationId: getPayment
+      tags: [payments]
+      summary: Read a payment's stored state
+      description: |
+        Reads what Nkap has on file. **This never calls the operator** — see the `payments`
+        tag's own description for why — so it is instant and safe to poll as often as you
+        like while a payment is `UNKNOWN`, `SUBMITTED` or `PENDING`.
+
+        A payment belonging to another merchant answers exactly like one that does not exist
+        at all (`404`, identical body): two different answers would be an oracle for which
+        references exist under someone else's key.
+      parameters:
+        - $ref: "#/components/parameters/ReferencePath"
+      responses:
+        "200":
+          description: The payment, as currently stored.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PaymentResponse" }
+        "400":
+          description: "`malformed-reference` — the path segment is not a well-formed reference."
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404":
+          description: "`payment-not-found` — no such reference, or it belongs to another merchant."
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+
+  /payments/{reference}/refunds:
+    post:
+      operationId: createRefund
+      tags: [payments]
+      summary: Refund a settled collection, in full or in part
+      description: |
+        A refund is a `DISBURSE` payment naming the `SUCCEEDED` collection it sends money back
+        for (ADR 0010) — created, submitted, polled at `GET /payments/{reference}` and
+        notified by webhook exactly like any other payment. There is no
+        `GET /payments/{reference}/refunds`: the refund's own reference, returned here, is
+        everything you need from this point on.
+
+        **`amount`, omitted, refunds the full remaining balance** — a bare `POST` with no
+        body refunds a collection in full. Partial refunds are allowed; their total may never
+        exceed what the collection originally settled.
+
+        **The cap is reserved before the operator is ever asked, not after the refund
+        settles** — the moment this call returns, the amount already counts against the
+        original's remaining balance, `SUCCEEDED` or still `UNKNOWN`. Two refunds issued at
+        once for more than remains: exactly as many as fit are accepted, and this is enforced
+        by an atomic database update, not by this read, so it holds even when both requests
+        race. The one that would push the total past what was ever collected gets `400
+        refund-exceeds-remaining` — that is the database's `CHECK` refusing the request, not
+        this endpoint's own arithmetic, which only rejects the common, non-racing case early.
+
+        **The destination is always the original collection's own payer.** There is no field
+        that lets a caller choose a different one — `RefundRequest.counterpartyMsisdn` exists
+        only so a caller who supplies one gets a `400` naming why, instead of the field being
+        silently ignored (`docs/positioning.md`).
+      parameters:
+        - $ref: "#/components/parameters/ReferencePath"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RefundRequest" }
+      responses:
+        "201":
+          description: The operator answered. Same meaning as `POST /payments`'s `201`.
+          headers:
+            Location:
+              $ref: "#/components/headers/Location"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PaymentResponse" }
+        "202":
+          description: The operator did not answer. Same meaning as `POST /payments`'s `202`.
+          headers:
+            Location:
+              $ref: "#/components/headers/Location"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PaymentResponse" }
+        "400":
+          description: >
+            `missing-idempotency-key`; `refund-destination-not-allowed` (a
+            `counterpartyMsisdn` was supplied); `cannot-refund-a-disbursement` (the reference
+            names a `DISBURSE`, not a collection); `original-not-refundable` (the collection
+            is not `SUCCEEDED` — `UNKNOWN` included, since whether the payer's money was ever
+            taken is not known); `invalid-request` (a non-positive or malformed `amount`); or
+            `refund-exceeds-remaining` (this request, alone or racing another, would exceed
+            what remains).
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404":
+          description: "`payment-not-found` — no such collection, or it belongs to another merchant."
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+        "409":
+          description: Same two conflicts as `POST /payments` — `idempotency-key-reuse` or `request-in-progress`.
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+
+  /balance:
+    get:
+      operationId: getBalance
+      tags: [operator reads]
+      summary: The default installation's live balance for one product
+      description: |
+        Calls the operator on every request, on purpose: a cached balance is yesterday's
+        balance with today's date on it. Operator data across **every** merchant this
+        deployment serves, so it requires an **admin** key — a merchant key is `403`, the
+        same gate `GET /statements/imports/{importId}` uses.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: operation
+          in: query
+          required: true
+          description: "`COLLECT` or `DISBURSE` — which product's balance to read."
+          schema: { type: string, enum: [COLLECT, DISBURSE] }
+        - name: currency
+          in: query
+          required: true
+          description: >
+            The currency to read the balance in. Not validated against what this
+            installation actually settles — an operator answering in a currency Nkap does
+            not count in is a real, if unlikely, answer worth seeing rather than hiding.
+          schema: { type: string }
+      responses:
+        "200":
+          description: The live balance.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BalanceResponse" }
+        "400":
+          description: "`invalid-request` — `operation` is not `COLLECT`/`DISBURSE`, or `currency` is not one Nkap counts in."
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/AdminRequired" }
+        "503": { $ref: "#/components/responses/OperatorDidNotAnswer" }
+
+  /account-holders/{msisdn}:
+    get:
+      operationId: getAccountHolder
+      tags: [operator reads]
+      summary: Whether a number is an active mobile money account, right now
+      description: |
+        A merchant's own question about a number it is about to pay — operator-wide data the
+        way `GET /balance` is not, so a **merchant** key is enough.
+
+        `GET`, deliberately not cached: the answer can flip the moment an account is
+        deactivated, and serving a stale "active" from a shared cache costs someone a payment
+        sent to a number that no longer takes it. Every call here spends the operator's own
+        quota for this check, not Nkap's.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: msisdn
+          in: path
+          required: true
+          description: The number to check, in the format the operator expects (MTN — no leading `+`).
+          schema: { type: string }
+        - name: operation
+          in: query
+          required: true
+          description: "`COLLECT` or `DISBURSE` — which product's account rules to check against."
+          schema: { type: string, enum: [COLLECT, DISBURSE] }
+      responses:
+        "200":
+          description: The live answer.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AccountHolderResponse" }
+        "400":
+          description: "`invalid-request` — `operation` is not `COLLECT`/`DISBURSE`."
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "503": { $ref: "#/components/responses/OperatorDidNotAnswer" }
+
+  /statements/imports/{importId}:
+    get:
+      operationId: getStatementReport
+      tags: [statements]
+      summary: The reconciliation report for one statement import
+      description: |
+        Read-only, and deliberately the **only** route statement reconciliation has. Running
+        an import writes fee and suspense entries straight to an append-only ledger from a
+        file, with nothing between the file and a permanent entry; this application
+        authenticates nothing strong enough to be trusted with that write over HTTP, so the
+        import itself is a host-side command
+        (`java -jar app.jar --nkap.statement.import=<path>`), never a route. This endpoint
+        only ever reads back what that command already decided and persisted.
+
+        Operator data across every merchant, so it requires an **admin** key.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: importId
+          in: path
+          required: true
+          description: The import's id, printed by the import command when it ran.
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: The stored report, rebuilt from its rows.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReconciliationReport" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/AdminRequired" }
+        "404":
+          description: "`statement-import-not-found` — no import has this id, or the path segment is not a well-formed one."
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+
+  /webhooks/events/dead-lettered:
+    get:
+      operationId: listDeadLetteredEvents
+      tags: [webhooks]
+      summary: Webhook events the relay gave up retrying
+      description: |
+        After `nkap.webhooks.max-attempts` failed deliveries an event is dead-lettered:
+        retries stop, but the event is never deleted. This is how one is found without
+        already knowing its id — oldest first, the same rule
+        `PaymentRepository.findEscalated()` follows for a payment the reconciler gave up
+        chasing. `nkap_outbox_dead_lettered` (`docs/prometheus-alerts.yml`) is what pages a
+        human in the first place; this is what they read once paged.
+
+        Operator data across every merchant, so it requires an **admin** key.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Dead-lettered events, oldest first. Empty when there are none.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/DeadLetteredEventResponse" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/AdminRequired" }
+
+  /webhooks/events/{eventId}/replay:
+    post:
+      operationId: replayWebhookEvent
+      tags: [webhooks]
+      summary: Resend one webhook event by hand
+      description: |
+        A manual, out-of-band resend for a human who has already looked at why an event
+        failed (or wants a merchant to re-process one that did) — not a retry the relay's own
+        schedule accounts for. It deliberately does not touch the original event's attempt
+        count or dead-letter timestamp: replaying does not reset an exhaustion the relay
+        already decided.
+
+        Triggers a real outbound call in a merchant's name, so it requires an **admin** key
+        even though nothing here touches the ledger — the same reasoning
+        `GET /statements/imports/{importId}` and `GET /balance` apply for different reasons.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: eventId
+          in: path
+          required: true
+          description: The outbox event's id — the same value as the webhook payload's own `id` field.
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: >
+            The attempt's own outcome. A failed delivery is not this endpoint's error — see
+            `WebhookReplayResponse.delivered` — so a receiver that is down still answers `200`.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WebhookReplayResponse" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/AdminRequired" }
+        "404":
+          description: "`event-not-found` (no such event, or a malformed id) or `no-webhook-endpoint` (the event's merchant has none registered)."
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+
+  /callbacks/{providerId}:
+    post:
+      operationId: receiveCallback
+      tags: [operator callbacks]
+      summary: The operator's own webhook — not a merchant-facing endpoint
+      description: |
+        Where MTN (or another configured operator) tells Nkap something changed. **A merchant
+        integration never calls this** — it exists so the operator can call Nkap, the mirror
+        image of `docs/webhooks.md`'s outgoing webhook. It is documented here only so this
+        file describes the whole HTTP surface on the API port, not because it belongs in
+        `docs/integration-guide.md`'s walkthrough.
+
+        Unauthenticated on purpose: the operator sends no credential Nkap can verify, and the
+        endpoint is safe anyway because a callback settles nothing by itself — it only
+        triggers a confirming query to the operator before anything is written
+        (`SettlementService`). A callback naming a reference this gateway never issued is
+        still `202`, never `404`: a 404-vs-202 difference on a public, unauthenticated path
+        would let a caller enumerate which references exist.
+      security: []
+      parameters:
+        - name: providerId
+          in: path
+          required: true
+          description: "Which configured installation this callback is for, e.g. `mtn-cm`."
+          schema: { type: string }
+      requestBody:
+        required: false
+        description: The operator's own callback body — shape is provider-specific and not part of this contract.
+        content:
+          "*/*":
+            schema: { type: string }
+      responses:
+        "202":
+          description: >
+            The gateway took responsibility for the message — including one naming a
+            reference it never issued. No body.
+        "400":
+          description: "`unparseable-callback` — the body is not a well-formed callback for this provider. Says nothing about Nkap's own data."
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+        "404":
+          description: "`unknown-callback-provider` — `providerId` names no configured adapter."
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: "nkap_<43 base64url characters>"
+      description: |
+        `Authorization: Bearer <key>`. Keys are minted by a host-side command, never a route,
+        and shown exactly once — `java -jar app.jar --nkap.apikey.create
+        --nkap.apikey.merchant=<id>` (see `docs/integration-guide.md`, step 1). The key
+        identifies the merchant; there is no separate `merchantId` anywhere in a request
+        body. One boolean on the key, `admin`, gates operator-wide reads
+        (`GET /balance`, `GET /statements/imports/{importId}`, both webhook admin routes) —
+        not a role system.
+
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: >
+        A key of the caller's choosing, unique per intended payment. The same key replays the
+        first response; the same key with a different body is `409`. See this operation's own
+        description for the full two-sided rule.
+      schema: { type: string }
+    ReferencePath:
+      name: reference
+      in: path
+      required: true
+      description: A payment's reference, returned by `POST /payments` or `POST /payments/{reference}/refunds`.
+      schema: { type: string, format: uuid }
+
+  headers:
+    Location:
+      description: "`/payments/{reference}` — the same value as the body's own `reference` field, as a URL."
+      schema: { type: string }
+
+  responses:
+    Unauthenticated:
+      description: >
+        No API key was presented, or the one presented is not recognised. One sentence for
+        both cases — a different message for "wrong key" than "no key" would confirm that
+        valid keys exist, which is an oracle.
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    AdminRequired:
+      description: The key authenticated, but this resource is operator-wide and the key is a merchant key.
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    OperatorDidNotAnswer:
+      description: >
+        This reads live from the operator and it did not answer. Not a failed read — it is
+        not known, and the identical request can be retried; the same "a timeout is never a
+        failure" rule a payment submission follows, applied to a read.
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+
+  schemas:
+    Problem:
+      description: >
+        `application/problem+json` (RFC 7807). Every error this API returns uses this shape,
+        from one place (`ApiExceptionHandler`) — a client sees the same envelope whatever went
+        wrong. `type` is a stable identifier a client can branch on; it does not resolve to a
+        document. See each operation's own `4xx`/`5xx` responses for which `type` means what.
+      type: object
+      required: [type, title, status, detail, instance]
+      properties:
+        type: { type: string, format: uri, examples: ["https://nkap.dev/problems/payment-not-found"] }
+        title: { type: string, description: "A short, stable summary of this problem type." }
+        status: { type: integer, description: "Repeats the HTTP status code." }
+        detail: { type: string, description: "What went wrong, specific to this request — safe to show a developer, not written for an end payer." }
+        instance: { type: string, description: "The request path that produced this problem." }
+
+    CreatePaymentRequest:
+      description: >
+        The body of `POST /payments`. **There is no `merchantId`.** The merchant is the one
+        the API key identifies, never a value the caller supplies — see `bearerAuth`'s own
+        description for why that used to be a real hole.
+      type: object
+      required: [operation, amount, currency, country, counterpartyMsisdn]
+      properties:
+        operation:
+          type: string
+          enum: [COLLECT, DISBURSE]
+          description: Take money from `counterpartyMsisdn` (`COLLECT`) or send money to it (`DISBURSE`).
+        amount:
+          type: integer
+          format: int64
+          minimum: 1
+          description: >
+            An integer count of the currency's minor units — `5000` XAF is 5000 francs (XAF
+            has none), `5000` EUR is €50.00. A fractional number (`"50.5"`) is a `400` before
+            anything is persisted; this is never a decimal, anywhere in this API.
+        currency:
+          type: string
+          description: >
+            An ISO 4217 code this gateway counts in (`dev.nkap.core.money.Currency`) — not
+            enumerated here because membership only grows; see `docs/providers/mtn.md` for
+            what a given installation actually settles in.
+        country:
+          type: string
+          description: >
+            Which configured installation this payment routes to, e.g. `cm` for the `mtn-cm`
+            installation — explicit rather than guessed from the MSISDN, the currency, or the
+            merchant, each rejected for a way it could quietly charge the wrong installation.
+            An unconfigured country is a `400` naming what is configured.
+        counterpartyMsisdn:
+          type: string
+          description: The payer's (or payee's) number, in the format the operator expects.
+        payerMessage:
+          type: string
+          description: Shown to the payer on their handset, where the operator supports it. Omitted, `""`.
+        payeeNote:
+          type: string
+          description: A note attached to the transfer for the payee's own records. Omitted, `""`.
+
+    RefundRequest:
+      description: The body of `POST /payments/{reference}/refunds`. A bare `POST` with no body is valid — see the path's own description.
+      type: object
+      properties:
+        amount:
+          type: integer
+          format: int64
+          minimum: 1
+          description: Minor units to refund. Omitted, defaults to the full amount the collection has left to refund.
+        counterpartyMsisdn:
+          type: string
+          description: >
+            **Exists only to be refused.** A refund's destination is always the original
+            collection's own payer; supplying this field is always a `400
+            refund-destination-not-allowed`, never silently ignored.
+        note:
+          type: string
+          description: >
+            The operator-facing payer/payee message for the transfer. Omitted, defaults to
+            the plain word `"Refund"` — never an internal reference, so a payer is never shown
+            a raw UUID they cannot make sense of.
+
+    PaymentResponse:
+      description: >
+        What `POST /payments`, `POST /payments/{reference}/refunds` and
+        `GET /payments/{reference}` all return — a refund is a payment, read the same way.
+        Every field is always present; a value that does not apply is `""`, never absent or
+        `null` (`refundOf` on a payment that is not a refund, `providerTransactionId` before
+        one exists).
+      type: object
+      required:
+        - reference
+        - provider
+        - merchantId
+        - state
+        - operation
+        - amountMinorUnits
+        - currency
+        - counterpartyMsisdn
+        - providerReference
+        - providerTransactionId
+        - createdAt
+        - updatedAt
+        - detail
+        - refundOf
+        - history
+      properties:
+        reference: { type: string, format: uuid }
+        provider:
+          type: string
+          description: "The installation this payment routed to, e.g. `mtn-cm` — `mtn-` plus the request's own `country`."
+        merchantId: { type: string, description: The merchant the API key that created this payment identifies. }
+        state:
+          type: string
+          enum: [CREATED, SUBMITTED, PENDING, UNKNOWN, SUCCEEDED, FAILED, EXPIRED]
+          description: >
+            See `docs/integration-guide.md`'s step 3 for what to do with each one. `UNKNOWN`
+            is never terminal; `SUCCEEDED`/`FAILED`/`EXPIRED` are, and each fires exactly one
+            webhook (`docs/webhooks.md`).
+        operation: { type: string, enum: [COLLECT, DISBURSE] }
+        amountMinorUnits: { type: integer, format: int64 }
+        currency: { type: string }
+        counterpartyMsisdn: { type: string }
+        providerReference: { type: string, description: "The operator's own reference for the request, once known. `\"\"` until then." }
+        providerTransactionId:
+          type: string
+          description: >
+            The operator's transaction id for the settled movement. `""` unless `state` is
+            `SUCCEEDED` — and, against the bundled simulator specifically, `""` even then; see
+            `docs/providers/mtn.md`.
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        detail:
+          type: string
+          description: '`""` unless `state` is `UNKNOWN`, where it explains that the outcome is not yet known and names the poll URL.'
+        refundOf: { type: string, description: "The original collection's reference, for a refund. `\"\"` for every payment that is not one." }
+        history:
+          type: array
+          items: { $ref: "#/components/schemas/PaymentTransition" }
+
+    PaymentTransition:
+      type: object
+      required: [from, to, at, cause, operatorCode, note]
+      properties:
+        from: { type: string, enum: [CREATED, SUBMITTED, PENDING, UNKNOWN, SUCCEEDED, FAILED, EXPIRED] }
+        to: { type: string, enum: [CREATED, SUBMITTED, PENDING, UNKNOWN, SUCCEEDED, FAILED, EXPIRED] }
+        at: { type: string, format: date-time }
+        cause:
+          type: string
+          enum: [SUBMIT_RESPONSE, QUERY, CALLBACK, RECONCILER]
+          description: What attributed this transition — the initial submit response, a live query, the operator's own callback, or the reconciler's backoff loop.
+        operatorCode: { type: string, description: "The operator's own code for this transition, when it sent one. Often \"\"." }
+        note: { type: string }
+
+    BalanceResponse:
+      type: object
+      required: [provider, operation, amountMinorUnits, currency]
+      properties:
+        provider: { type: string }
+        operation: { type: string, enum: [COLLECT, DISBURSE] }
+        amountMinorUnits: { type: integer, format: int64 }
+        currency: { type: string }
+
+    AccountHolderResponse:
+      type: object
+      required: [provider, operation, msisdn, active]
+      properties:
+        provider: { type: string }
+        operation: { type: string, enum: [COLLECT, DISBURSE] }
+        msisdn: { type: string }
+        active: { type: boolean }
+
+    DeadLetteredEventResponse:
+      type: object
+      required: [eventId, merchantId, eventType, lastError, deadLetteredAt]
+      properties:
+        eventId: { type: string, format: uuid }
+        merchantId: { type: string }
+        eventType: { type: string, examples: ["payment.succeeded", "refund.failed"] }
+        lastError: { type: string, description: The delivery failure that finally exhausted the retry budget. }
+        deadLetteredAt: { type: string, format: date-time }
+
+    WebhookReplayResponse:
+      type: object
+      required: [eventId, delivered, error]
+      properties:
+        eventId: { type: string, format: uuid }
+        delivered: { type: boolean }
+        error: { type: string, description: '`""` when `delivered` is `true`; the receiver''s answer or the transport failure otherwise.' }
+
+    ReconciliationReport:
+      type: object
+      required: [importId, provider, sourceName, importedAt, lineCount, findings]
+      properties:
+        importId: { type: string, format: uuid }
+        provider: { type: string }
+        sourceName: { type: string, description: The imported file's own name, kept for traceability. }
+        importedAt: { type: string, format: date-time }
+        lineCount: { type: integer }
+        findings:
+          type: array
+          items: { $ref: "#/components/schemas/ReconciliationFinding" }
+
+    ReconciliationFinding:
+      type: object
+      required: [kind, operatorTransactionId, paymentReference, detail]
+      properties:
+        kind:
+          type: string
+          enum:
+            - FEE_POSTED
+            - FEE_ALREADY_POSTED
+            - MATCHED
+            - SUSPENSE_POSTED
+            - SUSPENSE_ALREADY_POSTED
+            - MISSING_FROM_STATEMENT
+            - AMOUNT_MISMATCH
+          description: >
+            `SUSPENSE_POSTED`, `SUSPENSE_ALREADY_POSTED`, `MISSING_FROM_STATEMENT` and
+            `AMOUNT_MISMATCH` are the ones a human must act on.
+        operatorTransactionId: { type: [string, "null"], description: "`null` for a finding with no statement line (`MISSING_FROM_STATEMENT`)." }
+        paymentReference: { type: [string, "null"], description: "`null` for a finding with no matching payment (`SUSPENSE_POSTED`, `SUSPENSE_ALREADY_POSTED`)." }
+        detail: { type: string }

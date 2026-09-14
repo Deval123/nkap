@@ -26,10 +26,10 @@ import org.yaml.snakeyaml.Yaml;
 /**
  * Issue #90's own reason for existing, extended from issue #88's: {@code
  * docs/configuration-reference.md} is a file in the repository, and this is what keeps it
- * describing the running application rather than merely hoping to. Two checks, in the same
+ * describing the running application rather than merely hoping to. Three checks, in the same
  * spirit as {@code OpenApiSpecIT} but needing no Spring context at all — everything here is
- * plain reflection over the compiled {@code @ConfigurationProperties} records and plain text
- * parsing of two files already on disk.
+ * plain reflection over the compiled {@code @ConfigurationProperties} records, a plain text
+ * scan of {@code server/src/main/java}, and plain text parsing of two files already on disk.
  *
  * <h2>What this proves</h2>
  *
@@ -39,6 +39,11 @@ import org.yaml.snakeyaml.Yaml;
  *       {@code List<record>} fields — has a row in {@code docs/configuration-reference.md},
  *       and every {@code nkap.*} row in that file corresponds to a real property. Neither
  *       direction is optional: a stale row is exactly as wrong as an undocumented one.</li>
+ *   <li>The same, for every {@code nkap.*} property read directly with {@code @Value} or
+ *       {@code @ConditionalOnProperty} rather than through a record — found by
+ *       {@link #discoverDirectlyBoundProperties()} scanning the source tree, not by a
+ *       hand-kept list. See that method's own javadoc for exactly what it can and cannot
+ *       find.</li>
  *   <li>For {@link ReconcilerProperties} and {@link OutboxRelayProperties} — where
  *       {@code application.yml} always supplies a concrete literal, so "the default" is a
  *       single, unambiguous fact — the reference's own Default column is checked against
@@ -46,18 +51,6 @@ import org.yaml.snakeyaml.Yaml;
  * </ol>
  *
  * <h2>What this does <strong>not</strong> cover, and why</h2>
- *
- * <p>Four {@code nkap.*} settings are read directly — {@code @Value} or
- * {@code @ConditionalOnProperty} — rather than through a {@code @ConfigurationProperties}
- * record: {@code nkap.reconciler.enabled}, {@code nkap.webhooks.enabled} (both
- * {@code @ConditionalOnProperty}), {@code nkap.webhooks.allow-insecure-endpoint-url} and
- * {@code nkap.provider.default} (both {@code @Value}). There is no single class to reflect
- * on for these the way there is for the three records above, so {@link #KNOWN_DIRECT_PROPERTIES}
- * names them by hand instead of discovering them. That is a real, narrower guarantee than the
- * records get: this test proves today's four are documented, but it cannot notice a
- * <em>fifth</em> being added elsewhere in the same way tomorrow without also being added here
- * — a full annotation scan of the compiled classpath could close that gap, and was judged not
- * worth building for four settings that change about as often as this list does.
  *
  * <p>{@code MtnProperties.Installation}'s fields other than {@code requestTimeout} have no
  * single meaningful "default" to check: most are blank on purpose (real credentials are
@@ -78,18 +71,12 @@ class ConfigurationReferenceTest {
 
     private static final Path REFERENCE = Path.of("..", "docs", "configuration-reference.md");
     private static final Path APPLICATION_YML = Path.of("src", "main", "resources", "application.yml");
-
-    /** See this class's own javadoc for why these four are named rather than discovered. */
-    private static final Set<String> KNOWN_DIRECT_PROPERTIES = Set.of(
-            "nkap.reconciler.enabled",
-            "nkap.webhooks.enabled",
-            "nkap.webhooks.allow-insecure-endpoint-url",
-            "nkap.provider.default");
+    private static final Path MAIN_JAVA = Path.of("src", "main", "java");
 
     @Test
-    @DisplayName("every nkap.* property bound by a @ConfigurationProperties record, plus the four bound directly, has exactly one row in docs/configuration-reference.md")
+    @DisplayName("every nkap.* property bound by a @ConfigurationProperties record, or read directly with @Value/@ConditionalOnProperty, has exactly one row in docs/configuration-reference.md")
     void every_property_is_documented_and_every_documented_property_is_real() throws IOException {
-        Set<String> fromCode = new TreeSet<>(KNOWN_DIRECT_PROPERTIES);
+        Set<String> fromCode = new TreeSet<>(discoverDirectlyBoundProperties());
         collect(ReconcilerProperties.class, "nkap.reconciler", fromCode);
         collect(OutboxRelayProperties.class, "nkap.webhooks", fromCode);
         collect(MtnProperties.class, "nkap.provider.mtn", fromCode);
@@ -207,6 +194,92 @@ class ConfigurationReferenceTest {
 
     private static String kebab(String camelCase) {
         return camelCase.replaceAll("([a-z0-9])([A-Z])", "$1-$2").toLowerCase(Locale.ROOT);
+    }
+
+    // --- server/src/main/java: nkap.* properties read directly, not through a record ----
+
+    private static final Pattern VALUE_ANNOTATION = Pattern.compile("@Value\\s*\\(\\s*\"([^\"]*)\"\\s*\\)");
+    private static final Pattern VALUE_PLACEHOLDER = Pattern.compile("\\$\\{(nkap\\.[A-Za-z0-9_.-]+)(?::[^}]*)?}");
+    private static final Pattern CONDITIONAL_ON_PROPERTY = Pattern.compile("@ConditionalOnProperty\\s*\\(([^)]*)\\)");
+    private static final Pattern CONDITIONAL_PREFIX = Pattern.compile("\\bprefix\\s*=\\s*\"([^\"]*)\"");
+    private static final Pattern CONDITIONAL_NAME = Pattern.compile("\\bname\\s*=\\s*\"([^\"]*)\"");
+
+    /**
+     * Every {@code nkap.*} property read directly with {@code @Value} or
+     * {@code @ConditionalOnProperty} in {@code server/src/main/java} — the properties no
+     * {@code @ConfigurationProperties} record ever sees, found by text-scanning the source
+     * tree rather than by naming them in a list that could fall out of date the day a fifth
+     * one is added the same way. {@code @Value("${nkap.foo.bar:some-default}")} yields
+     * {@code nkap.foo.bar} (the {@code :default} suffix is not part of the property name);
+     * {@code @ConditionalOnProperty(prefix = "nkap.foo", name = "bar", ...)} — the only shape
+     * this codebase actually uses — composes to the same {@code nkap.foo.bar}. Annotations
+     * are matched across the whole file, not line by line, since Java does not require one of
+     * either to fit on a single source line.
+     *
+     * <p>Any {@code @ConditionalOnProperty} that mentions {@code nkap} but does not fit the
+     * {@code prefix}/{@code name} shape above — a bare {@code @ConditionalOnProperty("nkap.foo")},
+     * a {@code value} alias, an array of names — fails this method outright instead of being
+     * silently skipped. That is deliberate: a text scan that recognises one shape and ignores
+     * everything else it cannot parse is worse than no scan, so this one refuses to guess.
+     *
+     * <h2>What this cannot cover</h2>
+     *
+     * <p>This is a text scan of one module's source, not a reflection- or bytecode-level
+     * search of the compiled classpath the way {@link #collect} is for the three records
+     * above. It finds a property name only when it appears as a string literal directly
+     * inside one of the two annotations above; it would miss one built from a runtime
+     * string (e.g. {@code environment.getProperty("nkap." + suffix)}), one read through
+     * {@code Environment} or a {@code Binder} call with no annotation at all, or one in a
+     * module other than {@code server}. None of those patterns exist in this codebase today
+     * (confirmed while writing this scan by grepping for {@code Environment}/{@code getProperty}
+     * usage against {@code nkap.*} — there is none), but a scan is only ever a check against
+     * the patterns it was written to expect, not a guarantee no other pattern was introduced.
+     */
+    private static Set<String> discoverDirectlyBoundProperties() throws IOException {
+        if (!Files.isDirectory(MAIN_JAVA)) {
+            throw new IllegalStateException(
+                    "FAIL: " + MAIN_JAVA.toAbsolutePath() + " not found -- this test must run "
+                            + "from the server module (mvn -pl server test), not some other working directory");
+        }
+
+        Set<String> found = new TreeSet<>();
+        try (var files = Files.walk(MAIN_JAVA)) {
+            for (Path file : files.filter(p -> p.toString().endsWith(".java")).toList()) {
+                String source = Files.readString(file);
+
+                Matcher value = VALUE_ANNOTATION.matcher(source);
+                while (value.find()) {
+                    Matcher placeholder = VALUE_PLACEHOLDER.matcher(value.group(1));
+                    while (placeholder.find()) {
+                        found.add(placeholder.group(1));
+                    }
+                }
+
+                Matcher conditional = CONDITIONAL_ON_PROPERTY.matcher(source);
+                while (conditional.find()) {
+                    String body = conditional.group(1);
+                    if (!body.contains("nkap")) {
+                        continue;
+                    }
+                    Matcher prefix = CONDITIONAL_PREFIX.matcher(body);
+                    Matcher name = CONDITIONAL_NAME.matcher(body);
+                    if (prefix.find() && name.find() && prefix.group(1).startsWith("nkap")) {
+                        found.add(prefix.group(1) + "." + name.group(1));
+                    } else {
+                        throw new IllegalStateException(
+                                "unhandled @ConditionalOnProperty shape referencing nkap in " + file + ": "
+                                        + body.strip() + " -- extend discoverDirectlyBoundProperties instead of "
+                                        + "letting this be silently missed");
+                    }
+                }
+            }
+        }
+
+        assertThat(found)
+                .as("discoverDirectlyBoundProperties found nothing at all -- the scan itself is broken "
+                        + "(every assertion in this test would otherwise pass vacuously)")
+                .isNotEmpty();
+        return found;
     }
 
     // --- docs/configuration-reference.md: table rows, as text ---------------------------

@@ -69,6 +69,16 @@ public abstract class ProviderAdapterConformanceTest {
         return harness.anIntent().operation();
     }
 
+    /**
+     * The provider reference a real caller would have on hand after {@code result} —
+     * exactly what {@code submit} returned, blank if it never acknowledged. Used everywhere
+     * a test submits before querying, so the kit passes what {@code SettlementService} would
+     * have: never a synthetic blank standing in for a value that was actually returned.
+     */
+    private static String providerReferenceFrom(SubmitResult result) {
+        return result instanceof SubmitResult.Acknowledged acknowledged ? acknowledged.providerReference() : "";
+    }
+
     @Test
     @DisplayName("operations() declares the operation the harness submits under — asked by type, not by a switch on members")
     void operations_declares_what_the_harness_submits_under() {
@@ -134,7 +144,8 @@ public abstract class ProviderAdapterConformanceTest {
         assertInstanceOf(SubmitResult.Acknowledged.class, first, "first submission");
         assertInstanceOf(SubmitResult.Acknowledged.class, again,
                 "the same reference again is acknowledged, not rejected and not an error");
-        assertSame(PaymentState.SUCCEEDED, adapter.query(QuerySubject.of(reference), operationUnderTest()).state(),
+        assertSame(PaymentState.SUCCEEDED,
+                adapter.query(new QuerySubject(reference, providerReferenceFrom(again)), operationUnderTest()).state(),
                 "the reused reference resolves to a single outcome");
     }
 
@@ -157,12 +168,9 @@ public abstract class ProviderAdapterConformanceTest {
         ReferenceId reference = ReferenceId.newReference();
 
         SubmitResult result = adapter.submit(harness.anIntent(), reference);
-        String providerReference = result instanceof SubmitResult.Acknowledged acknowledged
-                ? acknowledged.providerReference()
-                : "";
 
         assertSame(PaymentState.SUCCEEDED,
-                adapter.query(new QuerySubject(reference, providerReference), operationUnderTest()).state(),
+                adapter.query(new QuerySubject(reference, providerReferenceFrom(result)), operationUnderTest()).state(),
                 "a query built from exactly what submit returned must still resolve normally");
     }
 
@@ -178,6 +186,8 @@ public abstract class ProviderAdapterConformanceTest {
                 () -> adapter.submit(harness.anIntent(), reference));
 
         // The payment may still exist at the operator: a later query can resolve it.
+        // QuerySubject.of(reference) is correct here, not a shortcut: submit() threw, so
+        // there is no SubmitResult and nothing a real caller could have kept.
         assertSame(PaymentState.SUCCEEDED, adapter.query(QuerySubject.of(reference), operationUnderTest()).state());
     }
 
@@ -200,10 +210,11 @@ public abstract class ProviderAdapterConformanceTest {
         ProviderAdapter adapter = harness.adapter();
         harness.makeStatusFlap();
         ReferenceId reference = ReferenceId.newReference();
-        adapter.submit(harness.anIntent(), reference);
+        SubmitResult submitted = adapter.submit(harness.anIntent(), reference);
+        QuerySubject subject = new QuerySubject(reference, providerReferenceFrom(submitted));
 
-        ProviderStatus firstAnswer = adapter.query(QuerySubject.of(reference), operationUnderTest());
-        ProviderStatus secondAnswer = adapter.query(QuerySubject.of(reference), operationUnderTest());
+        ProviderStatus firstAnswer = adapter.query(subject, operationUnderTest());
+        ProviderStatus secondAnswer = adapter.query(subject, operationUnderTest());
 
         // The rule this kit can check is the adapter's: it reports what it is told on each
         // query, faithfully, and decides nothing. That the second answer cannot reopen the
@@ -219,11 +230,12 @@ public abstract class ProviderAdapterConformanceTest {
         ProviderAdapter adapter = harness.adapter();
         harness.makeStatusUnrecognised();
         ReferenceId reference = ReferenceId.newReference();
-        adapter.submit(harness.anIntent(), reference);
+        SubmitResult submitted = adapter.submit(harness.anIntent(), reference);
 
         // The sentence this whole project rests on: a token the adapter has never seen is
         // not a failure it can assert, so it is UNKNOWN — never a guess dressed up as FAILED.
-        assertSame(PaymentState.UNKNOWN, adapter.query(QuerySubject.of(reference), operationUnderTest()).state());
+        assertSame(PaymentState.UNKNOWN,
+                adapter.query(new QuerySubject(reference, providerReferenceFrom(submitted)), operationUnderTest()).state());
     }
 
     @Test
@@ -233,16 +245,17 @@ public abstract class ProviderAdapterConformanceTest {
         harness.expireCredentialsMidFlight();
         ReferenceId reference = ReferenceId.newReference();
 
-        assertInstanceOf(SubmitResult.Acknowledged.class,
-                adapter.submit(harness.anIntent(), reference));
+        SubmitResult submitted = adapter.submit(harness.anIntent(), reference);
+        assertInstanceOf(SubmitResult.Acknowledged.class, submitted);
 
         // Wait past the lifetime the harness declared, so the credential is certainly stale,
         // then query the SAME reference. An adapter that generated a new reference on renewal
         // would query the wrong one; an adapter that failed to renew would throw. Three queries,
         // not a timed loop: the wait is the harness's business, the count is the kit's.
         Thread.sleep(harness.credentialLifetime().plusMillis(500).toMillis());
+        QuerySubject subject = new QuerySubject(reference, providerReferenceFrom(submitted));
         for (int query = 1; query <= 3; query++) {
-            assertSame(PaymentState.SUCCEEDED, adapter.query(QuerySubject.of(reference), operationUnderTest()).state(),
+            assertSame(PaymentState.SUCCEEDED, adapter.query(subject, operationUnderTest()).state(),
                     "query " + query + " after the credential expired");
         }
     }

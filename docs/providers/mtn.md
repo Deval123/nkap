@@ -132,7 +132,13 @@ and it says nothing about whether the payment itself succeeded or failed.
 | `INVALID_CALLBACK_URL_HOST` | `reason` | `FAILED` | yes |
 | `SERVICE_UNAVAILABLE` | `reason` | `UNKNOWN` | yes |
 | `INTERNAL_PROCESSING_ERROR` | `reason` | `UNKNOWN` | yes |
-| `RESOURCE_NOT_FOUND` | error body `code` | `UNKNOWN` | yes |
+| `RESOURCE_NOT_FOUND` | error body `code`¹ | `UNKNOWN` | yes |
+
+¹ This column names where MTN's own vocabulary places the code, not where `stateFor` reads
+it from for this row. `MtnCollectionsAdapter`/`MtnDisbursementsAdapter`'s query handling maps
+any `404` to `UNKNOWN` unconditionally, without calling `stateFor` and without inspecting the
+body's `code` at all. That is deliberate, not an unwired lookup: see *Three namespaces, one
+flat map* below for why routing it through the table would be a regression, not a tidy-up.
 
 **Three rows carry the weight, and a reader will not believe them until they are argued.**
 `SERVICE_UNAVAILABLE` and `INTERNAL_PROCESSING_ERROR` are the operator saying *its own*
@@ -153,23 +159,34 @@ operator's `status` field itself is never absent or unrecognised here, only its 
 and a `status` of literally `FAILED` is already the verdict — there is nothing left for a
 missing `reason` to cast doubt on.
 
-**The table is one flat map, but its keys come from three different namespaces** — the
-"Appears in" column above: `status` values (`SUCCESSFUL`, `PENDING`, `FAILED`, `EXPIRED`),
-`reason` values, and the `code` field of a non-200 error body. Flattening them into one
+### Three namespaces, one flat map
+
+The table is one flat map, but its keys come from three different namespaces — the "Appears
+in" column above: `status` values (`SUCCESSFUL`, `PENDING`, `FAILED`, `EXPIRED`), `reason`
+values, and the `code` field of a non-200 error body. Flattening them into one
 `Map<String, PaymentState>` works because the tokens happen to be disjoint across MTN's
 documented vocabulary, and it is what makes `stateFor` a one-liner — but it is an assumption,
 not a guarantee, and nothing checks that a future code MTN adds to one namespace does not
 collide with an existing one in another.
 
-That assumption is also narrower in practice than the three-namespace picture suggests:
-today, every call to `stateFor` in `MtnCollectionsAdapter` and `MtnDisbursementsAdapter`
-passes an empty string for the error-body `code` argument — a query's `404` branch never
-reaches `stateFor` at all, returning `UNKNOWN` unconditionally regardless of what the body's
-`code` says. `RESOURCE_NOT_FOUND`'s row above is real and asserted by
-`MtnStatusMapTest.the_table_covers_every_documented_code` via `MtnStatusMap.isKnown`, but no
-call site today actually looks it up through `stateFor`'s third parameter. Worth knowing
-before adding a second error-body code and assuming it will be consulted the same way
-`reason` is.
+**The error-body-`code` namespace is not wired into `stateFor` the way `status` and `reason`
+are, and that is not a gap — it is a stronger rule than the table can express.** Every call
+to `stateFor` in `MtnCollectionsAdapter` and `MtnDisbursementsAdapter` passes an empty string
+for that argument, and the one place a real `code` would naturally reach it — the query
+path's `404` branch — never calls `stateFor` at all. It returns `UNKNOWN` unconditionally,
+on purpose: a `404` moments after submission is indistinguishable from "not visible yet",
+and the adapter's own comment calls this "the least intuitive rule in the adapter" (see
+*Observed responses* below). Routing that branch through `stateFor` would let a `404` whose
+body happened to carry a recognised `FAILED` reason code — say, `NOT_ENOUGH_FUNDS` — come out
+`FAILED` instead of `UNKNOWN`, which is exactly the softening that rule exists to prevent:
+this project does not treat "the answer looks like a failure" as license to skip the
+one-response-cannot-tell-them-apart argument. `RESOURCE_NOT_FOUND`'s row in the table above
+is real, and records the mapping ADR 0004 documents for that code, and
+`MtnStatusMapTest.the_table_covers_every_documented_code` asserts it via `MtnStatusMap.isKnown`
+— but the row is not what runs for a `404`, and consulting it there would be a regression,
+not a tidy-up. A *second* error-body code, one no unconditional branch already overrides,
+would be the first to actually reach `stateFor` through this namespace — worth remembering
+before assuming this one already proves the wiring works.
 
 ## Observed responses
 

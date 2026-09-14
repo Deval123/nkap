@@ -5,9 +5,14 @@ name: release
 #
 # Triggers on an annotated `v*` tag, and nowhere else -- `latest` must follow releases, never
 # `main`, or it is a development build wearing the name people reach for by default on a
-# payments gateway. `workflow_dispatch` exists only so this workflow can be exercised by hand
-# (issue #86's own pull request describes exactly what that did and did not prove) -- it never
-# moves `latest`, so a manual run can never overwrite the tag a real release owns.
+# payments gateway. "A release" is narrower than "a tag push": `latest` follows a real,
+# non-pre-release version only (`v1.0.0`, never `v1.0.0-rc1`) -- see
+# .github/scripts/compute-release-tags.sh for the exact rule and why it moved out of this
+# file (issue #103, found by this workflow's own first rehearsal). `workflow_dispatch`
+# exists only so this workflow can be exercised by hand (issue #86's own pull request
+# describes exactly what that did and did not prove) -- it never moves `latest` either,
+# whatever version it is given, so a manual run can never overwrite the tag a real release
+# owns.
 on:
   push:
     tags:
@@ -53,18 +58,17 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      # A tag push names the version; workflow_dispatch (testing only) supplies its own.
-      # Docker image tags are conventionally unprefixed ("1.0.0"), even though the git tag
-      # itself carries the "v" CONTRIBUTING.md asks for.
-      - name: Compute the version to publish
+      # The version, and whether "latest" should follow it, are computed by
+      # .github/scripts/compute-release-tags.sh -- extracted (issue #103) so the decision
+      # has a test (compute-release-tags.test.sh, run by build.yml) rather than being three
+      # lines of shell only a real tag push could exercise. See that script for the rule.
+      - name: Compute the version to publish, and whether latest should follow it
         id: version
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            version="${{ inputs.test_version }}"
-          else
-            version="${GITHUB_REF_NAME#v}"
-          fi
-          echo "version=${version}" >> "$GITHUB_OUTPUT"
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+          TEST_VERSION: ${{ inputs.test_version }}
+        run: .github/scripts/compute-release-tags.sh >> "$GITHUB_OUTPUT"
 
       - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
@@ -75,8 +79,8 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # `latest` moves only on a real tag push -- see the workflow-level comment on why a
-      # workflow_dispatch test run must never touch it.
+      # latest is exactly what the step above computed it to be -- see
+      # compute-release-tags.sh's own rule, not the event name repeated here.
       - name: Tags for this build
         id: tags
         run: |
@@ -84,11 +88,11 @@ jobs:
           {
             echo "gateway<<EOF"
             echo "${GATEWAY_IMAGE}:${version}"
-            [ "${{ github.event_name }}" = "push" ] && echo "${GATEWAY_IMAGE}:latest"
+            [ "${{ steps.version.outputs.latest }}" = "true" ] && echo "${GATEWAY_IMAGE}:latest"
             echo "EOF"
             echo "simulator<<EOF"
             echo "${SIMULATOR_IMAGE}:${version}"
-            [ "${{ github.event_name }}" = "push" ] && echo "${SIMULATOR_IMAGE}:latest"
+            [ "${{ steps.version.outputs.latest }}" = "true" ] && echo "${SIMULATOR_IMAGE}:latest"
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
@@ -130,6 +134,12 @@ jobs:
       # -> Change visibility -> Public, for both packages. `verify-pull` below is what catches
       # this being forgotten -- it fails loudly on an anonymous pull instead of shipping a
       # publish nobody can use.
+      #
+      # Do not delete the 0.0.1-rc1 package versions this workflow's first rehearsal left in
+      # GHCR (issue #103) until each package has another version. Deleting a package's only
+      # version can remove the package itself and reset this same manual visibility step --
+      # silently re-privatising the registry and failing the first real release's
+      # `verify-pull` after everything else about it succeeds.
 
   # A green publish nobody can pull is the exact failure this slice must not ship, so this
   # job pulls what `publish` just pushed from a job with no registry credentials -- no

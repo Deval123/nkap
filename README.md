@@ -315,6 +315,10 @@ honest against the code by `ConfigurationReferenceTest`.
 verification, what Nkap does and does not protect, and what an operator has to do that Nkap
 cannot.
 
+[`CHANGELOG.md`](CHANGELOG.md) says what each tagged release actually is, what it
+deliberately does not do, and — from `v1.0.0` onward — what stability means: which parts of
+this project are a published contract and which are today's behaviour, not a promise.
+
 ## Build
 
 Requires JDK 21 and Maven 3.9+.

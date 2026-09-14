@@ -31,8 +31,8 @@ class CapabilityTest {
     @Test
     @DisplayName("operations() filters capabilities() by type, so a Feature never appears no matter what it is named")
     void operations_filters_capabilities_by_type_not_by_name() {
-        // A fake adapter that declares one operation and both features. Nothing in
-        // ProviderAdapter.operations() names COLLECT, BALANCE or STATEMENT — it filters by
+        // A fake adapter that declares one operation and one feature. Nothing in
+        // ProviderAdapter.operations() names COLLECT or BALANCE — it filters by
         // instanceof Capability.Operation — so this proves the filtering, not a hardcoded list.
         ProviderAdapter mixed = new ProviderAdapter() {
             @Override
@@ -42,7 +42,7 @@ class CapabilityTest {
 
             @Override
             public Set<Capability> capabilities() {
-                return Set.of(Capability.Operation.COLLECT, Capability.Feature.BALANCE, Capability.Feature.STATEMENT);
+                return Set.of(Capability.Operation.COLLECT, Capability.Feature.BALANCE);
             }
 
             @Override

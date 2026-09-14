@@ -1,6 +1,7 @@
 package dev.nkap.conformance;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -16,11 +17,13 @@ import dev.nkap.provider.ProviderUnavailableException;
 import dev.nkap.provider.QuerySubject;
 import dev.nkap.provider.SubmitResult;
 import dev.nkap.provider.UntrustedCallbackException;
+import java.util.Map;
 import java.util.Set;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.function.Executable;
 
 /**
  * The rules every {@link ProviderAdapter} has to satisfy, whatever operator it speaks to.
@@ -98,16 +101,17 @@ public abstract class ProviderAdapterConformanceTest {
      * adapter that declares {@code BALANCE} but still throws is as much a bug as one that
      * does not declare it and answers anyway.
      *
-     * <p>This is deliberately hardcoded to {@code BALANCE} and {@code HOLDER_VALIDATION} —
-     * the two {@link Capability.Feature} members with a method on the contract to call — and
-     * not written generically over every {@link Capability.Feature}. {@code STATEMENT} has no
-     * such method (statement reconciliation is a host-side command, not an adapter call), so
-     * there is nothing to tie it to without a second way to express "this feature means this
-     * method" — a marker interface, a lookup table — which is exactly the kind of second
-     * mechanism issue #70 spent a slice removing. Two explicit branches cost less than that.
+     * <p>Written over {@link Capability.Feature#values()} rather than a member-by-member
+     * {@code if}, on purpose (issue #74): every {@link Capability.Feature} member now has a
+     * method on the contract to call — {@code STATEMENT} was the one exception, and it is
+     * gone rather than given a method it does not need. The first assertion below is the
+     * reason this is safe to write generically at all: it checks that the {@code checks} map
+     * names every current member before the loop that follows ever runs, so a member added
+     * to the enum without a matching entry there fails loudly, on that one line, instead of
+     * silently going untested the way {@code STATEMENT} did the first time.
      */
     @Test
-    @DisplayName("declaring BALANCE or HOLDER_VALIDATION means answering it; not declaring either means refusing, never guessing")
+    @DisplayName("declaring a Feature means answering it; not declaring one means refusing, never guessing — and every Feature has a check")
     void feature_declaration_and_support_agree() throws Exception {
         ProviderAdapter adapter = harness.adapter();
         Capability.Operation operation = operationUnderTest();
@@ -115,20 +119,22 @@ public abstract class ProviderAdapterConformanceTest {
         String msisdn = harness.anIntent().counterpartyMsisdn();
         Set<Capability> declared = adapter.capabilities();
 
-        if (declared.contains(Capability.Feature.BALANCE)) {
-            assertDoesNotThrow(() -> adapter.balance(operation, currency),
-                    "BALANCE is declared, so balance() must answer, not refuse");
-        } else {
-            assertThrows(UnsupportedOperationException.class, () -> adapter.balance(operation, currency),
-                    "BALANCE is not declared, so balance() must refuse, not guess");
-        }
+        Map<Capability.Feature, Executable> checks = Map.of(
+                Capability.Feature.BALANCE, () -> adapter.balance(operation, currency),
+                Capability.Feature.HOLDER_VALIDATION, () -> adapter.validateHolder(operation, msisdn));
 
-        if (declared.contains(Capability.Feature.HOLDER_VALIDATION)) {
-            assertDoesNotThrow(() -> adapter.validateHolder(operation, msisdn),
-                    "HOLDER_VALIDATION is declared, so validateHolder() must answer, not refuse");
-        } else {
-            assertThrows(UnsupportedOperationException.class, () -> adapter.validateHolder(operation, msisdn),
-                    "HOLDER_VALIDATION is not declared, so validateHolder() must refuse, not guess");
+        assertEquals(Set.of(Capability.Feature.values()), checks.keySet(),
+                "every Capability.Feature member must have a check registered in the map above -- "
+                        + "a member with none is issue #74 happening again");
+
+        for (Capability.Feature feature : Capability.Feature.values()) {
+            Executable check = checks.get(feature);
+            if (declared.contains(feature)) {
+                assertDoesNotThrow(check, feature + " is declared, so its method must answer, not refuse");
+            } else {
+                assertThrows(UnsupportedOperationException.class, check,
+                        feature + " is not declared, so its method must refuse, not guess");
+            }
         }
     }
 

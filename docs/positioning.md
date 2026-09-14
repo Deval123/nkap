@@ -134,8 +134,15 @@ network, not the port serving a public API. An operator who publishes that port 
 to hand out business volume, the suspense balance, and exactly when the operator is
 struggling; Nkap does not make that choice by default.
 
-The one action that writes to the ledger from a file — statement reconciliation — is a
-host-side command and not a route, for the same reason keys are.
+**Statement reconciliation reads a file; it does not ask the operator for one.** The one
+action that writes to the ledger from a file is a host-side command and not a route, for the
+same reason keys are. Fetching a statement from the operator directly was considered and
+left out (issue #74): `Capability.Feature` once had a `STATEMENT` member for exactly that,
+declared by an adapter and never callable by anything, because no method on
+`ProviderAdapter` asked for one. A capability nobody can act on is a claim the conformance
+kit cannot check, so it was removed rather than kept as a placeholder. If fetching a
+statement from the operator is ever added, it comes back as a `Feature` with a contract
+method behind it from the start — never as a bare member again.
 
 These exclusions are not modesty. They are what keeps the project legally simple enough for
 one person to run and small enough to finish.

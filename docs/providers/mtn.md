@@ -203,6 +203,7 @@ before assuming this one already proves the wiring works.
 | same `X-Reference-Id` again | `409` `{"code":"RESOURCE_ALREADY_EXIST"}` — a previous attempt reached MTN; not an error |
 | `GET /collection/v1_0/requesttopay/{ref}` | `200` with the payload above |
 | `GET` on a reference never submitted | `404` `{"code":"RESOURCE_NOT_FOUND"}` |
+| `GET /collection/v1_0/requesttopay/{ref}` for a submission to MSISDN `46733123450` | `INTERNAL_PROCESSING_ERROR` — on every query, over 36 hours |
 
 Every row above was actually seen against the sandbox. What a `400` on submission means is
 not: no real MTN account has produced one yet, so it stays here as **assumed**, from ADR
@@ -229,6 +230,73 @@ it, every query comes back `RESOURCE_NOT_FOUND` → `UNKNOWN`, forever — it do
 self-heal to `FAILED`. It escalates once its window is spent, the same as any other stuck
 payment, and a human resolves it by hand once they have confirmed with MTN that the transfer
 never happened.
+
+### MTN's published test MSISDNs, and what they actually answer
+
+MTN's developer documentation publishes a table of test MSISDNs said to produce determined
+outcomes — Failed, Rejected, Timeout, Success, Pending. **That table is not reproduced
+here, because it was not observed here.** Two of its own details do not line up: the
+"Success" entry carries a different leading pair of digits from the other four, and
+`MtnSandboxIT`'s own default MSISDN appears in neither list. A table this project has not
+run is not a fact this project can vouch for.
+
+What has actually been observed, against a real sandbox account, on 2026-09-15 and
+2026-09-16:
+
+| MSISDN | What a status query answered | When |
+| --- | --- | --- |
+| `46733123450` | `INTERNAL_PROCESSING_ERROR`, every time, across two payments and 36 hours | 2026-09-15, 2026-09-16 |
+| `46733123453` | `PENDING` shortly after submission; terminal state never observed | 2026-09-15 |
+
+`46733123450` is documented by MTN as the *Failed* case, and it does not answer as one.
+It would be easy, and wrong, to conclude that MTN's table is simply incorrect. **No
+callback has ever been received by this project from the real sandbox** — MTN cannot
+reach a local deployment — so the documented outcome may arrive that way instead, rather
+than through the status query. This page does not choose between the two readings: the
+sandbox's status endpoint may genuinely be unreliable for this MSISDN, or the *Failed*
+verdict may exist only on a callback nobody here has ever been in a position to receive.
+Until one arrives, the published table describes something this project has not seen.
+
+The practical consequence for anyone exercising the sandbox today: **`46733123450` does
+not currently produce a `FAILED` payment in Nkap.** It produces an escalation — see the
+next section.
+
+### What Nkap does when the real operator answers nothing conclusive
+
+A payment submitted for `46733123450` was accepted (`202`, `CREATED → SUBMITTED`), and
+every subsequent status query answered `INTERNAL_PROCESSING_ERROR` — the operator saying
+*its own* system failed, which says nothing about where the money went. `MtnStatusMap`
+maps it to `UNKNOWN`, deliberately, and the reconciler treated it accordingly. Observed in
+Nkap's own logs:
+
+```
+09:26:24  RECONCILER … not conclusive (INTERNAL_PROCESSING_ERROR), changing nothing
+09:27:24  RECONCILER … not conclusive (INTERNAL_PROCESSING_ERROR), changing nothing
+09:29:24  RECONCILER … not conclusive (INTERNAL_PROCESSING_ERROR), changing nothing
+09:33:25  RECONCILER … not conclusive (INTERNAL_PROCESSING_ERROR), changing nothing
+09:41:25  RECONCILER … not conclusive (INTERNAL_PROCESSING_ERROR), changing nothing
+…
+escalated to a human after 6 reconciler attempt(s); operator's last answer: INTERNAL_PROCESSING_ERROR
+```
+
+Six attempts on an exponential backoff — one minute, two, four, eight, and onward — then,
+once the window was spent, an escalation. **The payment was never marked `FAILED`**, on
+any of the six occasions it could have been guessed at, and it never will be by this
+mechanism: only the operator's own conclusive answer can make it terminal. This is the
+project's founding rule — a timeout is never a failure — observed against a real operator
+instead of the simulator that was built to model it.
+
+Two further things this run showed, neither observed before:
+
+- **The reconciler's schedule survives a process restart.** The stack was down for
+  roughly thirty-six hours between the fifth attempt and the sixth. The attempt count and
+  the retry window are columns on the payment, not state held in memory, so the sixth
+  attempt escalated correctly rather than starting the count over.
+- **A non-conclusive answer leaves no trace on the payment.** `updatedAt` stayed at the
+  millisecond of submission throughout, across all six attempts. That is correct — nothing
+  about the payment's own state changed — but it means a payment actively being chased is,
+  through `GET /payments/{reference}`, indistinguishable from one nobody has looked at
+  since it was created. Issue #113 tracks that gap.
 
 ### What the simulator answers with
 
@@ -310,7 +378,15 @@ way a balance and a status query are:
 
 Left open deliberately rather than guessed. Each is worth a pull request adding a line here.
 
-- Which sandbox MSISDNs produce which failure codes, and how long each takes to settle.
+- **Whether any sandbox MSISDN produces a terminal outcome through the status endpoint.**
+  `46733123450` answers `INTERNAL_PROCESSING_ERROR` indefinitely; `46733123453` answered
+  `PENDING` and its terminal state was never seen. The three remaining published numbers
+  have not been exercised, and no run against the real sandbox has yet produced a
+  `SUCCESSFUL` or a `FAILED`.
+- **Whether the real sandbox sends callbacks at all**, and whether the outcomes MTN's
+  test-MSISDN table describes arrive that way rather than through the status endpoint.
+  Untestable from a deployment MTN cannot reach; it needs a publicly reachable
+  `providerCallbackHost`.
 - **What a real `400` on submission actually contains.** Assumed from ADR 0004's vocabulary
   and `MtnCollectionsAdapter.submit`'s own handling (*Observed responses* above); no real
   account has produced one yet, so it is not yet known whether the body's `code` is always

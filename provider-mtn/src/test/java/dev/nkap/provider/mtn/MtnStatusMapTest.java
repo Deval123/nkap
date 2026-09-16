@@ -31,6 +31,20 @@ class MtnStatusMapTest {
     }
 
     @Test
+    @DisplayName("an unrecognised status is not overruled by a recognised, conclusive reason — "
+            + "a second behaviour change from issue #115")
+    void an_unrecognised_status_beside_a_recognised_reason_is_unknown() {
+        // Under the old reason-first rule, reason being present and recognised was the end of
+        // it: stateFor("SOME_FUTURE_STATUS", "PAYER_NOT_FOUND", "") returned FAILED without
+        // status ever being examined. The new rule rejects an unrecognised token in either
+        // field before it ever asks which field is more conclusive, so this pair is UNKNOWN
+        // now, not FAILED. an_unrecognised_code_is_unknown above does not cover this: its
+        // FAILED/SOME_CODE_ADDED_NEXT_YEAR case was already UNKNOWN under the old rule too,
+        // because an unrecognised reason was what reason-first picked.
+        assertThat(MtnStatusMap.stateFor("SOME_FUTURE_STATUS", "PAYER_NOT_FOUND", "")).isEqualTo(UNKNOWN);
+    }
+
+    @Test
     @DisplayName("an inconclusive reason arriving without a status is still UNKNOWN")
     void an_inconclusive_reason_alone_is_still_unknown() {
         assertThat(MtnStatusMap.stateFor("", "SERVICE_UNAVAILABLE", "")).isEqualTo(UNKNOWN);

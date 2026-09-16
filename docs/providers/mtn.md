@@ -322,10 +322,13 @@ arrives *instead of* a status, because the operator saying its own system failed
 about where the money went — but it was wrong here, because MTN had also supplied a real
 verdict in `status`, and the old rule discarded it.
 
-**Fixed by issue #115.** `stateFor` now reads both `status` and `reason` rather than picking
-one; see *Status and error mapping* above for the current rule. A submission to
-`46733123450` today reaches `FAILED` on the first query — not an escalation six attempts and
-thirty-six hours later.
+**The reading that discarded this verdict is corrected by issue #115.** `stateFor` now reads
+both `status` and `reason` rather than picking one; see *Status and error mapping* above for
+the current rule, and `MtnStatusMapTest` for the pair `status: FAILED, reason:
+INTERNAL_PROCESSING_ERROR` returning `FAILED` from the map directly. What that test does not
+establish is the path from a real submission to a terminal payment — submit, query, map,
+persist, no escalation — against the real sandbox; nobody has run that since the fix. See
+*Still unknown*.
 
 ### What the reconciler did while `stateFor` discarded a conclusive verdict
 
@@ -351,7 +354,9 @@ once the window was spent, an escalation. **This is not the founding rule workin
 intended.** MTN did not time out and it did not answer inconclusively; it answered `FAILED`
 on the first query and every one after. What happened is that `stateFor` threw the verdict
 away before the reconciler ever saw it, so the reconciler chased an answer that had already
-been given. **Fixed by issue #115** — see *Status and error mapping* above.
+been given. **The map-level defect is corrected by issue #115** — see *Status and error
+mapping* above — but whether a submission to `46733123450` now reaches `FAILED` without
+escalation, end to end against the real sandbox, has not been confirmed. See *Still unknown*.
 
 What the run does show correctly, and worth keeping:
 
@@ -527,6 +532,12 @@ way a balance and a status query are:
 
 Left open deliberately rather than guessed. Each is worth a pull request adding a line here.
 
+- **Whether a submission to `46733123450` now reaches `FAILED` without escalation, against
+  the real sandbox.** Issue #115 fixed the map-level defect — `MtnStatusMapTest` confirms
+  `stateFor("FAILED", "INTERNAL_PROCESSING_ERROR", "")` returns `FAILED` — but that is a unit
+  test of the map, not an observation of the path from a real submission through `submit`,
+  `query`, persistence and no escalation. Nobody has run that path against the real sandbox
+  since the fix.
 - **Whether a callback is ever the *only* notification**, or whether the status endpoint
   always catches up. `46733123453` announced its outcome by callback while the status
   endpoint still said `PENDING`; whether that endpoint would have reported `EXPIRED` later

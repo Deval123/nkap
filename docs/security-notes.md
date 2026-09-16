@@ -127,6 +127,22 @@ than a silence a reader has to interpret for themselves:
   (`key-init`'s pod logs are, by default, wherever your cluster ships pod logs, not only
   where you happened to run `kubectl logs`).
 
+## 5. The callback route, observed under real exposure
+
+A `trycloudflare.com` quick-tunnel hostname, stood up for an MTN sandbox callback test and
+never shared with anyone, was hit by two `HEAD /` requests from Cloudflare's own security
+scanner (`104.30.167.164`, identifying itself as `...security-center`) forty-five minutes
+after the tunnel came up. A hostname on a public CDN is discoverable within the hour, without
+being told to anyone.
+
+Nothing was at risk in that session — a recorder stood behind the tunnel, not a live gateway.
+But it is direct evidence for `docs/positioning.md`'s "the callback endpoint stays
+unauthenticated, on purpose" argument: `POST /callbacks/{providerId}` is unauthenticated by
+design, and anyone developing against it behind a public tunnel should expect internet-wide
+scanning within the hour, not treat it as a hypothetical. The design held under that exposure
+— a callback settles nothing by itself, and `SettlementService` confirms by query before
+writing anything — which is the fact worth recording, not a warning against doing this.
+
 ## Not in this slice
 
 A threat model with severities or likelihoods. Anything Nkap does not actually implement

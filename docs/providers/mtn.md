@@ -95,10 +95,12 @@ adapter that requires them fails on every pending payment, which is most of them
 **A 202 really is empty.** `Content-Length: 0`, no body at all. The outcome is only ever
 available through the query.
 
-**The sandbox settles in EUR** whatever country you think you are testing, and the documented
-test MSISDN `46733123453` stays `PENDING` for well over three seconds. A test that submits
-and immediately expects success fails for reasons that have nothing to do with the code
-under test.
+**The sandbox settles in EUR** whatever country you think you are testing, and
+`MtnSandboxIT`'s default test MSISDN, `46733123453`, stays `PENDING` for well over three
+seconds. It is not one of MTN's published numbers — see *MTN's published test MSISDNs, and
+what they actually answer* below for the two that are easy to confuse with it. A test that
+submits and immediately expects success fails for reasons that have nothing to do with the
+code under test.
 
 ## Status and error mapping
 
@@ -166,6 +168,12 @@ operator's `status` field itself is never absent or unrecognised here, only its 
 and a `status` of literally `FAILED` is already the verdict — there is nothing left for a
 missing `reason` to cast doubt on.
 
+**No deployment of Nkap sends `X-Callback-Url` today, so nothing here can currently provoke
+`INVALID_CALLBACK_URL_HOST`.** The header is meant to come from `intent.providerOptions()`,
+and no controller, service, or configuration property this project ships ever populates that
+map — see issue #116. The row above is correct as a statement of MTN's vocabulary; it is not
+yet a statement of anything a caller of this gateway can trigger.
+
 ### Three namespaces, one flat map
 
 The table is one flat map, but its keys come from three different namespaces — the "Appears
@@ -203,9 +211,13 @@ before assuming this one already proves the wiring works.
 | same `X-Reference-Id` again | `409` `{"code":"RESOURCE_ALREADY_EXIST"}` — a previous attempt reached MTN; not an error |
 | `GET /collection/v1_0/requesttopay/{ref}` | `200` with the payload above |
 | `GET` on a reference never submitted | `404` `{"code":"RESOURCE_NOT_FOUND"}` |
-| `GET /collection/v1_0/requesttopay/{ref}` for a submission to MSISDN `46733123450` | `INTERNAL_PROCESSING_ERROR` — on every query, over 36 hours |
+| `GET /collection/v1_0/requesttopay/{ref}` for a submission to MSISDN `46733123450` | `status: FAILED, reason: INTERNAL_PROCESSING_ERROR` — on every query, over 36 hours |
+| `POST /v1_0/apiuser/{id}/apikey` with no `Content-Length` | `411 Length Required` — needs an explicit `Content-Length: 0`; `curl -X POST` with no data does not send one |
 
-Every row above was actually seen against the sandbox. What a `400` on submission means is
+Every row above was actually seen against the sandbox. **A caution worth stating plainly: an
+observation of Nkap's own logs is an observation of Nkap, not of the operator** — this table
+only ever holds what MTN itself said, never what Nkap made of it afterwards. What a `400` on
+submission means is
 not: no real MTN account has produced one yet, so it stays here as **assumed**, from ADR
 0004's documented vocabulary and `MtnCollectionsAdapter.submit`'s own handling, not from
 observation — the same distinction the *Still unknown* section keeps elsewhere. `submit`
@@ -234,40 +246,84 @@ never happened.
 ### MTN's published test MSISDNs, and what they actually answer
 
 MTN's developer documentation publishes a table of test MSISDNs said to produce determined
-outcomes — Failed, Rejected, Timeout, Success, Pending. **That table is not reproduced
-here, because it was not observed here.** Two of its own details do not line up: the
-"Success" entry carries a different leading pair of digits from the other four, and
-`MtnSandboxIT`'s own default MSISDN appears in neither list. A table this project has not
-run is not a fact this project can vouch for.
+outcomes — Failed, Rejected, Timeout, Success, Pending. This page did not reproduce it
+verbatim, out of caution rather than confidence: the "Success" entry carries a different
+leading pair of digits from the other four, and `MtnSandboxIT`'s own default MSISDN,
+`46733123453`, appears in neither list. Both turned out to matter.
 
-What has actually been observed, against a real sandbox account, on 2026-09-15 and
-2026-09-16:
+Every published number has now been exercised directly against MTN, alongside
+`MtnSandboxIT`'s undocumented default. All six, in one table — MTN's own label is given only
+to show that its table was directionally right, not as a source for anything else here:
 
-| MSISDN | What a status query answered | When |
-| --- | --- | --- |
-| `46733123450` | `INTERNAL_PROCESSING_ERROR`, every time, across two payments and 36 hours | 2026-09-15, 2026-09-16 |
-| `46733123453` | `PENDING` shortly after submission; terminal state never observed | 2026-09-15 |
+| MSISDN | MTN's label | Status query answered | What Nkap records |
+| --- | --- | --- | --- |
+| `56733123453` | *Success* | `SUCCESSFUL`, `financialTransactionId` present, no `reason`, under 10s | `SUCCEEDED` |
+| `46733123451` | *Rejected* | `FAILED` / `APPROVAL_REJECTED`, under 10s | `FAILED` |
+| `46733123452` | *Timeout* | `FAILED` / `EXPIRED`, under 10s | `EXPIRED` |
+| `46733123450` | *Failed* | `FAILED` / `INTERNAL_PROCESSING_ERROR`, under 10s | `UNKNOWN` — see below |
+| `46733123454` | *Pending* | `CREATED`, still `CREATED` at 40 seconds | `UNKNOWN` — see below |
+| `46733123453` | *(not published — `MtnSandboxIT`'s default)* | `PENDING` at 10s and 40s, then `FAILED`/`EXPIRED` by callback | `EXPIRED` |
 
-`46733123450` is documented by MTN as the *Failed* case, and it does not answer as one.
-It would be easy, and wrong, to conclude that MTN's table is simply incorrect. **No
-callback has ever been received by this project from the real sandbox** — MTN cannot
-reach a local deployment — so the documented outcome may arrive that way instead, rather
-than through the status query. This page does not choose between the two readings: the
-sandbox's status endpoint may genuinely be unreliable for this MSISDN, or the *Failed*
-verdict may exist only on a callback nobody here has ever been in a position to receive.
-Until one arrives, the published table describes something this project has not seen.
+**The leading-pair discrepancy this page declined to resolve was real, and both numbers
+exist.** `56733123453` — the published *Success* entry, the digit this page would not guess
+was a typo — answers `SUCCESSFUL`. `46733123453` is a different, undocumented number: it is
+`MtnSandboxIT`'s own default, it expires rather than succeeds, and it is not MTN's *Success*
+case. The caution was right, and the question it left open is now closed by observation, not
+by adopting MTN's table.
 
-The practical consequence for anyone exercising the sandbox today: **`46733123450` does
-not currently produce a `FAILED` payment in Nkap.** It produces an escalation — see the
-next section.
+**A `SUCCESSFUL` carries `financialTransactionId` and no `reason`** — the field-by-field
+shape this page has been listing as unknown. `600198217` in this run: a short numeric id, not
+a UUID.
 
-### What Nkap does when the real operator answers nothing conclusive
+**`CREATED` is a real MTN status absent from `MtnStatusMap`'s table.** `46733123454` answers
+`status: CREATED` and had not moved after 40 seconds. Falling to `UNKNOWN` is issue #80's rule
+working exactly as intended, not a defect — but the code is no longer unrecognised now that it
+has been observed. Whether to add a row mapping it to `PENDING` is a mapping change with a
+`MtnStatusMappingDocTest` update attached, proposed in this pull request's description rather
+than made in this slice.
 
-A payment submitted for `46733123450` was accepted (`202`, `CREATED → SUBMITTED`), and
-every subsequent status query answered `INTERNAL_PROCESSING_ERROR` — the operator saying
-*its own* system failed, which says nothing about where the money went. `MtnStatusMap`
-maps it to `UNKNOWN`, deliberately, and the reconciler treated it accordingly. Observed in
-Nkap's own logs:
+**A callback can carry a verdict the status endpoint was still withholding.** `46733123453`
+answered `PENDING` twice, then announced `FAILED`/`EXPIRED` by callback before the status
+endpoint caught up. For this MSISDN the callback was the first conclusive word — see
+*Callbacks* below for what that callback looked like.
+
+### `46733123450` is settled, and it is neither reading this page carried before
+
+This page used to carry two open readings of `46733123450`: that the sandbox's status
+endpoint is unreliable for it, or that the documented *Failed* verdict arrives only by
+callback. **Neither is right.** The status endpoint answers, immediately and conclusively:
+
+```
+status  FAILED
+reason  INTERNAL_PROCESSING_ERROR
+```
+
+MTN's published table is correct: `46733123450` *is* the *Failed* case, it says so in
+`status`, on the first query, and the callback repeats the same pair.
+
+What turned that verdict into thirty-six hours of `UNKNOWN`, six reconciler attempts and an
+escalation is `MtnStatusMap.stateFor`, quoted here rather than paraphrased:
+
+```java
+String key = firstNonBlank(reason, status, errorCode);
+return TABLE.getOrDefault(key, UNKNOWN);
+```
+
+`reason` wins. `INTERNAL_PROCESSING_ERROR` maps to `UNKNOWN`. The terminal `status` is never
+consulted. Everything this page says elsewhere about that rule is accurate — it is right when
+`reason` arrives *instead of* a status, because the operator saying its own system failed says
+nothing about where the money went. What this page did not say, and now must, is that the same
+rule discards a conclusive answer whenever MTN supplies both. See issue #115.
+
+### What the reconciler did while `stateFor` discarded a conclusive verdict
+
+A payment submitted for `46733123450` was accepted (`202`, `CREATED → SUBMITTED`). MTN
+answered every subsequent status query with `status: FAILED, reason:
+INTERNAL_PROCESSING_ERROR` — a terminal verdict, every time. `MtnStatusMap.stateFor` read
+`reason` first, as it always does, and returned `UNKNOWN` — not because the operator was
+unclear, but because the rule never looked at `status` once `reason` matched. The reconciler
+then did exactly what `UNKNOWN` tells it to do: chase the payment. Observed in Nkap's own
+logs:
 
 ```
 09:26:24  RECONCILER … not conclusive (INTERNAL_PROCESSING_ERROR), changing nothing
@@ -280,23 +336,24 @@ escalated to a human after 6 reconciler attempt(s); operator's last answer: INTE
 ```
 
 Six attempts on an exponential backoff — one minute, two, four, eight, and onward — then,
-once the window was spent, an escalation. **The payment was never marked `FAILED`**, on
-any of the six occasions it could have been guessed at, and it never will be by this
-mechanism: only the operator's own conclusive answer can make it terminal. This is the
-project's founding rule — a timeout is never a failure — observed against a real operator
-instead of the simulator that was built to model it.
+once the window was spent, an escalation. **This is not the founding rule working as
+intended.** MTN did not time out and it did not answer inconclusively; it answered `FAILED`
+on the first query and every one after. What happened is that `stateFor` threw the verdict
+away before the reconciler ever saw it, so the reconciler chased an answer that had already
+been given. See issue #115 for the defect and the decision it still has to make.
 
-Two further things this run showed, neither observed before:
+What the run does show correctly, and worth keeping:
 
 - **The reconciler's schedule survives a process restart.** The stack was down for
   roughly thirty-six hours between the fifth attempt and the sixth. The attempt count and
   the retry window are columns on the payment, not state held in memory, so the sixth
   attempt escalated correctly rather than starting the count over.
 - **A non-conclusive answer leaves no trace on the payment.** `updatedAt` stayed at the
-  millisecond of submission throughout, across all six attempts. That is correct — nothing
-  about the payment's own state changed — but it means a payment actively being chased is,
-  through `GET /payments/{reference}`, indistinguishable from one nobody has looked at
-  since it was created. Issue #113 tracks that gap.
+  millisecond of submission throughout, across all six attempts. That is correct given what
+  the reconciler believed it was dealing with — but it means a payment actively being chased
+  is, through `GET /payments/{reference}`, indistinguishable from one nobody has looked at
+  since it was created. Issue #113 tracks that gap, though its own worked example — this
+  payment — is one that should never have needed chasing at all.
 
 ### What the simulator answers with
 
@@ -327,6 +384,83 @@ and a contributor who mistyped a scenario is better served by a 400 naming the f
 above). The consequence a reader hits directly: `GET /payments/{reference}` and every webhook
 for a payment settled against the simulator carry `providerTransactionId: ""`, even for
 `SUCCEEDED` — not a Nkap bug, and not something the simulator was asked to model here.
+
+## Callbacks
+
+One run against the real sandbox, 2026-09-16, from a `cloudflared` quick tunnel in front of a
+catch-all recorder, using a second API user created for the occasion and pinned to the
+tunnel's hostname. Five submissions, made **directly to MTN in `curl`, bypassing the
+gateway** — nothing in this section was exercised through Nkap itself; where it says
+something about the gateway's own behaviour, that is inference from code the adapter's
+source can be checked against, not observation of Nkap in motion.
+
+### `providerCallbackHost` is an allow-list, not a destination
+
+Each submission carried, or omitted, an explicit `X-Callback-Url` pointed at the tunnel;
+everything else about the submission was identical:
+
+| `externalId` suffix | MSISDN | `X-Callback-Url` sent | Callback received |
+| --- | --- | --- | --- |
+| `T215608Z` | `46733123453` | no | **none** |
+| `T215701Z` | `46733123453` | yes | yes |
+| `T220019Z` | `46733123451` | yes | **yes, twice** |
+| `T220110Z` | `46733123451` | no | **none** |
+| `T220218Z` | `46733123450` | yes | yes |
+
+Three submissions carried the header; all three produced a callback. Two omitted it; neither
+did. **Registering `providerCallbackHost` on the API user is not enough on its own — it only
+constrains where a supplied `X-Callback-Url` is allowed to point.** Omitting the header
+produces no callback at all: not a rejection, not a delayed delivery, nothing.
+
+### What a real MTN callback looks like
+
+The first one this project has ever received. Headers, verbatim, with the tunnel's own
+(`Cf-*`, `X-Forwarded-*`, `Cdn-Loop`) removed as artefacts of Cloudflare rather than MTN:
+
+```
+POST /callbacks/mtn-cm
+Host: <the host registered as providerCallbackHost>
+User-Agent: LWAC Http Client 1.0
+Content-Type: application/json; charset=utf-8
+Content-Length: 212
+Accept-Encoding: gzip
+Connection: keep-alive
+```
+
+Body:
+
+```json
+{"externalId":"…","amount":"100","currency":"EUR",
+ "payer":{"partyIdType":"MSISDN","partyId":"46733123451"},
+ "payeeNote":"…","status":"FAILED","reason":"APPROVAL_REJECTED"}
+```
+
+Three facts settle a design question this project had to answer without evidence until now:
+
+- **There is no signature and no credential of any kind.** No `Authorization`, no HMAC
+  header, nothing MTN-specific — anyone who learns the URL can post to it.
+  `docs/positioning.md`'s "the callback endpoint stays unauthenticated, on purpose" argument
+  is now backed by an observation, not only a design intent.
+- **The body carries no `referenceId`, only `externalId`.**
+  `MtnCollectionsAdapter.parseCallback` reads `referenceId` first and falls back to
+  `externalId` (`firstNonBlank(referenceId, externalId)`); since `submit` sets outgoing
+  `externalId` to Nkap's own reference in the first place, this body's `externalId`
+  round-trips to exactly the reference the payment was created under. The fallback this shape
+  depends on is exercised, not theoretical.
+- **MTN retries a delivery the receiver already answered `200` for.** See below.
+
+### Callbacks are retried
+
+The `46733123451` callback above was delivered **twice**, at `22:00:51` and `22:03:50` UTC —
+the same body, three minutes apart — with no acknowledgement problem at the recorder, which
+answered `200` both times. A receiver that treats a callback as a one-shot event is wrong
+about this operator; `SettlementService`'s confirm-by-query design already tolerates a
+repeat, since a duplicate is exactly what it is built to absorb.
+
+One further delivery attempt was cut short before it reached the recorder, which was
+single-threaded and still busy handling the first. So **one repeat is a floor, not a
+count**: at least one attempt was lost to the recorder's own limitation, not to MTN, and
+nothing here establishes MTN's retry ceiling or schedule.
 
 ## Disbursements
 
@@ -378,26 +512,29 @@ way a balance and a status query are:
 
 Left open deliberately rather than guessed. Each is worth a pull request adding a line here.
 
-- **Whether any sandbox MSISDN produces a terminal outcome through the status endpoint.**
-  `46733123450` answers `INTERNAL_PROCESSING_ERROR` indefinitely; `46733123453` answered
-  `PENDING` and its terminal state was never seen. The three remaining published numbers
-  have not been exercised, and no run against the real sandbox has yet produced a
-  `SUCCESSFUL` or a `FAILED`.
-- **Whether the real sandbox sends callbacks at all**, and whether the outcomes MTN's
-  test-MSISDN table describes arrive that way rather than through the status endpoint.
-  Untestable from a deployment MTN cannot reach; it needs a publicly reachable
-  `providerCallbackHost`.
+- **Whether a callback is ever the *only* notification**, or whether the status endpoint
+  always catches up. `46733123453` announced its outcome by callback while the status
+  endpoint still said `PENDING`; whether that endpoint would have reported `EXPIRED` later
+  was not checked.
+- **How many times MTN retries a callback, and on what schedule.** One delivery was
+  repeated once after three minutes, and one further attempt was lost to the recorder rather
+  than refused — so one repeat is a floor. Nothing establishes the ceiling, the interval, or
+  what a non-2xx answer would change.
+- **Whether `46733123454` ever leaves `CREATED`.** It had not after 40 seconds and was not
+  watched longer.
 - **What a real `400` on submission actually contains.** Assumed from ADR 0004's vocabulary
-  and `MtnCollectionsAdapter.submit`'s own handling (*Observed responses* above); no real
-  account has produced one yet, so it is not yet known whether the body's `code` is always
-  one of the mapping's `FAILED` reason codes or something this table does not yet name.
+  and `MtnCollectionsAdapter.submit`'s own handling (*Observed responses* above); every
+  submission in this run and the one before it was accepted with `202`, so no real account
+  has produced a `400` yet.
 - **What MTN answers to a missing or malformed `X-Reference-Id`.** The simulator answers
   `400` with `INVALID_REFERENCE_ID`, which is *its own* code: no observation records MTN's,
   and inventing one that looked documented would be worse than an obviously local name. An
   unrecognised code maps to `UNKNOWN` anyway, so nothing depends on the guess.
-- What a `SUCCESSFUL` and a `FAILED` status actually contain, field by field.
+- **What a `FAILED` status actually contains, field by field, from the status query
+  itself.** A callback carrying `status`, `reason`, `externalId`, `amount`, `currency`,
+  `payer` and `payeeNote` was observed (see *Callbacks* above); whether a query response has
+  the same shape, or also carries `financialTransactionId`, was not checked directly.
 - Whether production returns codes absent from the documentation.
-- The shape and headers of a real callback, and whether it is ever the only notification.
 - **Whether a real Disbursements `transfer` and its status differ from what the *Disbursements*
   section above assumes** — a different response field, a code Collections does not use, a
   callback shaped differently. Mapped from documentation and the simulator only; a real call

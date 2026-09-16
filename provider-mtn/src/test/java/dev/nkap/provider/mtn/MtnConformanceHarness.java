@@ -77,7 +77,10 @@ final class MtnConformanceHarness implements ConformanceHarness {
     public void makeStatusUnrecognised() {
         // status stays a valid MomoStatus — the simulator only accepts the enum — but reason
         // is free text (QueryBehaviour.reason), unvalidated, which is exactly how an operator
-        // code MtnStatusMap has never seen reaches the adapter: reason is consulted first.
+        // code MtnStatusMap has never seen reaches the adapter. An unrecognised reason poisons
+        // the whole read to UNKNOWN even though status is a code this table does recognise
+        // (MtnStatusMap#stateFor) — a code this adapter has never seen is not license to
+        // trust the field it has.
         onQuery = "\"onQuery\":[{\"status\":\"FAILED\",\"reason\":\"SOMETHING_NOBODY_MAPS\"}]";
         redeclare();
     }

@@ -37,9 +37,11 @@ settle it. A `400` is `SubmitResult.Rejected`, carrying MTN's `code` and `messag
 definitive "this request is invalid", closed by ADR 0005. Anything else, a timeout, or an
 unreadable body is `ProviderUnavailableException`.
 
-**query** — `200` is mapped through `MtnStatusMap`; `reason` is consulted before `status`,
-so a `FAILED` carrying `SERVICE_UNAVAILABLE` (the operator's own system failing mid-answer)
-comes out `UNKNOWN`. `financialTransactionId` is read into `ProviderStatus.transactionId()`
+**query** — `200` is mapped through `MtnStatusMap`; both `status` and `reason` are read, and
+the more conclusive of the two wins, so a `FAILED` carrying `SERVICE_UNAVAILABLE` (the
+operator's own system failing mid-answer) comes out `FAILED` — `SERVICE_UNAVAILABLE` alone,
+with no status, is still `UNKNOWN`. `financialTransactionId` is read into
+`ProviderStatus.transactionId()`
 when the payment has settled, and is absent while it is pending. A `404`
 (`RESOURCE_NOT_FOUND`) is **`UNKNOWN`, not a failure** — Nkap persists the reference first,
 so a 404 is "never arrived" or "not visible yet", and one response cannot tell them apart;

@@ -348,12 +348,13 @@ What the run does show correctly, and worth keeping:
   roughly thirty-six hours between the fifth attempt and the sixth. The attempt count and
   the retry window are columns on the payment, not state held in memory, so the sixth
   attempt escalated correctly rather than starting the count over.
-- **A non-conclusive answer leaves no trace on the payment.** `updatedAt` stayed at the
-  millisecond of submission throughout, across all six attempts. That is correct given what
-  the reconciler believed it was dealing with — but it means a payment actively being chased
-  is, through `GET /payments/{reference}`, indistinguishable from one nobody has looked at
-  since it was created. Issue #113 tracks that gap, though its own worked example — this
-  payment — is one that should never have needed chasing at all.
+- **A discarded verdict leaves no trace on the payment.** `updatedAt` stayed at the
+  millisecond of submission throughout, across all six attempts — not because MTN's answer
+  was unclear, but because `stateFor` returned `UNKNOWN` every time and `UNKNOWN` writes
+  nothing. A payment actively being chased is, through `GET /payments/{reference}`,
+  indistinguishable from one nobody has looked at since it was created. Issue #113 tracks
+  that gap, though its own worked example — this payment — is one that should never have
+  needed chasing at all.
 
 ### What the simulator answers with
 
@@ -441,12 +442,15 @@ Three facts settle a design question this project had to answer without evidence
   header, nothing MTN-specific — anyone who learns the URL can post to it.
   `docs/positioning.md`'s "the callback endpoint stays unauthenticated, on purpose" argument
   is now backed by an observation, not only a design intent.
-- **The body carries no `referenceId`, only `externalId`.**
-  `MtnCollectionsAdapter.parseCallback` reads `referenceId` first and falls back to
-  `externalId` (`firstNonBlank(referenceId, externalId)`); since `submit` sets outgoing
-  `externalId` to Nkap's own reference in the first place, this body's `externalId`
-  round-trips to exactly the reference the payment was created under. The fallback this shape
-  depends on is exercised, not theoretical.
+- **The body carries no `referenceId`, only `externalId`.** Observed directly — but this
+  callback came from a `curl` submission whose `externalId` the test script made up itself,
+  never through the gateway, so nothing here says what `MtnCollectionsAdapter.parseCallback`
+  does with a body shaped like this. Reading the source rather than this run: `parseCallback`
+  reads `referenceId` first and falls back to `externalId`
+  (`firstNonBlank(referenceId, externalId)`), and `submit` sets outgoing `externalId` to
+  Nkap's own reference — so, if that reading holds, this shape would round-trip. That stays a
+  reading of the adapter, not something this run established, until a callback actually
+  reaches `CallbackController` (issue #116).
 - **MTN retries a delivery the receiver already answered `200` for.** See below.
 
 ### Callbacks are retried

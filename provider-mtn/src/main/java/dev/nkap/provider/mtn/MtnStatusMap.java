@@ -80,27 +80,112 @@ final class MtnStatusMap {
     }
 
     /**
-     * The state for a query response or a callback. {@code reason} is consulted before
-     * {@code status}, so a {@code FAILED} that carries {@code SERVICE_UNAVAILABLE} —
-     * the operator's system failing mid-answer — comes out {@code UNKNOWN}, not
-     * {@code FAILED}. {@code errorCode} is the {@code code} field of a non-200 body.
-     * Any token not in the table is {@link PaymentState#UNKNOWN}.
+     * The state for a query response or a callback. Both {@code status} and {@code reason}
+     * are read, not just one: whichever names a <strong>conclusive</strong> outcome —
+     * {@code SUCCEEDED}, {@code FAILED} or {@code EXPIRED}; not {@code PENDING}, which is a
+     * real answer but never a final one — wins. When both do and they disagree, the more
+     * specific of the two wins over the more general one — {@code EXPIRED} over a bare
+     * {@code FAILED}, MTN's own shape for a request that timed out. Two conclusive readings
+     * that disagree about the outcome itself, rather than one refining the other, are a
+     * contradiction, not a verdict: {@link PaymentState#UNKNOWN}, never a guess at which half
+     * to believe.
+     *
+     * <p>A {@code FAILED} that carries {@code SERVICE_UNAVAILABLE} — the operator's own
+     * system failing mid-answer — now comes out {@code FAILED}. {@code SERVICE_UNAVAILABLE}
+     * alone still maps to {@link PaymentState#UNKNOWN}, because on its own it says nothing
+     * about where the money went; but a {@code status} naming a real, conclusive verdict is
+     * not "nothing" just because {@code reason} had nothing to add to it. A {@code PENDING}
+     * paired with the same {@code SERVICE_UNAVAILABLE} is different: {@code PENDING} is not
+     * conclusive, so it does not survive an inconclusive {@code reason} the way a final
+     * verdict does — if the operator's own system is having trouble, its claim that the
+     * payment is merely still in flight is exactly as suspect as any other claim it might
+     * make right now, and the answer is {@link PaymentState#UNKNOWN}. A lone
+     * {@code PENDING}, with no {@code reason} at all, is unaffected and still
+     * {@link PaymentState#PENDING} — {@code reason} arriving <strong>without</strong> a
+     * {@code status} is, as ever, still {@link PaymentState#UNKNOWN}.
+     *
+     * <p>A token neither field's table has an entry for makes the whole answer
+     * {@link PaymentState#UNKNOWN}, even when the other field names a recognised verdict — a
+     * code this adapter has never seen is not license to trust the one it has.
+     * {@code errorCode} is the {@code code} field of a non-200 body, consulted only when
+     * neither {@code status} nor {@code reason} is present at all.
      */
     static PaymentState stateFor(String status, String reason, String errorCode) {
-        String key = firstNonBlank(reason, status, errorCode);
-        return TABLE.getOrDefault(key, UNKNOWN);
+        if (isBlank(status) && isBlank(reason)) {
+            return TABLE.getOrDefault(orEmpty(errorCode), UNKNOWN);
+        }
+        if (!isBlank(status) && !TABLE.containsKey(status)) {
+            return UNKNOWN;
+        }
+        if (!isBlank(reason) && !TABLE.containsKey(reason)) {
+            return UNKNOWN;
+        }
+
+        PaymentState statusState = isBlank(status) ? null : TABLE.get(status);
+        PaymentState reasonState = isBlank(reason) ? null : TABLE.get(reason);
+        boolean statusConclusive = isConclusive(statusState);
+        boolean reasonConclusive = isConclusive(reasonState);
+
+        if (statusConclusive && reasonConclusive) {
+            if (statusState == reasonState) {
+                return statusState;
+            }
+            if (refines(reasonState, statusState)) {
+                return reasonState;
+            }
+            if (refines(statusState, reasonState)) {
+                return statusState;
+            }
+            return UNKNOWN;
+        }
+        if (statusConclusive) {
+            return statusState;
+        }
+        if (reasonConclusive) {
+            return reasonState;
+        }
+        // Neither field named a conclusive verdict. A lone PENDING — no reason at all — is
+        // still PENDING; paired with anything else present, even something as inconclusive
+        // as SERVICE_UNAVAILABLE, it is not trustworthy enough to stand on its own.
+        if (isBlank(reason) && statusState == PENDING) {
+            return PENDING;
+        }
+        if (isBlank(status) && reasonState == PENDING) {
+            return PENDING;
+        }
+        return UNKNOWN;
     }
 
     static boolean isKnown(String code) {
         return code != null && TABLE.containsKey(code);
     }
 
-    private static String firstNonBlank(String... values) {
-        for (String value : values) {
-            if (value != null && !value.isBlank()) {
-                return value;
-            }
-        }
-        return "";
+    /**
+     * A final verdict: the payment will not be re-queried into a different outcome.
+     * {@code PENDING} is deliberately excluded — it is a real answer, but never a final one,
+     * so it must not out-rank, or be trusted alongside, an inconclusive companion reading the
+     * way {@code SUCCEEDED}, {@code FAILED} and {@code EXPIRED} do.
+     */
+    private static boolean isConclusive(PaymentState state) {
+        return state == SUCCEEDED || state == FAILED || state == EXPIRED;
+    }
+
+    /**
+     * Whether {@code specific} is a more precise verdict within the same outcome as
+     * {@code general}, rather than a different outcome altogether. Today this is only
+     * {@code EXPIRED} refining {@code FAILED} — MTN's observed shape for a timed-out request
+     * is {@code status: FAILED, reason: EXPIRED} — but the check does not assume which field
+     * the more specific reading arrives in.
+     */
+    private static boolean refines(PaymentState specific, PaymentState general) {
+        return specific == EXPIRED && general == FAILED;
+    }
+
+    private static boolean isBlank(String value) {
+        return value == null || value.isBlank();
+    }
+
+    private static String orEmpty(String value) {
+        return value == null ? "" : value;
     }
 }

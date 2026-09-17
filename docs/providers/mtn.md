@@ -118,12 +118,26 @@ adapter must pass (issue #80, `ProviderAdapterConformanceTest.an_unrecognised_an
 so an adapter that mapped an unrecognised code to `FAILED` would fail its own kit, not just
 disagree with a comment.
 
-**`reason` is consulted before `status`.** `MtnStatusMap.stateFor` checks `reason` first,
-then `status`, then the error body's `code` — whichever is non-blank first wins. The
-consequence is the least obvious behaviour in this adapter: a query or callback reporting
-`status: FAILED, reason: SERVICE_UNAVAILABLE` comes out `UNKNOWN`, not `FAILED`, because the
-`reason` — the operator's own system failing mid-answer — is what actually gets consulted,
-and it says nothing about whether the payment itself succeeded or failed.
+**Both `status` and `reason` are read, and the more conclusive one wins.**
+`MtnStatusMap.stateFor` does not pick one field over the other: it reads both, and whichever
+names a *conclusive* verdict — `SUCCEEDED`, `FAILED` or `EXPIRED` — is the answer. `PENDING`
+is deliberately not conclusive for this purpose: it is a real answer, but never a final one,
+so a lone `PENDING` with no `reason` at all is still `PENDING`, but a `PENDING` paired with
+anything else — even something as inconclusive as `SERVICE_UNAVAILABLE` — is not trustworthy
+enough to stand on its own, and the answer is `UNKNOWN`. When both fields name a conclusive
+verdict and they disagree, the more specific one wins: `status: FAILED, reason: EXPIRED`
+stays `EXPIRED`, because `EXPIRED` is a sharper answer than a bare `FAILED`. When both name a
+conclusive verdict and they flatly contradict each other — one says the payment succeeded,
+the other says it did not — neither wins: `UNKNOWN`, because a contradiction is not a verdict
+this gateway can assert. A code neither field's table has an entry for makes the whole answer
+`UNKNOWN` too, even when the other field names a conclusive verdict. `errorCode` is the last
+resort, consulted only when `status` and `reason` are both absent.
+
+Until issue #115, a query or callback reporting `status: FAILED, reason:
+SERVICE_UNAVAILABLE` came out `UNKNOWN`, not `FAILED` — the least obvious behaviour in this
+adapter, because the old rule read `reason` first and stopped there. `reason` alone
+genuinely says nothing about where the money went, but a `status` MTN did supply is not
+*nothing* just because `reason` had nothing to add to it; that pair is now `FAILED`.
 
 | Code | Appears in | Nkap records | Documented by MTN |
 | --- | --- | --- | --- |
@@ -302,28 +316,28 @@ MTN's published table is correct: `46733123450` *is* the *Failed* case, it says 
 `status`, on the first query, and the callback repeats the same pair.
 
 What turned that verdict into thirty-six hours of `UNKNOWN`, six reconciler attempts and an
-escalation is `MtnStatusMap.stateFor`, quoted here rather than paraphrased:
+escalation was `MtnStatusMap.stateFor` reading only `reason`: `INTERNAL_PROCESSING_ERROR`
+maps to `UNKNOWN`, and the terminal `status` was never consulted. That was right when `reason`
+arrives *instead of* a status, because the operator saying its own system failed says nothing
+about where the money went — but it was wrong here, because MTN had also supplied a real
+verdict in `status`, and the old rule discarded it.
 
-```java
-String key = firstNonBlank(reason, status, errorCode);
-return TABLE.getOrDefault(key, UNKNOWN);
-```
-
-`reason` wins. `INTERNAL_PROCESSING_ERROR` maps to `UNKNOWN`. The terminal `status` is never
-consulted. Everything this page says elsewhere about that rule is accurate — it is right when
-`reason` arrives *instead of* a status, because the operator saying its own system failed says
-nothing about where the money went. What this page did not say, and now must, is that the same
-rule discards a conclusive answer whenever MTN supplies both. See issue #115.
+**The reading that discarded this verdict is corrected by issue #115.** `stateFor` now reads
+both `status` and `reason` rather than picking one; see *Status and error mapping* above for
+the current rule, and `MtnStatusMapTest` for the pair `status: FAILED, reason:
+INTERNAL_PROCESSING_ERROR` returning `FAILED` from the map directly. What that test does not
+establish is the path from a real submission to a terminal payment — submit, query, map,
+persist, no escalation — against the real sandbox; nobody has run that since the fix. See
+*Still unknown*.
 
 ### What the reconciler did while `stateFor` discarded a conclusive verdict
 
 A payment submitted for `46733123450` was accepted (`202`, `CREATED → SUBMITTED`). MTN
 answered every subsequent status query with `status: FAILED, reason:
-INTERNAL_PROCESSING_ERROR` — a terminal verdict, every time. `MtnStatusMap.stateFor` read
-`reason` first, as it always does, and returned `UNKNOWN` — not because the operator was
+INTERNAL_PROCESSING_ERROR` — a terminal verdict, every time. `MtnStatusMap.stateFor`, as it
+stood then, read `reason` first and returned `UNKNOWN` — not because the operator was
 unclear, but because the rule never looked at `status` once `reason` matched. The reconciler
-then did exactly what `UNKNOWN` tells it to do: chase the payment. Observed in Nkap's own
-logs:
+did exactly what `UNKNOWN` tells it to do: chase the payment. Observed in Nkap's own logs:
 
 ```
 09:26:24  RECONCILER … not conclusive (INTERNAL_PROCESSING_ERROR), changing nothing
@@ -340,7 +354,9 @@ once the window was spent, an escalation. **This is not the founding rule workin
 intended.** MTN did not time out and it did not answer inconclusively; it answered `FAILED`
 on the first query and every one after. What happened is that `stateFor` threw the verdict
 away before the reconciler ever saw it, so the reconciler chased an answer that had already
-been given. See issue #115 for the defect and the decision it still has to make.
+been given. **The map-level defect is corrected by issue #115** — see *Status and error
+mapping* above — but whether a submission to `46733123450` now reaches `FAILED` without
+escalation, end to end against the real sandbox, has not been confirmed. See *Still unknown*.
 
 What the run does show correctly, and worth keeping:
 
@@ -516,6 +532,12 @@ way a balance and a status query are:
 
 Left open deliberately rather than guessed. Each is worth a pull request adding a line here.
 
+- **Whether a submission to `46733123450` now reaches `FAILED` without escalation, against
+  the real sandbox.** Issue #115 fixed the map-level defect — `MtnStatusMapTest` confirms
+  `stateFor("FAILED", "INTERNAL_PROCESSING_ERROR", "")` returns `FAILED` — but that is a unit
+  test of the map, not an observation of the path from a real submission through `submit`,
+  `query`, persistence and no escalation. Nobody has run that path against the real sandbox
+  since the fix.
 - **Whether a callback is ever the *only* notification**, or whether the status endpoint
   always catches up. `46733123453` announced its outcome by callback while the status
   endpoint still said `PENDING`; whether that endpoint would have reported `EXPIRED` later

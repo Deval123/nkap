@@ -287,14 +287,18 @@ Every published number has now been exercised directly against MTN, alongside
 `MtnSandboxIT`'s undocumented default. All six, in one table — MTN's own label is given only
 to show that its table was directionally right, not as a source for anything else here:
 
-| MSISDN | MTN's label | Status query answered | What Nkap records |
-| --- | --- | --- | --- |
-| `56733123453` | *Success* | `SUCCESSFUL`, `financialTransactionId` present, no `reason`, under 10s | `SUCCEEDED` |
-| `46733123451` | *Rejected* | `FAILED` / `APPROVAL_REJECTED`, under 10s | `FAILED` |
-| `46733123452` | *Timeout* | `FAILED` / `EXPIRED`, under 10s | `EXPIRED` |
-| `46733123450` | *Failed* | `FAILED` / `INTERNAL_PROCESSING_ERROR`, under 10s | `UNKNOWN` — see below |
-| `46733123454` | *Pending* | `CREATED`, still `CREATED` at 40 seconds | `UNKNOWN` — see below |
-| `46733123453` | *(not published — `MtnSandboxIT`'s default)* | `PENDING` at 10s and 40s, then `FAILED`/`EXPIRED` by callback | `EXPIRED` |
+| MSISDN | MTN's label | Status query answered |
+| --- | --- | --- |
+| `56733123453` | *Success* | `SUCCESSFUL`, `financialTransactionId` present, no `reason`, under 10s |
+| `46733123451` | *Rejected* | `FAILED` / `APPROVAL_REJECTED`, under 10s |
+| `46733123452` | *Timeout* | `FAILED` / `EXPIRED`, under 10s |
+| `46733123450` | *Failed* | `FAILED` / `INTERNAL_PROCESSING_ERROR`, under 10s |
+| `46733123454` | *Pending* | `CREATED`, still `CREATED` at 40 seconds |
+| `46733123453` | *(not published — `MtnSandboxIT`'s default)* | `PENDING` at 10s and 40s, then `FAILED`/`EXPIRED` by callback |
+
+What this gateway makes of each answer is not repeated here — see *Status and error mapping*
+above for the mapping, and `MtnStatusMappingDocTest` for the test that keeps it honest against
+the code.
 
 **Every timing above is a single sample, not a measurement.** Each row is one run against
 that MSISDN — two runs for `46733123450` and `46733123451` — and "under 10s" means only that

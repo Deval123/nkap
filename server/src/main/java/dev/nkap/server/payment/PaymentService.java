@@ -78,6 +78,9 @@ public class PaymentService {
         // reconciler log later about the same payment, can be filtered on it (issue #75).
         try (var ignored = MDC.putCloseable("reference", reference.toString())) {
             Payment created = Payment.create(reference, providerId, merchantId, intent);
+            // Which endpoint this payment is actually being submitted to, from
+            // configuration, before the operator is ever called (issue #122).
+            adapters.settlementEndpoint(providerId).ifPresent(created::recordProviderBaseUrl);
             payments.save(created);
             return submit(adapter, intent, reference);
         }

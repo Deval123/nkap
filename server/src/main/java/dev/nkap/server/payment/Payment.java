@@ -39,6 +39,17 @@ public final class Payment {
     private String providerReference = "";
     private String providerTransactionId = "";
 
+    // The installation's own base URL at the moment this payment was created — issue #122,
+    // recorded so a simulated settlement and a real one stop being byte-identical in the
+    // database. Known from configuration at birth, not learned from the operator the way
+    // providerReference/providerTransactionId are, so it is set exactly once, immediately
+    // after create()/createRefund() and before the first save() — persistence then makes it
+    // truly immutable: a BEFORE UPDATE trigger on the payment table (V9) refuses any change
+    // to this column once a row exists, regardless of what application code does afterwards.
+    // Blank for a payment that predates that migration, or if routing genuinely could not
+    // resolve one; never guessed.
+    private String providerBaseUrl = "";
+
     // Meaningful only on a SUCCEEDED collection: the running total reserved or already paid
     // out against it by a refund (ADR 0010). Reserved the moment a refund is created, not
     // only once it settles, because an in-flight refund that later succeeds must not have
@@ -104,14 +115,16 @@ public final class Payment {
      */
     public static Payment rehydrate(ReferenceId reference, ProviderId provider, String merchantId, PaymentIntent intent,
                                     PaymentState state, String providerReference, String providerTransactionId,
-                                    Instant createdAt, Instant updatedAt, List<PaymentTransition> history,
-                                    int reconcileAttempts, Instant reconcileDueAt, Instant escalatedAt,
-                                    Instant unresolvedSince, ReferenceId refundOf, long refundedMinor) {
+                                    String providerBaseUrl, Instant createdAt, Instant updatedAt,
+                                    List<PaymentTransition> history, int reconcileAttempts, Instant reconcileDueAt,
+                                    Instant escalatedAt, Instant unresolvedSince, ReferenceId refundOf,
+                                    long refundedMinor) {
         Payment payment = new Payment(reference, provider, merchantId, intent, refundOf, createdAt);
         payment.state = Objects.requireNonNull(state, "state");
         payment.updatedAt = Objects.requireNonNull(updatedAt, "updatedAt");
         payment.providerReference = providerReference == null ? "" : providerReference;
         payment.providerTransactionId = providerTransactionId == null ? "" : providerTransactionId;
+        payment.providerBaseUrl = providerBaseUrl == null ? "" : providerBaseUrl;
         payment.history.addAll(history);
         payment.reconcileAttempts = reconcileAttempts;
         payment.reconcileDueAt = reconcileDueAt;
@@ -176,6 +189,21 @@ public final class Payment {
         }
     }
 
+    /**
+     * Records which installation base URL this payment was actually submitted to (issue
+     * #122). Unlike {@link #recordProviderReference} and {@link #recordProviderTransactionId},
+     * this is not learned progressively from the operator — it is known from configuration
+     * the moment the payment is created, so the caller ({@link PaymentService},
+     * {@link RefundService}) sets it exactly once, before the first {@code save()}. A blank
+     * or {@code null} value leaves it blank, the same "not recorded" convention every other
+     * provenance-shaped field on this class uses.
+     */
+    public void recordProviderBaseUrl(String value) {
+        if (value != null && !value.isBlank()) {
+            this.providerBaseUrl = value;
+        }
+    }
+
     public ReferenceId reference() {
         return reference;
     }
@@ -202,6 +230,14 @@ public final class Payment {
 
     public String providerTransactionId() {
         return providerTransactionId;
+    }
+
+    /**
+     * The installation base URL this payment was submitted to, or {@code ""} for a payment
+     * that predates this being recorded at all (issue #122) — deliberately, not backfilled.
+     */
+    public String providerBaseUrl() {
+        return providerBaseUrl;
     }
 
     public Instant createdAt() {

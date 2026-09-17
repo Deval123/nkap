@@ -51,7 +51,8 @@ class MtnConfiguration {
     List<ProviderRouting> mtnRoutings(MtnProperties properties) {
         return properties.installations().stream()
                 .filter(MtnProperties.Installation::isConfigured)
-                .map(installation -> new ProviderRouting(providerId(installation), installation.currency()))
+                .map(installation -> new ProviderRouting(
+                        providerId(installation), installation.currency(), installation.baseUrl().toString()))
                 .toList();
     }
 

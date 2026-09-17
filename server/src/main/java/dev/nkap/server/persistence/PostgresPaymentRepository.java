@@ -60,13 +60,20 @@ public final class PostgresPaymentRepository implements PaymentRepository {
     // loaded the row without a lock -- writing it here would let such a caller silently
     // erase a concurrent reservation. reserveRefund/releaseRefundReservation below are the
     // only writers of that column, each a single atomic UPDATE in the database.
+    // provider_base_url is deliberately absent from the SET list below, the same reasoning
+    // as refunded_minor above: it is recorded once, in the same INSERT that first creates
+    // the row (Payment.create/createRefund's caller sets it before the first save()), and
+    // V9's own trigger refuses to let any UPDATE change it thereafter regardless. Listing it
+    // here too would let a future edit to this SET list quietly reintroduce a way to change
+    // it through this code path even if the trigger were ever loosened.
     private static final String UPSERT_PAYMENT = """
             INSERT INTO payment (reference, provider, merchant_id, operation, amount_minor, currency,
                                  counterparty_msisdn, payer_message, payee_note, provider_options,
-                                 state, provider_reference, provider_transaction_id, created_at, updated_at,
+                                 state, provider_reference, provider_transaction_id, provider_base_url,
+                                 created_at, updated_at,
                                  reconcile_attempts, reconcile_due_at, escalated_at, unresolved_since,
                                  refund_of, refunded_minor)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT (reference) DO UPDATE SET
                 state = EXCLUDED.state,
                 provider_reference = EXCLUDED.provider_reference,
@@ -122,6 +129,7 @@ public final class PostgresPaymentRepository implements PaymentRepository {
                 payment.state().name(),
                 payment.providerReference(),
                 payment.providerTransactionId(),
+                payment.providerBaseUrl().isBlank() ? null : payment.providerBaseUrl(),
                 OffsetDateTime.ofInstant(payment.createdAt(), ZoneOffset.UTC),
                 OffsetDateTime.ofInstant(payment.updatedAt(), ZoneOffset.UTC),
                 payment.reconcileAttempts(),
@@ -246,6 +254,7 @@ public final class PostgresPaymentRepository implements PaymentRepository {
                 PaymentState.valueOf(row.state),
                 row.providerReference,
                 row.providerTransactionId,
+                row.providerBaseUrl,
                 row.createdAt,
                 row.updatedAt,
                 history,
@@ -280,7 +289,7 @@ public final class PostgresPaymentRepository implements PaymentRepository {
     private record Row(
             String provider, String merchantId, String operation, long amountMinor, String currency,
             String counterpartyMsisdn, String payerMessage, String payeeNote, String providerOptions,
-            String state, String providerReference, String providerTransactionId,
+            String state, String providerReference, String providerTransactionId, String providerBaseUrl,
             Instant createdAt, Instant updatedAt,
             int reconcileAttempts, Instant reconcileDueAt, Instant escalatedAt, Instant unresolvedSince,
             UUID refundOf, long refundedMinor) {
@@ -299,6 +308,7 @@ public final class PostgresPaymentRepository implements PaymentRepository {
             rs.getString("state"),
             rs.getString("provider_reference"),
             rs.getString("provider_transaction_id"),
+            rs.getString("provider_base_url"),
             rs.getObject("created_at", OffsetDateTime.class).toInstant(),
             rs.getObject("updated_at", OffsetDateTime.class).toInstant(),
             rs.getInt("reconcile_attempts"),

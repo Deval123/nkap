@@ -56,7 +56,7 @@ class ConfiguredAdapterRegistryTest {
     void settlement_currency_comes_from_the_configured_routing() {
         ProviderId mtn = ProviderId.of("mtn");
         AdapterRegistry registry = new ConfiguredAdapterRegistry(
-                List.of(adapterFor("mtn")), List.of(new ProviderRouting(mtn, Currency.EUR)));
+                List.of(adapterFor("mtn")), List.of(new ProviderRouting(mtn, Currency.EUR, "http://simulator:8081")));
 
         assertThat(registry.settlementCurrency(mtn)).contains(Currency.EUR);
         assertThat(registry.settlementCurrency(ProviderId.of("orange"))).isEmpty();
@@ -67,7 +67,30 @@ class ConfiguredAdapterRegistryTest {
     void conflicting_routes_are_rejected() {
         ProviderId mtn = ProviderId.of("mtn");
         assertThatThrownBy(() -> new ConfiguredAdapterRegistry(List.of(adapterFor("mtn")),
-                List.of(new ProviderRouting(mtn, Currency.EUR), new ProviderRouting(mtn, Currency.XAF))))
+                List.of(new ProviderRouting(mtn, Currency.EUR, "http://simulator:8081"),
+                        new ProviderRouting(mtn, Currency.XAF, "http://simulator:8081"))))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("mtn");
+    }
+
+    @Test
+    @DisplayName("settlementEndpoint reports the base URL configured for a provider, and nothing for an unrouted one — issue #122")
+    void settlement_endpoint_comes_from_the_configured_routing() {
+        ProviderId mtn = ProviderId.of("mtn");
+        AdapterRegistry registry = new ConfiguredAdapterRegistry(
+                List.of(adapterFor("mtn")), List.of(new ProviderRouting(mtn, Currency.EUR, "http://simulator:8081")));
+
+        assertThat(registry.settlementEndpoint(mtn)).contains("http://simulator:8081");
+        assertThat(registry.settlementEndpoint(ProviderId.of("orange"))).isEmpty();
+    }
+
+    @Test
+    @DisplayName("two routes disagreeing on a provider's base URL is a configuration error")
+    void conflicting_endpoints_are_rejected() {
+        ProviderId mtn = ProviderId.of("mtn");
+        assertThatThrownBy(() -> new ConfiguredAdapterRegistry(List.of(adapterFor("mtn")),
+                List.of(new ProviderRouting(mtn, Currency.EUR, "http://simulator:8081"),
+                        new ProviderRouting(mtn, Currency.EUR, "https://sandbox.momodeveloper.mtn.com"))))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("mtn");
     }

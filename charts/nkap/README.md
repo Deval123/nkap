@@ -151,7 +151,7 @@ oversight:
   because that is a fact about the application code in each release, not about the migration
   scripts. **The safety of a rolling upgrade rests on every migration staying additive and
   backward-compatible with the previous release** — the discipline this project's own
-  migration history (`V1` through `V8`, each adding rather than rewriting) already follows,
+  migration history (`V1` through `V9`, each adding rather than rewriting) already follows,
   not a guarantee this chart can enforce for you. A migration that ever needs to *not* be
   additive is a migration that needs `maxUnavailable: 100%` (effectively: stop everything,
   then upgrade) for that one release, set by hand in that release's own values, not a chart

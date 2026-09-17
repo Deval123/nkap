@@ -296,6 +296,11 @@ to show that its table was directionally right, not as a source for anything els
 | `46733123454` | *Pending* | `CREATED`, still `CREATED` at 40 seconds | `UNKNOWN` — see below |
 | `46733123453` | *(not published — `MtnSandboxIT`'s default)* | `PENDING` at 10s and 40s, then `FAILED`/`EXPIRED` by callback | `EXPIRED` |
 
+**Every timing above is a single sample, not a measurement.** Each row is one run against
+that MSISDN — two runs for `46733123450` and `46733123451` — and "under 10s" means only that
+the first status query, made at the ten-second mark, already carried that answer. Nothing
+here was timed, and none of it is a latency characteristic.
+
 **The leading-pair discrepancy this page declined to resolve was real, and both numbers
 exist.** `56733123453` — the published *Success* entry, the digit this page would not guess
 was a typo — answers `SUCCESSFUL`. `46733123453` is a different, undocumented number: it is

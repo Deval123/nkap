@@ -6,7 +6,7 @@ import dev.nkap.provider.Capability;
 import dev.nkap.provider.PaymentIntent;
 import dev.nkap.provider.ProviderAdapter;
 import dev.nkap.server.provider.AdapterRegistry;
-import java.util.Map;
+import dev.nkap.server.provider.PublicBaseUrl;
 import org.slf4j.MDC;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -50,13 +50,15 @@ public class RefundService {
     private final PaymentRepository payments;
     private final AdapterRegistry adapters;
     private final PaymentService paymentService;
+    private final PublicBaseUrl publicBaseUrl;
     private final TransactionTemplate tx;
 
     public RefundService(PaymentRepository payments, AdapterRegistry adapters, PaymentService paymentService,
-                         PlatformTransactionManager txManager) {
+                         PublicBaseUrl publicBaseUrl, PlatformTransactionManager txManager) {
         this.payments = payments;
         this.adapters = adapters;
         this.paymentService = paymentService;
+        this.publicBaseUrl = publicBaseUrl;
         this.tx = new TransactionTemplate(txManager);
     }
 
@@ -86,7 +88,8 @@ public class RefundService {
             payments.reserveRefund(originalReference, amount);
 
             PaymentIntent refundIntent = new PaymentIntent(Capability.Operation.DISBURSE, amount,
-                    original.intent().counterpartyMsisdn(), note, note, Map.of());
+                    original.intent().counterpartyMsisdn(), note, note,
+                    publicBaseUrl.providerOptionsFor(original.provider()));
             Payment refund = Payment.createRefund(refundReference, original.provider(), original.merchantId(),
                     refundIntent, originalReference);
             payments.save(refund);

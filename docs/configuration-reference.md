@@ -63,6 +63,25 @@ consumers of a country-agnostic default.
 | --- | --- | --- |
 | `nkap.provider.default` | `mtn-cm` | `GET /balance` and `GET /account-holders/{msisdn}` are not per-country routes (issue #82); this is the installation they route to. If it names an installation that is not actually configured (its country is blank, see below), both routes fail with no adapter found for it. If it names one installation while another is also configured, calls silently land on the one this setting names, not the one a caller might assume from context — nothing checks that this points at the installation an operator actually intended to be the default. |
 
+## The public callback base URL (`nkap.public-base-url`)
+
+`PublicBaseUrl` binds this one, directly with `@Value`, and fills
+`PaymentIntent.providerOptions()` for every real submission (`PaymentController`,
+`RefundService`) with the URL both MTN adapters send as `X-Callback-Url` — the one thing that
+map carries today (issue #116). Not part of `nkap.provider.mtn.*`: it names this deployment's
+own reachable host, not an installation's endpoint at MTN, and it is the same value for every
+installation and every future provider — `<public-base-url>/callbacks/<providerId>`, the path
+`docs/openapi.yaml` defines, composed by Nkap rather than spelled out per deployment.
+
+Setting this property is what exposes `POST /callbacks/{providerId}` — unauthenticated by
+design — to the public internet at a real, guessable hostname. `docs/security-notes.md` §5
+already records what that costs in practice (a hostname stood up for testing was scanned
+within the hour); the design withstands it, since a callback settles nothing by itself.
+
+| Property | Default | What happens when it's wrong |
+| --- | --- | --- |
+| `nkap.public-base-url` | *(blank; set per deployment)* | Blank (the default) means `providerOptionsFor` returns an empty map, no `X-Callback-Url` is ever sent, and MTN never calls this deployment back at all — not an error, since a payment still resolves through the reconciler, only slower. Set but not an absolute URL (missing scheme or host) fails the application at startup, the same way a malformed MTN installation `base-url` does. Set to a real, reachable URL but naming a host MTN's `providerCallbackHost` was not given at API-user creation, every submission fails with `INVALID_CALLBACK_URL_HOST` (`docs/providers/mtn.md`) — a payment failure caused entirely by a mismatch between this property and an operator-side allow-list nothing here can see. Set to a host that is reachable but not the one actually recorded with MTN, callbacks are silently never delivered, indistinguishable from leaving it unset except that a submission now also carries a header. |
+
 ## MTN installations (`nkap.provider.mtn.installations[].*`)
 
 `MtnProperties` binds this block: a list, one entry per country (issue #82), each becoming

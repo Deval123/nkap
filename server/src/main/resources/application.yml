@@ -135,6 +135,18 @@ nkap:
     # Set true only for a local demo or a test with no TLS in front of it; a real
     # deployment never sets this.
     allow-insecure-endpoint-url: false
+  # The host this deployment is reachable at from the internet, so MTN's own callback (issue
+  # #116) has somewhere real to reach. Nkap composes the rest itself: <public-base-url>
+  # /callbacks/<providerId>, the path docs/openapi.yaml defines, so a deployment only ever
+  # spells its own host once, and never a full callback URL per installation.
+  #
+  # Unset (the default) means no X-Callback-Url header is ever sent, and MTN never calls
+  # back at all — a real payment still settles, resolved by the reconciler instead, only
+  # slower. Set but not an absolute URL fails the application at startup, not the first
+  # payment. Setting it is also an operational commitment: MTN's providerCallbackHost is an
+  # allow-list fixed at API-user creation and must name this same host, or every submission
+  # fails with INVALID_CALLBACK_URL_HOST (docs/providers/mtn.md).
+  public-base-url: ${NKAP_PUBLIC_BASE_URL:}
   provider:
     # The provider GET /balance and GET /account-holders/{msisdn} route to — those two
     # routes are not per-country (issue #82's "not in this slice"); POST /payments names

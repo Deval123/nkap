@@ -19,6 +19,7 @@ import dev.nkap.provider.SubmitResult;
 import dev.nkap.server.outbox.InMemoryOutbox;
 import dev.nkap.server.outbox.OutboxNotifier;
 import dev.nkap.server.provider.AdapterRegistry;
+import dev.nkap.server.provider.PublicBaseUrl;
 import dev.nkap.server.webhook.InMemoryWebhookEndpointStore;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -40,7 +41,8 @@ class RefundServiceTest {
     private final PaymentService paymentService = new PaymentService(payments, adapters,
             new OutboxNotifier(new InMemoryOutbox(), new InMemoryWebhookEndpointStore(), new ObjectMapper()),
             new DirectTransactionManager());
-    private final RefundService refunds = new RefundService(payments, adapters, paymentService, new DirectTransactionManager());
+    private final RefundService refunds = new RefundService(payments, adapters, paymentService,
+            new PublicBaseUrl(""), new DirectTransactionManager());
 
     RefundServiceTest() {
         when(adapters.require(MTN)).thenReturn(adapter);

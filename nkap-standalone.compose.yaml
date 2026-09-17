@@ -121,6 +121,16 @@ services:
       NKAP_DB_USER: nkap
       NKAP_DB_PASSWORD: ${NKAP_DB_PASSWORD:?set a database password}
 
+      # The host MTN should call back on -- this deployment's own reachable address, not an
+      # MTN setting. Blank (the default) means no X-Callback-Url is ever sent and MTN never
+      # calls back at all; a payment still settles, only slower, resolved by the reconciler
+      # instead. Set it to this gateway's real public https URL once one exists, and make
+      # sure it is the same host given to MTN as providerCallbackHost when your API user was
+      # created -- a mismatch fails every submission with INVALID_CALLBACK_URL_HOST rather
+      # than silently doing nothing. See docs/providers/mtn.md and
+      # docs/configuration-reference.md.
+      NKAP_PUBLIC_BASE_URL: ${NKAP_PUBLIC_BASE_URL:-}
+
       # One MTN installation. Every value below defaults to blank, which is
       # application.yml's own convention for "not configured" -- MtnConfiguration builds no
       # adapter for a blank country, and the gateway starts fine with none at all (you can

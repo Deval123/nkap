@@ -116,6 +116,10 @@ public final class MtnDisbursementsAdapter implements ProviderAdapter {
                 .header("X-Reference-Id", reference.toString())
                 .header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(transferBody(intent, reference)));
+        // Filled server-side from nkap.public-base-url, one property for every installation
+        // (dev.nkap.server.provider.PublicBaseUrl, issue #116) -- never by a caller of this
+        // adapter, and never blank by accident: an unset property means an absent key here,
+        // not an empty string.
         String callbackUrl = intent.providerOptions().get("callbackUrl");
         if (callbackUrl != null && !callbackUrl.isBlank()) {
             request.header("X-Callback-Url", callbackUrl);

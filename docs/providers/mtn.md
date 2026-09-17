@@ -200,11 +200,16 @@ enrols it in `PENDING`'s own non-conclusiveness rule for free, so `status: CREAT
 `PENDING` but `status: CREATED, reason: SERVICE_UNAVAILABLE` is `UNKNOWN`, exactly as it would
 be for a literal `PENDING`. `MtnStatusMapTest` pins both cases deliberately.
 
-**No deployment of Nkap sends `X-Callback-Url` today, so nothing here can currently provoke
-`INVALID_CALLBACK_URL_HOST`.** The header is meant to come from `intent.providerOptions()`,
-and no controller, service, or configuration property this project ships ever populates that
-map — see issue #116. The row above is correct as a statement of MTN's vocabulary; it is not
-yet a statement of anything a caller of this gateway can trigger.
+**A deployment can now send `X-Callback-Url`, which makes this row reachable — and makes it
+the other half of an operational commitment, not just MTN's vocabulary.**
+`PaymentIntent.providerOptions().get("callbackUrl")` is filled from `nkap.public-base-url`
+(`docs/configuration-reference.md`), a deployment-level setting composing
+`<public-base-url>/callbacks/<providerId>` for every real submission (issue #116). Setting it
+means `providerCallbackHost` must already name that same host at API-user creation
+(*`providerCallbackHost` is an allow-list, not a destination*, below) — a mismatch between
+the two is exactly this row, a real payment failing on a configuration error rather than an
+operator refusal. End-to-end confirmation that a deployment configured this way actually
+receives a callback has not been done; see *Still unknown*.
 
 ### Three namespaces, one flat map
 
@@ -583,6 +588,11 @@ way a balance and a status query are:
 
 Left open deliberately rather than guessed. Each is worth a pull request adding a line here.
 
+- **Whether a deployment configured with `nkap.public-base-url` actually receives a callback
+  from a real submission.** Issue #116 makes sending `X-Callback-Url` possible and adds the
+  test coverage that the header carries the right value for the right installation; nobody
+  has yet run a submission through a reachable deployment set up this way against the real
+  sandbox to confirm MTN calls back.
 - **Whether a callback is ever the *only* notification**, or whether the status endpoint
   always catches up. `46733123453` announced its outcome by callback while the status
   endpoint still said `PENDING`; whether that endpoint would have reported `EXPIRED` later

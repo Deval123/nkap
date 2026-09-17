@@ -43,10 +43,11 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
  * </pre>
  *
  * <p>{@code MSISDN} defaults to {@code 56733123453}, MTN's published <em>Success</em> test
- * number — it settles under ten seconds, unlike this repository's own {@code 46733123453}
- * fixture, which this test used to default to and which never concludes through the status
- * endpoint at all (see {@code docs/providers/mtn.md}, issue #117). Override it only to
- * exercise a different published outcome.
+ * number — settled quickly enough for a manual test to poll for it, observed once. This
+ * repository's own {@code 46733123453} fixture, which this test defaulted to before issue
+ * #117, never concludes through the status endpoint at all: its terminal state only arrives
+ * by callback, on a path no deployment of this gateway can currently receive (#116). Override
+ * the default only to exercise a different published outcome.
  */
 @EnabledIfEnvironmentVariable(named = "NKAP_MTN_SANDBOX", matches = ".+")
 class MtnSandboxIT {
@@ -76,15 +77,25 @@ class MtnSandboxIT {
         SubmitResult submitted = adapter.submit(intent, reference);
         System.out.println("submit  " + reference + " -> " + submitted);
 
-        ProviderStatus status = adapter.query(QuerySubject.of(reference), Capability.Operation.COLLECT);
-        System.out.println("query   " + reference + " -> " + status.state()
-                + " (" + status.providerStatusCode() + ")");
+        // The only observation behind this default settling is a query made ten seconds after
+        // submission, in one run, by a script that slept first — nothing has observed what it
+        // answers at t+0, and it may well still be PENDING that soon. Poll for a bounded window
+        // rather than asserting on the first query: giving a real operator time to reach a
+        // terminal state tests the adapter, not MTN's latency, and a single immediate query
+        // would be asserting a timing property nobody has actually observed.
+        ProviderStatus status = null;
+        for (int attempt = 0; attempt < 5; attempt++) {
+            if (attempt > 0) {
+                Thread.sleep(4000);
+            }
+            status = adapter.query(QuerySubject.of(reference), Capability.Operation.COLLECT);
+            System.out.println("query   " + reference + " -> " + status.state()
+                    + " (" + status.providerStatusCode() + ")");
+            if (status.state() != PaymentState.PENDING) {
+                break;
+            }
+        }
 
-        // 56733123453 is MTN's published Success case: SUCCESSFUL with a financialTransactionId,
-        // under ten seconds (docs/providers/mtn.md, "MTN's published test MSISDNs"). Tolerating
-        // PENDING here was written around the old default, 46733123453, which never settles
-        // through this endpoint at all; against a default that actually concludes, a weaker
-        // assertion would pass while checking nothing about whether the payment settled.
         assertThat(status.state()).as("query result").isEqualTo(PaymentState.SUCCEEDED);
         assertThat(status.transactionId())
                 .as("MTN's financialTransactionId for a SUCCESSFUL payment")

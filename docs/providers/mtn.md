@@ -96,13 +96,14 @@ adapter that requires them fails on every pending payment, which is most of them
 available through the query.
 
 **The sandbox settles in EUR** whatever country you think you are testing. `MtnSandboxIT`
-defaults to MSISDN `56733123453`, which settles within ten seconds; override it with
-`46733123453` — this test's own default before issue #117, and not one of MTN's published
-numbers — and it instead stays `PENDING` for well over three seconds, reaching a terminal
-state only by callback, roughly three minutes later (see *MTN's published test MSISDNs, and
-what they actually answer* below for the two numbers easy to confuse with it). A test that
-submits and immediately expects success fails for reasons that have nothing to do with the
-code under test, unless the MSISDN in play is known to settle quickly.
+defaults to MSISDN `56733123453`, which settled quickly enough for a manual test to poll for
+it; override it with `46733123453` — this test's own default before issue #117, and not one
+of MTN's published numbers — and it instead stays `PENDING` for well over three seconds,
+reaching a terminal state only by callback, roughly three minutes later (see *MTN's published
+test MSISDNs, and what they actually answer* below for the two numbers easy to confuse with
+it). A test that submits and asserts immediately, with no window for the operator to answer,
+fails for reasons that have nothing to do with the code under test — `MtnSandboxIT` itself
+polls rather than assumes.
 
 ## Status and error mapping
 

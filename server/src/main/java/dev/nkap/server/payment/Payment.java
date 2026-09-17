@@ -42,12 +42,12 @@ public final class Payment {
     // The installation's own base URL at the moment this payment was created — issue #122,
     // recorded so a simulated settlement and a real one stop being byte-identical in the
     // database. Known from configuration at birth, not learned from the operator the way
-    // providerReference/providerTransactionId are, so it is set exactly once, immediately
-    // after create()/createRefund() and before the first save() — persistence then makes it
-    // truly immutable: a BEFORE UPDATE trigger on the payment table (V9) refuses any change
-    // to this column once a row exists, regardless of what application code does afterwards.
-    // Blank for a payment that predates that migration, or if routing genuinely could not
-    // resolve one; never guessed.
+    // providerReference/providerTransactionId are, so it really is set exactly once:
+    // recordProviderBaseUrl refuses a second, different value in memory, immediately after
+    // create()/createRefund() and before the first save(); persistence then guards it too,
+    // a BEFORE UPDATE trigger on the payment table (V9) refusing any change to this column
+    // once a row exists. Blank for a payment that predates that migration, or if routing
+    // genuinely could not resolve one; never guessed.
     private String providerBaseUrl = "";
 
     // Meaningful only on a SUCCEEDED collection: the running total reserved or already paid
@@ -194,14 +194,24 @@ public final class Payment {
      * #122). Unlike {@link #recordProviderReference} and {@link #recordProviderTransactionId},
      * this is not learned progressively from the operator — it is known from configuration
      * the moment the payment is created, so the caller ({@link PaymentService},
-     * {@link RefundService}) sets it exactly once, before the first {@code save()}. A blank
-     * or {@code null} value leaves it blank, the same "not recorded" convention every other
-     * provenance-shaped field on this class uses.
+     * {@link RefundService}) calls this exactly once, before the first {@code save()}. A
+     * blank or {@code null} value leaves it blank, the same "not recorded" convention every
+     * other provenance-shaped field on this class uses. Calling it again with a
+     * <strong>different</strong> non-blank value throws — this method is where "set exactly
+     * once" is actually enforced, not just where the caller happens to call it once; the V9
+     * database trigger is the second, independent guard, once a row exists.
+     *
+     * @throws IllegalStateException if a different, non-blank value is already recorded
      */
     public void recordProviderBaseUrl(String value) {
-        if (value != null && !value.isBlank()) {
-            this.providerBaseUrl = value;
+        if (value == null || value.isBlank()) {
+            return;
         }
+        if (!providerBaseUrl.isBlank() && !providerBaseUrl.equals(value)) {
+            throw new IllegalStateException("providerBaseUrl is already recorded as '" + providerBaseUrl
+                    + "', cannot record '" + value + "' over it");
+        }
+        this.providerBaseUrl = value;
     }
 
     public ReferenceId reference() {

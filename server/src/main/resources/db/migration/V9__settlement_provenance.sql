@@ -11,10 +11,19 @@
 -- created. Self-describing (http://simulator:8081 needs no interpretation) and, unlike a
 -- deployment-level label such as nkap.environment: production, it cannot lie about itself.
 -- Set once, from configuration, never from a caller (the same reasoning as #116's callback
--- URL), and never again: a BEFORE UPDATE trigger refuses any change to it once a row exists.
--- payment itself is not append-only -- state and refunded_minor both move -- so
+-- URL), and never again: a trigger on this column alone refuses any change to it once a row
+-- exists. payment itself is not append-only -- state and refunded_minor both move -- so
 -- nkap_forbid_mutation() (V1) cannot be reused as-is; this guards one column instead of the
 -- whole row, the same discipline scaled down.
+--
+-- BEFORE UPDATE OF provider_base_url, not a bare BEFORE UPDATE: this column is never in any
+-- application UPDATE's SET list today (PostgresPaymentRepository's UPSERT_PAYMENT deliberately
+-- leaves it out, the same as refunded_minor), so a bare trigger would run on every payment
+-- write -- every transition, every refund reservation -- to check a column that statement
+-- never touched. The OF form fires only when a statement actually lists this column, which is
+-- exactly the one case worth checking, and still catches a future SET list that adds it back:
+-- the column being merely listed is what fires the trigger, whether or not the listed value
+-- happens to equal what is already there.
 --
 -- Every row that predates this migration gets NULL, and nothing here backfills one. The
 -- database this was found on already holds simulator payments and real-operator payments
@@ -52,5 +61,5 @@ END;
 $$;
 
 CREATE TRIGGER payment_provider_base_url_is_final
-    BEFORE UPDATE ON payment
+    BEFORE UPDATE OF provider_base_url ON payment
     FOR EACH ROW EXECUTE FUNCTION nkap_payment_provider_base_url_is_final();

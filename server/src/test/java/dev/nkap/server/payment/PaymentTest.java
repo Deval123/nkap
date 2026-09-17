@@ -50,6 +50,26 @@ class PaymentTest {
         assertThat(payment.providerBaseUrl())
                 .as("a blank value does not erase what is already recorded")
                 .isEqualTo("http://simulator:8081");
+
+        payment.recordProviderBaseUrl("http://simulator:8081");
+        assertThat(payment.providerBaseUrl())
+                .as("recording the same value again is not a change")
+                .isEqualTo("http://simulator:8081");
+    }
+
+    @Test
+    @DisplayName("recordProviderBaseUrl refuses a second, different value — issue #122")
+    void provider_base_url_cannot_be_changed_once_recorded() {
+        Payment payment = newPayment();
+        payment.recordProviderBaseUrl("http://simulator:8081");
+
+        assertThatThrownBy(() -> payment.recordProviderBaseUrl("https://sandbox.momodeveloper.mtn.com"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("http://simulator:8081")
+                .hasMessageContaining("sandbox.momodeveloper.mtn.com");
+        assertThat(payment.providerBaseUrl())
+                .as("the refused call must not have partially applied")
+                .isEqualTo("http://simulator:8081");
     }
 
     @Test

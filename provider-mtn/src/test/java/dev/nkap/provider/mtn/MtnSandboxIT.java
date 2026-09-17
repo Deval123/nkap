@@ -37,10 +37,17 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
  *   API_KEY=...
  *   CURRENCY=EUR
  *   COUNTRY=sandbox
- *   MSISDN=46733123453
+ *   MSISDN=56733123453
  *
  *   NKAP_MTN_SANDBOX=1 mvn -pl provider-mtn test -Dtest=MtnSandboxIT
  * </pre>
+ *
+ * <p>{@code MSISDN} defaults to {@code 56733123453}, MTN's published <em>Success</em> test
+ * number — settled quickly enough for a manual test to poll for it, observed once. This
+ * repository's own {@code 46733123453} fixture, which this test defaulted to before issue
+ * #117, never concludes through the status endpoint at all: its terminal state only arrives
+ * by callback, on a path no deployment of this gateway can currently receive (#116). Override
+ * the default only to exercise a different published outcome.
  */
 @EnabledIfEnvironmentVariable(named = "NKAP_MTN_SANDBOX", matches = ".+")
 class MtnSandboxIT {
@@ -64,18 +71,35 @@ class MtnSandboxIT {
         ReferenceId reference = ReferenceId.newReference();
         PaymentIntent intent = new PaymentIntent(Capability.Operation.COLLECT,
                 Money.of(100, profile.currency()),
-                env.getOrDefault("MSISDN", "46733123453"),
+                env.getOrDefault("MSISDN", "56733123453"),
                 "nkap manual sandbox test", "nkap manual sandbox test", Map.of());
 
         SubmitResult submitted = adapter.submit(intent, reference);
         System.out.println("submit  " + reference + " -> " + submitted);
 
-        ProviderStatus status = adapter.query(QuerySubject.of(reference), Capability.Operation.COLLECT);
-        System.out.println("query   " + reference + " -> " + status.state()
-                + " (" + status.providerStatusCode() + ")");
+        // The only observation behind this default settling is a query made ten seconds after
+        // submission, in one run, by a script that slept first — nothing has observed what it
+        // answers at t+0, and it may well still be PENDING that soon. Poll for a bounded window
+        // rather than asserting on the first query: giving a real operator time to reach a
+        // terminal state tests the adapter, not MTN's latency, and a single immediate query
+        // would be asserting a timing property nobody has actually observed.
+        ProviderStatus status = null;
+        for (int attempt = 0; attempt < 5; attempt++) {
+            if (attempt > 0) {
+                Thread.sleep(4000);
+            }
+            status = adapter.query(QuerySubject.of(reference), Capability.Operation.COLLECT);
+            System.out.println("query   " + reference + " -> " + status.state()
+                    + " (" + status.providerStatusCode() + ")");
+            if (status.state() != PaymentState.PENDING) {
+                break;
+            }
+        }
 
-        assertThat(status.state()).isIn(
-                PaymentState.PENDING, PaymentState.SUCCEEDED, PaymentState.UNKNOWN);
+        assertThat(status.state()).as("query result").isEqualTo(PaymentState.SUCCEEDED);
+        assertThat(status.transactionId())
+                .as("MTN's financialTransactionId for a SUCCESSFUL payment")
+                .isPresent();
     }
 
     private static Map<String, String> readEnv(Path file) throws IOException {

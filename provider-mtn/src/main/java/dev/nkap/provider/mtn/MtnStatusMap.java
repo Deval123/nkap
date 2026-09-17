@@ -61,6 +61,14 @@ final class MtnStatusMap {
     static final Map<String, PaymentState> TABLE = Map.ofEntries(
             Map.entry("SUCCESSFUL", SUCCEEDED),
             Map.entry("PENDING", PENDING),
+            // Not in ADR 0004 / DOCUMENTED_CODES: MTN's own Pending test MSISDN answers this,
+            // observed once, against one MSISDN, in one sandbox run (issue #117; see
+            // docs/providers/mtn.md, "MTN's published test MSISDNs"). PENDING over UNKNOWN
+            // because both are non-terminal and both get reconciled — the choice is about what
+            // a merchant is told, not escalation or the ledger — and it inherits PENDING's own
+            // non-conclusiveness for free: alone it is PENDING, beside an inconclusive reason
+            // it is UNKNOWN, same as any other PENDING.
+            Map.entry("CREATED", PENDING),
             Map.entry("EXPIRED", EXPIRED),
             // A bare FAILED with no recognised reason is still the operator saying "no".
             Map.entry("FAILED", FAILED),

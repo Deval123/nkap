@@ -325,10 +325,33 @@ verdict in `status`, and the old rule discarded it.
 **The reading that discarded this verdict is corrected by issue #115.** `stateFor` now reads
 both `status` and `reason` rather than picking one; see *Status and error mapping* above for
 the current rule, and `MtnStatusMapTest` for the pair `status: FAILED, reason:
-INTERNAL_PROCESSING_ERROR` returning `FAILED` from the map directly. What that test does not
-establish is the path from a real submission to a terminal payment — submit, query, map,
-persist, no escalation — against the real sandbox; nobody has run that since the fix. See
-*Still unknown*.
+INTERNAL_PROCESSING_ERROR` returning `FAILED` from the map directly.
+
+**Confirmed end to end, 2026-09-17.** One payment, submitted through the gateway —
+`POST /payments`, not `curl` against MTN — to MSISDN `46733123450`, `100 EUR`, installation
+`mtn-cm`. Its history, as `GET /payments/{reference}` returned it:
+
+```json
+{"from":"CREATED","to":"SUBMITTED","at":"2026-09-17T17:53:41.869732Z",
+ "cause":"SUBMIT_RESPONSE","operatorCode":""}
+{"from":"SUBMITTED","to":"FAILED","at":"2026-09-17T17:53:48.830327Z",
+ "cause":"RECONCILER","operatorCode":"INTERNAL_PROCESSING_ERROR"}
+```
+
+Reference `76874635-e92a-41b4-b13a-f3b3522a3c1c`. Resolved on the reconciler's first pass —
+where the old behaviour spent six attempts and then escalated. The attribution is the
+evidence, not the state: `cause: RECONCILER` with `operatorCode: INTERNAL_PROCESSING_ERROR`
+is the exact pair that used to be discarded, now named on the transition that settled it —
+that is what makes this a confirmation of #115, not merely a payment that happened to fail.
+
+The outbox produced an event for this terminal transition (`OutboxRelay` logged delivery
+attempts) — for thirty-six hours the old behaviour produced none, because the payment never
+went terminal. Delivery failed in this run because the registered endpoint belonged to the
+demo stack and nothing was listening; that is a fact about the demo endpoint, not about the
+fix.
+
+This confirms the fix as it stands on `main`, run on a stack built from the working tree, not
+a published image.
 
 ### What the reconciler did while `stateFor` discarded a conclusive verdict
 
@@ -355,8 +378,9 @@ intended.** MTN did not time out and it did not answer inconclusively; it answer
 on the first query and every one after. What happened is that `stateFor` threw the verdict
 away before the reconciler ever saw it, so the reconciler chased an answer that had already
 been given. **The map-level defect is corrected by issue #115** — see *Status and error
-mapping* above — but whether a submission to `46733123450` now reaches `FAILED` without
-escalation, end to end against the real sandbox, has not been confirmed. See *Still unknown*.
+mapping* above, and *`46733123450` is settled, and it is neither reading this page carried
+before* for the end-to-end confirmation: the reconciler's first pass now resolves it, not a
+sixth attempt and an escalation.
 
 What the run does show correctly, and worth keeping:
 
@@ -532,12 +556,6 @@ way a balance and a status query are:
 
 Left open deliberately rather than guessed. Each is worth a pull request adding a line here.
 
-- **Whether a submission to `46733123450` now reaches `FAILED` without escalation, against
-  the real sandbox.** Issue #115 fixed the map-level defect — `MtnStatusMapTest` confirms
-  `stateFor("FAILED", "INTERNAL_PROCESSING_ERROR", "")` returns `FAILED` — but that is a unit
-  test of the map, not an observation of the path from a real submission through `submit`,
-  `query`, persistence and no escalation. Nobody has run that path against the real sandbox
-  since the fix.
 - **Whether a callback is ever the *only* notification**, or whether the status endpoint
   always catches up. `46733123453` announced its outcome by callback while the status
   endpoint still said `PENDING`; whether that endpoint would have reported `EXPIRED` later

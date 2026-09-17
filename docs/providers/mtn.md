@@ -208,8 +208,8 @@ the other half of an operational commitment, not just MTN's vocabulary.**
 means `providerCallbackHost` must already name that same host at API-user creation
 (*`providerCallbackHost` is an allow-list, not a destination*, below) — a mismatch between
 the two is exactly this row, a real payment failing on a configuration error rather than an
-operator refusal. End-to-end confirmation that a deployment configured this way actually
-receives a callback has not been done; see *Still unknown*.
+operator refusal. Confirmed end to end: see *A callback reaches the gateway* under
+*Callbacks* below.
 
 ### Three namespaces, one flat map
 
@@ -516,13 +516,14 @@ Three facts settle a design question this project had to answer without evidence
   is now backed by an observation, not only a design intent.
 - **The body carries no `referenceId`, only `externalId`.** Observed directly — but this
   callback came from a `curl` submission whose `externalId` the test script made up itself,
-  never through the gateway, so nothing here says what `MtnCollectionsAdapter.parseCallback`
-  does with a body shaped like this. Reading the source rather than this run: `parseCallback`
-  reads `referenceId` first and falls back to `externalId`
+  never through the gateway, so this run alone said nothing about what
+  `MtnCollectionsAdapter.parseCallback` does with a body shaped like this. The reading was:
+  `parseCallback` reads `referenceId` first and falls back to `externalId`
   (`firstNonBlank(referenceId, externalId)`), and `submit` sets outgoing `externalId` to
-  Nkap's own reference — so, if that reading holds, this shape would round-trip. That stays a
-  reading of the adapter, not something this run established, until a callback actually
-  reaches `CallbackController` (issue #116).
+  Nkap's own reference, so this shape should round-trip. *A callback reaches the gateway*
+  below confirms it: a payment submitted through `POST /payments` settled by `CALLBACK`,
+  which only happens once `parseCallback` has resolved the callback back to that payment's
+  own reference.
 - **MTN retries a delivery the receiver already answered `200` for.** See below.
 
 ### Callbacks are retried
@@ -537,6 +538,42 @@ One further delivery attempt was cut short before it reached the recorder, which
 single-threaded and still busy handling the first. So **one repeat is a floor, not a
 count**: at least one attempt was lost to the recorder's own limitation, not to MTN, and
 nothing here establishes MTN's retry ceiling or schedule.
+
+### A callback reaches the gateway
+
+2026-09-17, a `cloudflared` tunnel in front of the gateway itself — not a recorder this time —
+with a second MTN API user created for the occasion, `providerCallbackHost` pinned to the
+tunnel's hostname, and `nkap.public-base-url` set to it (issue #116). One payment, submitted
+through `POST /payments` to MSISDN `46733123451`, `100 EUR`, installation `mtn-cm`.
+
+The payment's history, as `GET /payments/{reference}` returned it:
+
+```json
+{"from":"CREATED","to":"SUBMITTED","cause":"SUBMIT_RESPONSE","operatorCode":""}
+{"from":"SUBMITTED","to":"FAILED","cause":"CALLBACK","operatorCode":"APPROVAL_REJECTED"}
+```
+
+Reference `cae20264-012b-49c7-b12a-3dff5fa00e1e`. Terminal within fifteen seconds of
+submission — one run, not a latency characteristic, the same caveat *Every timing above is a
+single sample* makes for the six-MSISDN table.
+
+**The attribution is the finding, and one detail makes it unambiguous.** The reconciler for
+this run was configured with a two-minute interval, so it had not run even once in those
+fifteen seconds. `cause: CALLBACK` is the only way this payment could have settled: a callback
+reached `CallbackController`, `parseCallback` resolved it to this reference,
+`SettlementService` confirmed it by querying MTN, and only then was the transition written.
+This is the first callback any deployment of this gateway has received — the receiving half
+has been complete and unreachable since before 1.0.0.
+
+**`docker compose logs gateway | grep -i callback` returns nothing.** The callback arrived,
+was confirmed by a query to MTN, and settled a payment, and the gateway logged not one word
+of any of it. The confirmation above is entirely from the payment's own history, not from
+logs — a reader reproducing this should not go looking for a log line that is not there.
+
+This ran against the fix as it stands on `main`, on a stack built from the working tree, not
+a published image. The tunnel's hostname is gone — quick tunnels are ephemeral — so the API
+user created for it can never receive anything again; this specific run cannot simply be
+repeated by following this page.
 
 ## Disbursements
 
@@ -588,11 +625,6 @@ way a balance and a status query are:
 
 Left open deliberately rather than guessed. Each is worth a pull request adding a line here.
 
-- **Whether a deployment configured with `nkap.public-base-url` actually receives a callback
-  from a real submission.** Issue #116 makes sending `X-Callback-Url` possible and adds the
-  test coverage that the header carries the right value for the right installation; nobody
-  has yet run a submission through a reachable deployment set up this way against the real
-  sandbox to confirm MTN calls back.
 - **Whether a callback is ever the *only* notification**, or whether the status endpoint
   always catches up. `46733123453` announced its outcome by callback while the status
   endpoint still said `PENDING`; whether that endpoint would have reported `EXPIRED` later

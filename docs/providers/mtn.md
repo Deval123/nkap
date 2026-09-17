@@ -521,9 +521,12 @@ Three facts settle a design question this project had to answer without evidence
   `parseCallback` reads `referenceId` first and falls back to `externalId`
   (`firstNonBlank(referenceId, externalId)`), and `submit` sets outgoing `externalId` to
   Nkap's own reference, so this shape should round-trip. *A callback reaches the gateway*
-  below confirms it: a payment submitted through `POST /payments` settled by `CALLBACK`,
-  which only happens once `parseCallback` has resolved the callback back to that payment's
-  own reference.
+  below confirms the round-trip itself: a payment submitted through `POST /payments` settled
+  by `CALLBACK`, which cannot happen unless `parseCallback` resolved that callback back to
+  the payment's own reference. It does **not** confirm which field carried the match —
+  whether MTN echoed a `referenceId` this time, or the fallback to `externalId` is what
+  actually ran — because the callback's body was never logged (issue #129) and so was never
+  recorded. See *Still unknown*.
 - **MTN retries a delivery the receiver already answered `200` for.** See below.
 
 ### Callbacks are retried
@@ -567,8 +570,10 @@ has been complete and unreachable since before 1.0.0.
 
 **`docker compose logs gateway | grep -i callback` returns nothing.** The callback arrived,
 was confirmed by a query to MTN, and settled a payment, and the gateway logged not one word
-of any of it. The confirmation above is entirely from the payment's own history, not from
-logs — a reader reproducing this should not go looking for a log line that is not there.
+of any of it (issue #129). The confirmation above is entirely from the payment's own history,
+not from logs — a reader reproducing this should not go looking for a log line that is not
+there, and neither the callback's body nor which field it carried the reference in was ever
+recorded anywhere.
 
 This ran against the fix as it stands on `main`, on a stack built from the working tree, not
 a published image. The tunnel's hostname is gone — quick tunnels are ephemeral — so the API
@@ -625,6 +630,11 @@ way a balance and a status query are:
 
 Left open deliberately rather than guessed. Each is worth a pull request adding a line here.
 
+- **Which field a callback for a gateway-submitted payment actually carries — `referenceId`
+  or only `externalId` — and therefore whether `parseCallback`'s fallback to `externalId` has
+  ever been exercised against a real operator.** *A callback reaches the gateway* confirms the
+  round-trip resolves, but not by which branch: the callback's body was never logged
+  (issue #129), so nothing recorded which one MTN actually sent.
 - **Whether a callback is ever the *only* notification**, or whether the status endpoint
   always catches up. `46733123453` announced its outcome by callback while the status
   endpoint still said `PENDING`; whether that endpoint would have reported `EXPIRED` later

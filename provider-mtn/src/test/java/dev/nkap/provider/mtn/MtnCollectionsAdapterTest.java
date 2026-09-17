@@ -16,6 +16,8 @@ import dev.nkap.provider.ProviderUnavailableException;
 import dev.nkap.provider.QuerySubject;
 import dev.nkap.provider.RawCallback;
 import dev.nkap.provider.SubmitResult;
+import dev.nkap.provider.mtn.StubMtn.StubResponse;
+import java.net.URI;
 import java.time.Duration;
 import java.util.Map;
 import org.junit.jupiter.api.AfterAll;
@@ -59,6 +61,10 @@ class MtnCollectionsAdapterTest {
     private MtnProfile profile() {
         return new MtnProfile(simulator.baseUrl(), "sandbox", "sub-key", "api-user", "api-key",
                 Currency.EUR, "sandbox");
+    }
+
+    private MtnProfile profileAt(URI base) {
+        return new MtnProfile(base, "sandbox", "sub-key", "api-user", "api-key", Currency.EUR, "sandbox");
     }
 
     private MtnCollectionsAdapter adapter() {
@@ -147,5 +153,34 @@ class MtnCollectionsAdapterTest {
 
         assertThat(event.reference()).isEqualTo(reference);
         assertThat(event.status().state()).isEqualTo(PaymentState.SUCCEEDED);
+    }
+
+    /**
+     * {@code X-Callback-Url} (issue #116): {@code intent.providerOptions().get("callbackUrl")}
+     * is the only thing that puts it on the wire, and this is the one place that decides
+     * whether MTN can ever call this deployment back at all. {@code server} fills that map
+     * from {@code nkap.public-base-url} ({@code PublicBaseUrl}) — nothing here assumes that;
+     * the adapter only ever sees a plain map.
+     */
+    @Test
+    @DisplayName("X-Callback-Url is sent when providerOptions carries callbackUrl, and never sent when it does not")
+    void the_callback_url_header_follows_provider_options() throws Exception {
+        try (StubMtn mtn = new StubMtn()) {
+            mtn.respondWith(request -> request.path().equals("/collection/token/")
+                    ? new StubResponse(200, StubMtn.tokenJson("tok", 3600))
+                    : new StubResponse(202, ""));
+            MtnCollectionsAdapter adapter = new MtnCollectionsAdapter(profileAt(mtn.baseUrl()), Duration.ofSeconds(3));
+
+            adapter.submit(collectIntent(), ReferenceId.newReference());
+            PaymentIntent withCallback = new PaymentIntent(Capability.Operation.COLLECT, Money.of(5000, Currency.EUR),
+                    "46733123453", "", "", Map.of("callbackUrl", "https://gateway.example/callbacks/mtn-cm"));
+            adapter.submit(withCallback, ReferenceId.newReference());
+
+            assertThat(mtn.requests).filteredOn(r -> r.path().equals("/collection/v1_0/requesttopay"))
+                    .satisfiesExactly(
+                            withoutHeader -> assertThat(withoutHeader.header("X-Callback-Url")).isNull(),
+                            withHeader -> assertThat(withHeader.header("X-Callback-Url"))
+                                    .isEqualTo("https://gateway.example/callbacks/mtn-cm"));
+        }
     }
 }

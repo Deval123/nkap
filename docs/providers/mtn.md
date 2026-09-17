@@ -338,11 +338,11 @@ INTERNAL_PROCESSING_ERROR` returning `FAILED` from the map directly.
  "cause":"RECONCILER","operatorCode":"INTERNAL_PROCESSING_ERROR"}
 ```
 
-Reference `76874635-e92a-41b4-b13a-f3b3522a3c1c`. Seven seconds from submission to a terminal
-verdict, on the reconciler's first pass. The attribution is the evidence, not the state:
-`cause: RECONCILER` with `operatorCode: INTERNAL_PROCESSING_ERROR` is the exact pair that used
-to be discarded, now named on the transition that settled it — that is what makes this a
-confirmation of #115, not merely a payment that happened to fail.
+Reference `76874635-e92a-41b4-b13a-f3b3522a3c1c`. Resolved on the reconciler's first pass —
+where the old behaviour spent six attempts and then escalated. The attribution is the
+evidence, not the state: `cause: RECONCILER` with `operatorCode: INTERNAL_PROCESSING_ERROR`
+is the exact pair that used to be discarded, now named on the transition that settled it —
+that is what makes this a confirmation of #115, not merely a payment that happened to fail.
 
 The outbox produced an event for this terminal transition (`OutboxRelay` logged delivery
 attempts) — for thirty-six hours the old behaviour produced none, because the payment never

@@ -95,12 +95,14 @@ adapter that requires them fails on every pending payment, which is most of them
 **A 202 really is empty.** `Content-Length: 0`, no body at all. The outcome is only ever
 available through the query.
 
-**The sandbox settles in EUR** whatever country you think you are testing, and
-`MtnSandboxIT`'s default test MSISDN, `46733123453`, stays `PENDING` for well over three
-seconds. It is not one of MTN's published numbers — see *MTN's published test MSISDNs, and
-what they actually answer* below for the two that are easy to confuse with it. A test that
+**The sandbox settles in EUR** whatever country you think you are testing. `MtnSandboxIT`
+defaults to MSISDN `56733123453`, which settles within ten seconds; override it with
+`46733123453` — this test's own default before issue #117, and not one of MTN's published
+numbers — and it instead stays `PENDING` for well over three seconds, reaching a terminal
+state only by callback, roughly three minutes later (see *MTN's published test MSISDNs, and
+what they actually answer* below for the two numbers easy to confuse with it). A test that
 submits and immediately expects success fails for reasons that have nothing to do with the
-code under test.
+code under test, unless the MSISDN in play is known to settle quickly.
 
 ## Status and error mapping
 
@@ -143,6 +145,7 @@ genuinely says nothing about where the money went, but a `status` MTN did supply
 | --- | --- | --- | --- |
 | `SUCCESSFUL` | `status` | `SUCCEEDED` | yes |
 | `PENDING` | `status` | `PENDING` | yes |
+| `CREATED` | `status` | `PENDING` | no |
 | `EXPIRED` | `status` | `EXPIRED` | yes |
 | `FAILED` | `status` | `FAILED` | no |
 | `PAYER_NOT_FOUND` | `reason` | `FAILED` | yes |
@@ -181,6 +184,20 @@ than `UNKNOWN` is a narrow, deliberate exception to "anything absent is `UNKNOWN
 operator's `status` field itself is never absent or unrecognised here, only its `reason` is,
 and a `status` of literally `FAILED` is already the verdict — there is nothing left for a
 missing `reason` to cast doubt on.
+
+**`CREATED` is in the map and not documented by MTN either — same asymmetry, a different
+reason.** MTN's own *Pending* test MSISDN, `46733123454`, answers `status: CREATED` and had
+not moved after forty seconds (see *MTN's published test MSISDNs* below); `CREATED` itself is
+absent from ADR 0004's fourteen documented codes. The row rests on one observation, against
+one MSISDN, in one sandbox run — enough by this project's own standard, since an observed
+code is no longer license to fall back on issue #80's `UNKNOWN` rule, but the reason it is
+recorded as a comment on `MtnStatusMap.TABLE` rather than folded silently into the table.
+`PENDING`, not `UNKNOWN`, because both are non-terminal and both get reconciled either way —
+the choice is about what a merchant is told ("the operator has it and has not acted"), not
+about escalation or the ledger — and it costs nothing extra: mapping `CREATED` to `PENDING`
+enrols it in `PENDING`'s own non-conclusiveness rule for free, so `status: CREATED` alone is
+`PENDING` but `status: CREATED, reason: SERVICE_UNAVAILABLE` is `UNKNOWN`, exactly as it would
+be for a literal `PENDING`. `MtnStatusMapTest` pins both cases deliberately.
 
 **No deployment of Nkap sends `X-Callback-Url` today, so nothing here can currently provoke
 `INVALID_CALLBACK_URL_HOST`.** The header is meant to come from `intent.providerOptions()`,
@@ -289,12 +306,12 @@ by adopting MTN's table.
 shape this page has been listing as unknown. `600198217` in this run: a short numeric id, not
 a UUID.
 
-**`CREATED` is a real MTN status absent from `MtnStatusMap`'s table.** `46733123454` answers
-`status: CREATED` and had not moved after 40 seconds. Falling to `UNKNOWN` is issue #80's rule
-working exactly as intended, not a defect — but the code is no longer unrecognised now that it
-has been observed. Whether to add a row mapping it to `PENDING` is a mapping change with a
-`MtnStatusMappingDocTest` update attached, proposed in this pull request's description rather
-than made in this slice.
+**`CREATED` is a real MTN status, and issue #117 adds it to `MtnStatusMap`'s table.**
+`46733123454` answers `status: CREATED` and had not moved after 40 seconds. Falling to
+`UNKNOWN` was issue #80's rule working exactly as intended, not a defect — but the code is no
+longer unrecognised now that it has been observed, and `PENDING` describes it precisely: the
+operator has accepted the payment and has not yet acted on it. See *Status and error mapping*
+above for the row and the full reasoning.
 
 **A callback can carry a verdict the status endpoint was still withholding.** `46733123453`
 answered `PENDING` twice, then announced `FAILED`/`EXPIRED` by callback before the status

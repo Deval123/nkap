@@ -37,10 +37,16 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
  *   API_KEY=...
  *   CURRENCY=EUR
  *   COUNTRY=sandbox
- *   MSISDN=46733123453
+ *   MSISDN=56733123453
  *
  *   NKAP_MTN_SANDBOX=1 mvn -pl provider-mtn test -Dtest=MtnSandboxIT
  * </pre>
+ *
+ * <p>{@code MSISDN} defaults to {@code 56733123453}, MTN's published <em>Success</em> test
+ * number — it settles under ten seconds, unlike this repository's own {@code 46733123453}
+ * fixture, which this test used to default to and which never concludes through the status
+ * endpoint at all (see {@code docs/providers/mtn.md}, issue #117). Override it only to
+ * exercise a different published outcome.
  */
 @EnabledIfEnvironmentVariable(named = "NKAP_MTN_SANDBOX", matches = ".+")
 class MtnSandboxIT {
@@ -64,7 +70,7 @@ class MtnSandboxIT {
         ReferenceId reference = ReferenceId.newReference();
         PaymentIntent intent = new PaymentIntent(Capability.Operation.COLLECT,
                 Money.of(100, profile.currency()),
-                env.getOrDefault("MSISDN", "46733123453"),
+                env.getOrDefault("MSISDN", "56733123453"),
                 "nkap manual sandbox test", "nkap manual sandbox test", Map.of());
 
         SubmitResult submitted = adapter.submit(intent, reference);
@@ -74,8 +80,15 @@ class MtnSandboxIT {
         System.out.println("query   " + reference + " -> " + status.state()
                 + " (" + status.providerStatusCode() + ")");
 
-        assertThat(status.state()).isIn(
-                PaymentState.PENDING, PaymentState.SUCCEEDED, PaymentState.UNKNOWN);
+        // 56733123453 is MTN's published Success case: SUCCESSFUL with a financialTransactionId,
+        // under ten seconds (docs/providers/mtn.md, "MTN's published test MSISDNs"). Tolerating
+        // PENDING here was written around the old default, 46733123453, which never settles
+        // through this endpoint at all; against a default that actually concludes, a weaker
+        // assertion would pass while checking nothing about whether the payment settled.
+        assertThat(status.state()).as("query result").isEqualTo(PaymentState.SUCCEEDED);
+        assertThat(status.transactionId())
+                .as("MTN's financialTransactionId for a SUCCESSFUL payment")
+                .isPresent();
     }
 
     private static Map<String, String> readEnv(Path file) throws IOException {

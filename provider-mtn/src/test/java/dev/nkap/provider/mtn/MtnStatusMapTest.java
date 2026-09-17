@@ -70,11 +70,19 @@ class MtnStatusMapTest {
     }
 
     @Test
-    @DisplayName("a status a real MTN account has sent but this table does not map is still UNKNOWN")
-    void an_unmapped_real_status_is_unknown() {
-        // CREATED: observed against the real sandbox for MTN's own "Pending" test MSISDN
-        // (docs/providers/mtn.md, "Still unknown"). Not yet a row in the table; falls here.
-        assertThat(MtnStatusMap.stateFor("CREATED", "", "")).isEqualTo(UNKNOWN);
+    @DisplayName("CREATED alone is PENDING; CREATED beside an inconclusive reason is UNKNOWN — issue #117")
+    void created_inherits_pending_s_non_conclusiveness() {
+        // CREATED: observed against the real sandbox for MTN's own "Pending" test MSISDN,
+        // 46733123454 (docs/providers/mtn.md, "MTN's published test MSISDNs"). Mapped to
+        // PENDING rather than left UNKNOWN because both are non-terminal and both get
+        // reconciled either way — the row buys accuracy in what a merchant is told, not a
+        // change to escalation or the ledger.
+        assertThat(MtnStatusMap.stateFor("CREATED", "", "")).isEqualTo(PENDING);
+
+        // Mapping it to PENDING enrols it in PENDING's own non-conclusiveness rule for free:
+        // paired with an inconclusive reason, it is no more trustworthy than a literal PENDING
+        // would be, and the answer is UNKNOWN, not PENDING.
+        assertThat(MtnStatusMap.stateFor("CREATED", "SERVICE_UNAVAILABLE", "")).isEqualTo(UNKNOWN);
     }
 
     @ParameterizedTest

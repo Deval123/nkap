@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# The argument of the whole project, in one run against the live stack from `compose.yaml`.
+# The argument of the whole project, in one run against a live stack.
 #
 #   1. script the operator to accept the submission and then go silent — no callback
 #   2. POST /payments  -> 202, and the payment is UNKNOWN (not FAILED)
@@ -14,16 +14,33 @@
 # with it gone, only the reconciler — the thing this project is built on — can resolve the
 # payment, so this run proves the reconciler and not a webhook.
 #
-# POST /payments is authenticated (issue #59). compose.yaml provisions one demo API key
-# before the gateway starts; this script sends it as `Authorization: Bearer`. The merchant
-# is the key's, not a body field — that is the whole point of that slice.
+# POST /payments is authenticated (issue #59). The stack's own key-init service provisions
+# one demo API key before the gateway starts; this script sends it as `Authorization:
+# Bearer`. The merchant is the key's, not a body field — that is the whole point of that
+# slice.
 #
-# Every step is asserted. The script exits non-zero the moment one does not hold — which
-# is what lets CI run it as a test. Run it from anywhere after `docker compose up`:
+# Every step is asserted. The script exits non-zero the moment one does not hold — which is
+# what lets CI run it as a test. Two stacks run it, and neither is guessed at (issue #137):
 #
-#   docker compose up --build -d
-#   ./examples/demo.sh
+#   The local demo, with nothing set — the default, and what a contributor gets:
 #
+#     docker compose up --build -d
+#     ./examples/demo.sh
+#
+#   Any other stack, by naming it through Docker Compose's own COMPOSE_FILE — the same
+#   variable `docker compose` already reads, so nothing here invents a second one. Every
+#   compose file in this repository sets its own `name:` (issue #123), so COMPOSE_FILE alone
+#   is enough to pick the project too; nothing here sets COMPOSE_PROJECT_NAME, and it should
+#   stay that way — a project name set twice is a project name that can disagree with itself.
+#   .github/workflows/release.yml's verify-pull job does this, against the published images:
+#
+#     COMPOSE_FILE=nkap-standalone.compose.yaml:.github/release-check.compose.yaml \
+#     DEMO_KEY="$(docker compose logs key-init | grep -oE 'nkap_[A-Za-z0-9_-]{43}' | head -n1)" \
+#     ./examples/demo.sh
+#
+# COMPOSE_FILE entries are relative paths, resolved from wherever `docker compose` runs —
+# this script always runs it from the repository root (see the `cd` below), so a caller sets
+# COMPOSE_FILE relative to the repository root, not to its own working directory.
 set -euo pipefail
 
 GATEWAY="${GATEWAY:-http://localhost:8080}"
@@ -38,7 +55,9 @@ SIMULATOR="${SIMULATOR:-http://localhost:8081}"
 # correction: nothing outside this demo may make an operator-chosen token the norm).
 DEMO_KEY="${DEMO_KEY:-nkap_demo-key-not-for-production-000000000000000}"
 
-# Run compose commands from the repository root, whatever directory we were invoked from.
+# Run compose commands from the repository root, whatever directory we were invoked from --
+# and, per the header comment, the directory any caller's COMPOSE_FILE must be written
+# relative to.
 cd "$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 
 say()  { printf '\n\033[1m▸ %s\033[0m\n' "$*"; }
@@ -67,6 +86,14 @@ gateway_answering() {
 }
 
 say "Waiting for the stack"
+# Stated before any assertion, not left to be inferred from a failure -- issue #137 was a
+# "service is not running" error that named neither the project this script was addressing
+# nor which compose file(s) it came from, which cost an actual investigation to trace back.
+# This line's only job is to inform, so its own failure (nkap-standalone.compose.yaml's
+# required variables, unset outside verify-pull, make `docker compose config` itself fail)
+# must not be what stops the run before it says anything.
+target_project="$(docker compose config --format json | jq -r '.name')" || target_project="unknown"
+info "targeting project '$target_project' (COMPOSE_FILE=${COMPOSE_FILE:-compose.yaml})"
 for _ in $(seq 1 60); do
   if gateway_answering && curl -fsS -o /dev/null "$SIMULATOR/_nkap/scenarios"; then
     ok "gateway and simulator are up"
@@ -74,8 +101,8 @@ for _ in $(seq 1 60); do
   fi
   sleep 1
 done
-gateway_answering || fail "gateway did not come up — try 'docker compose logs gateway'"
-curl -fsS -o /dev/null "$SIMULATOR/_nkap/scenarios" || fail "simulator did not come up — try 'docker compose logs simulator'"
+gateway_answering || fail "gateway did not come up — try 'COMPOSE_FILE=${COMPOSE_FILE:-compose.yaml} docker compose logs gateway'"
+curl -fsS -o /dev/null "$SIMULATOR/_nkap/scenarios" || fail "simulator did not come up — try 'COMPOSE_FILE=${COMPOSE_FILE:-compose.yaml} docker compose logs simulator'"
 
 # gateway depends on webhook-init completing, so if the stack is up this already ran. It is
 # checked here rather than skipped: issue #77's second defect made provisioning refuse

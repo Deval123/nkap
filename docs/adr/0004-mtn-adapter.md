@@ -142,7 +142,8 @@ in EUR whatever the country, and the documented test MSISDN² stays `PENDING` fo
 a few seconds — so a test that submits and immediately expects success will fail for reasons
 that have nothing to do with the code.
 
-² Not accurate — see *Amendment, 2026-09-18* at the foot of this ADR.
+² Not accurate: MTN's published *Success* entry is `56733123453`. See *Amendment,
+2026-09-18* at the foot of this ADR for which number this one actually was.
 
 ## Follow-up, 2026-09-08 — the contract did change
 

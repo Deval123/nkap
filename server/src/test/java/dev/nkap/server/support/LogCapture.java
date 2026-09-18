@@ -28,7 +28,15 @@ public final class LogCapture implements AutoCloseable {
     private final ListAppender<ILoggingEvent> appender = new ListAppender<>();
 
     public LogCapture(Class<?> loggedClass) {
-        this.logger = (Logger) LoggerFactory.getLogger(loggedClass);
+        this(loggedClass.getName());
+    }
+
+    /**
+     * Same, by logger name rather than {@link Class} — for a logger whose class a test
+     * cannot import, such as a package-private controller in another package.
+     */
+    public LogCapture(String loggerName) {
+        this.logger = (Logger) LoggerFactory.getLogger(loggerName);
         this.previousLevel = logger.getLevel();
         logger.setLevel(Level.DEBUG);
         appender.start();

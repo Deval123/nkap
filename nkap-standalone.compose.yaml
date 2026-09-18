@@ -59,6 +59,17 @@
 #
 # PostgreSQL's data directory is a named volume (`db-data`) -- unlike compose.yaml, which is
 # torn down with `-v` after every demo, this file is meant to keep running.
+#
+# `name: nkap` is NOT changed by issue #123's fix, and must not be, for any reason, including
+# "for symmetry" with compose.yaml's new `nkap-demo`. Every real deployment of this file
+# already resolves to project `nkap`, because this line has said exactly that since the file
+# was first added -- pinning it, not deriving it from whatever directory a `curl`'d-down file
+# happens to sit in. Changing this value, or deleting it and letting the name fall back to the
+# directory, renames the project for a deployment that already exists: same effect as
+# `docker compose down -v` without the honesty of naming it. Leaving this line alone is what
+# guarantees `db-data` keeps resolving to the exact volume a real deployment already has.
+# compose.yaml is the one that changes, because it is the demo stack and its volume is
+# demo data -- see its own header for the other side of this.
 
 name: nkap
 

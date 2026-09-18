@@ -238,7 +238,10 @@ PYEOF
 # that "docker logs" cannot see until it fills or the process exits -- neither of which a
 # long-running receiver ever does on its own, so the request would have happened and this
 # guide would still be waiting for evidence of it.
-docker run -d --rm --name guide-webhook-receiver --network nkap_default \
+#
+# nkap-demo_default: compose.yaml's own network, named after its `name: nkap-demo` (issue
+# #123) -- the gateway reaches this receiver by container name only on that same network.
+docker run -d --rm --name guide-webhook-receiver --network nkap-demo_default \
   -v /tmp/nkap-guide-receiver.py:/receiver.py -p 9191:9191 \
   python:3.12-alpine python3 -u /receiver.py
 sleep 1

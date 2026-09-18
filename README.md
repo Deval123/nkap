@@ -253,6 +253,32 @@ docker compose -f nkap-standalone.compose.yaml run --rm gateway \
   --nkap.apikey.create --nkap.apikey.merchant=<id>
 ```
 
+### Two compose files, one volume
+
+If you have ever run `compose.yaml` and `nkap-standalone.compose.yaml` on the same machine,
+in either order — which is the natural thing to do when you try the demo first and then run
+Nkap for real — you may have hit this: both files resolved to the same Compose project, so
+they shared one PostgreSQL volume. PostgreSQL applies `POSTGRES_PASSWORD` only the first time
+it initialises an empty data directory, so whichever file touched the volume first kept its
+password, and the other could never connect — `FATAL: password authentication failed for
+user "nkap"`, forty lines into a Flyway stack trace inside `key-init`'s or `webhook-init`'s
+logs, with `docker compose up` already returned and the gateway correctly left `Created`,
+never started. Issue #123 fixed it: `compose.yaml` now names its own project (`nkap-demo`)
+and the two can no longer collide; a `nkap_*` volume from before that change, if you have
+one, is simply unused now — see `compose.yaml`'s own header for why leaving it behind is the
+right call, and `CHANGELOG.md` for which release actually carries this fix.
+
+If you are seeing that exact `FATAL` today, on either file, the non-destructive repair is to
+reset the password the volume already has, not to erase the volume:
+
+```bash
+docker compose exec -T db psql -U nkap -d nkap -c "ALTER USER nkap PASSWORD 'nkap';"
+```
+
+`docker compose down -v` "fixes" it too, but it deletes the ledger and every payment's
+history along with it — the accounting record this project exists to keep — to solve a
+one-line password mismatch. Use it only if you genuinely want a clean slate.
+
 ## Running on Kubernetes
 
 [`charts/nkap`](charts/nkap) is a Helm chart for the gateway, from the same published image —

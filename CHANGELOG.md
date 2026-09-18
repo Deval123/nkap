@@ -6,6 +6,15 @@ All notable changes to Nkap are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `--nkap.apikey.revoke --nkap.apikey.id=<id>`: retires an API key immediately, without
+  deleting its row. `api_key.revoked_at` marks it, so the merchant, the label and
+  `last_used_at` survive for whoever asks later why a caller stopped working; the key stops
+  authenticating on its very next request, not at some later cache expiry (there is none).
+  Rotation is provisioning a new key and revoking the old one — no separate command needed
+  (issue #112).
+
 ## [1.1.0] - 2026-09-18
 
 ### Added

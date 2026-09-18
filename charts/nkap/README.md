@@ -101,9 +101,18 @@ This chart cannot know your log pipeline and does not pretend to.
 **What to do about it, in order of preference:**
 
 - **Rotate after reading.** Read the key from the Job's logs, use it once to provision a
-  proper key through your merchant's own process, then treat the printed one as compromised
-  and delete its row (`docs/security-notes.md`'s "Key rotation and revocation" — today that
-  means a direct database delete, not a command).
+  proper key through your merchant's own process, then revoke the printed one as
+  compromised, the same one-off-pod shape `NOTES.txt` shows for provisioning:
+
+  ```bash
+  kubectl run nkap-apikey-revoke --rm -it --restart=Never \
+    --image=<the same image and tag> \
+    --env=NKAP_DB_URL=... --env=NKAP_DB_USER=... --env=NKAP_DB_PASSWORD=<from your database Secret> \
+    -- --nkap.apikey.revoke --nkap.apikey.id=<the printed key's id>
+  ```
+
+  It stops authenticating on its very next use — see `docs/security-notes.md` §1 ("Key
+  revocation") for what marking the row actually does.
 - **Provision out-of-band.** Set `keyInit.enabled: false` and run the provisioning command
   yourself, once, from a pod whose logs you control (or that you delete immediately after
   reading), the same way `NOTES.txt` shows after a `keyInit.enabled=false` install.
@@ -123,11 +132,12 @@ database still coming up fails right here, as the common case, not an edge case.
 `backoffLimit: 3` to paper over that turns one ordinary startup race into up to four live
 keys, three of them printed only into the logs of pods that already failed — logs nobody
 reads, because the Job looks broken rather than provisioned, and that your cluster's own log
-retention may garbage-collect before anyone does. There is no revocation command in this
-project (`docs/security-notes.md`) — only a direct database delete — so an unnoticed extra
-key stays valid indefinitely, not until someone happens to clean it up. **When this Job
-fails: fix database reachability and reinstall, or set `keyInit.enabled: false` and
-provision out-of-band** (see above) — never retry your way past it.
+retention may garbage-collect before anyone does. Revoking one is a command now
+(`docs/security-notes.md` §1), not a database delete — but it still needs someone to notice
+the extra key and its id first, which a failed-looking Job actively works against: an
+unnoticed extra key stays valid indefinitely, not until someone happens to revoke it.
+**When this Job fails: fix database reachability and reinstall, or set `keyInit.enabled:
+false` and provision out-of-band** (see above) — never retry your way past it.
 
 ### 2. What runs the migrations when there is more than one replica?
 

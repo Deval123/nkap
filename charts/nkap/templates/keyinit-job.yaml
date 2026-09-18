@@ -40,11 +40,12 @@ spec:
   # looks like resilience and is the opposite of it: backoffLimit: 3 turns one ordinary
   # startup race into up to four live keys, three of them printed only into the logs of pods
   # that already failed -- logs nobody reads because the Job looks broken, not provisioned,
-  # and that your cluster's own log retention may garbage-collect before anyone does. There
-  # is no revocation command in this project (docs/security-notes.md) -- only a direct
-  # database delete -- so an unnoticed extra key stays valid indefinitely, not until someone
-  # happens to clean it up. See charts/nkap/README.md's API-key exposure section for what to
-  # do instead when this Job fails: fix database reachability and reinstall, or set
+  # and that your cluster's own log retention may garbage-collect before anyone does.
+  # Revoking one is a command now (docs/security-notes.md §1), not a database delete -- but
+  # it still needs someone to notice the extra key and its id first, which a failed-looking
+  # Job actively works against: an unnoticed extra key stays valid indefinitely, not until
+  # someone happens to revoke it. See charts/nkap/README.md's API-key exposure section for
+  # what to do instead when this Job fails: fix database reachability and reinstall, or set
   # keyInit.enabled: false and provision out-of-band.
   backoffLimit: 0
   template:

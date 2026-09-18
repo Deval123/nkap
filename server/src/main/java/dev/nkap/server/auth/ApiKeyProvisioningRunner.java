@@ -2,6 +2,7 @@ package dev.nkap.server.auth;
 
 import java.io.PrintStream;
 import java.util.List;
+import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -12,23 +13,37 @@ import org.springframework.stereotype.Component;
 
 /**
  * Provisioning an API key is a command, never a route: a route that mints credentials is
- * worse than one that writes ledger entries. Run the application with:
+ * worse than one that writes ledger entries. Revoking one is the same argument and then
+ * some — a revocation route reachable with a stolen key would let its holder revoke
+ * everyone else's. Run the application with:
  *
  * <pre>
  *   --nkap.apikey.create --nkap.apikey.merchant=&lt;id&gt; [--nkap.apikey.admin]
  *                        [--nkap.apikey.label=&lt;text&gt;]
+ *
+ *   --nkap.apikey.revoke --nkap.apikey.id=&lt;key id&gt;
  * </pre>
  *
- * <p>It prints the key <strong>once</strong>, with a line saying it will not be shown again,
- * and exits. Only the key's SHA-256 is stored; there is no path — command or route — that
- * reads a key back.
+ * <p>{@code create} prints the key <strong>once</strong>, with a line saying it will not be
+ * shown again, and exits. Only the key's SHA-256 is stored; there is no path — command or
+ * route — that reads a key back.
  *
  * <p>{@code --nkap.apikey.token=&lt;value&gt;} sets the key explicitly instead of generating
  * one. That is for the demo, which needs a known credential; the value it uses is obviously
  * a demo one and the compose file says so. Do not use it in a real deployment.
  *
- * <p>Without {@code --nkap.apikey.create} this runner does nothing. The key is never logged,
- * not even a prefix.
+ * <p>{@code revoke} marks the key by id — the id {@code create} already printed — rather
+ * than deleting its row, so the merchant, the label and {@code last_used_at} survive for
+ * whoever asks later why a caller stopped working (issue #112). It takes effect on the very
+ * next authenticated request: there is no cache in front of {@link ApiKeyStore#authenticate}
+ * to invalidate. Revoking a merchant's only key locks that merchant out of the API until
+ * another is provisioned — correct, and not guarded against, but worth knowing before you do
+ * it at 3 a.m.
+ *
+ * <p>Without {@code --nkap.apikey.create} or {@code --nkap.apikey.revoke} this runner does
+ * nothing. Given both at once, neither runs: an operator asking to create and revoke in the
+ * same invocation gets a rejection naming both options and a non-zero exit, never one option
+ * winning silently while the other is dropped. A key is never logged, not even a prefix.
  */
 @Component
 class ApiKeyProvisioningRunner implements ApplicationRunner, ExitCodeGenerator {
@@ -38,6 +53,8 @@ class ApiKeyProvisioningRunner implements ApplicationRunner, ExitCodeGenerator {
     static final String ADMIN_OPTION = "nkap.apikey.admin";
     static final String LABEL_OPTION = "nkap.apikey.label";
     static final String TOKEN_OPTION = "nkap.apikey.token";
+    static final String REVOKE_OPTION = "nkap.apikey.revoke";
+    static final String ID_OPTION = "nkap.apikey.id";
 
     private static final Logger log = LoggerFactory.getLogger(ApiKeyProvisioningRunner.class);
 
@@ -57,10 +74,20 @@ class ApiKeyProvisioningRunner implements ApplicationRunner, ExitCodeGenerator {
 
     @Override
     public void run(ApplicationArguments args) {
-        if (!args.containsOption(CREATE_OPTION)) {
-            return;
+        boolean create = args.containsOption(CREATE_OPTION);
+        boolean revoke = args.containsOption(REVOKE_OPTION);
+        if (create && revoke) {
+            // Neither wins silently: a security command whose purpose is the 3 a.m. case
+            // must not let an operator believe a key was revoked when it was actually
+            // (re)created, or the reverse. Reject the combination outright.
+            out.println("--" + CREATE_OPTION + " and --" + REVOKE_OPTION
+                    + " cannot be combined -- run one at a time.");
+            this.exitCode = 2;
+        } else if (create) {
+            this.exitCode = executeCreate(args);
+        } else if (revoke) {
+            this.exitCode = executeRevoke(args);
         }
-        this.exitCode = execute(args);
     }
 
     @Override
@@ -68,7 +95,7 @@ class ApiKeyProvisioningRunner implements ApplicationRunner, ExitCodeGenerator {
         return exitCode;
     }
 
-    int execute(ApplicationArguments args) {
+    int executeCreate(ApplicationArguments args) {
         String merchant = optional(args, MERCHANT_OPTION);
         if (merchant == null) {
             out.println("--" + CREATE_OPTION + " needs --" + MERCHANT_OPTION + "=<id>");
@@ -88,6 +115,32 @@ class ApiKeyProvisioningRunner implements ApplicationRunner, ExitCodeGenerator {
         out.println("  key id: " + provisioned.credential().keyId());
         out.println("  key:    " + provisioned.token());
         out.println("This is the only time the key is shown. Store it now; it cannot be recovered.");
+        return 0;
+    }
+
+    int executeRevoke(ApplicationArguments args) {
+        String idText = optional(args, ID_OPTION);
+        if (idText == null) {
+            out.println("--" + REVOKE_OPTION + " needs --" + ID_OPTION + "=<key id>");
+            return 2;
+        }
+        UUID id;
+        try {
+            id = UUID.fromString(idText);
+        } catch (IllegalArgumentException notAUuid) {
+            out.println("--" + ID_OPTION + "=" + idText + " is not a key id (expected a UUID)");
+            return 2;
+        }
+
+        boolean revoked = keys.revoke(id);
+        if (!revoked) {
+            out.println("No active API key with id " + id + " — already revoked, or no such key.");
+            return 1;
+        }
+
+        log.info("revoked api key {}", id);
+        out.println("API key " + id + " revoked. It stops authenticating immediately.");
+        out.println("If this was a merchant's only key, that merchant has none until you provision another.");
         return 0;
     }
 

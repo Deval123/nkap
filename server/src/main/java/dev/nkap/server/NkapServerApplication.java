@@ -18,19 +18,19 @@ import org.springframework.context.ConfigurableApplicationContext;
  *
  * <p>The same jar also runs off-line commands: {@code --nkap.statement.import=<path>}
  * reconciles an operator statement (see {@code StatementImportRunner}),
- * {@code --nkap.apikey.create} provisions an API key (see {@code ApiKeyProvisioningRunner}),
- * and {@code --nkap.webhook.create} registers a merchant's webhook endpoint (see
- * {@code WebhookEndpointProvisioningRunner}). Given one of those the context starts with no
- * web server — it is a command, not a request — runs, and exits with a code that carries the
- * outcome.
+ * {@code --nkap.apikey.create} provisions an API key and {@code --nkap.apikey.revoke} retires
+ * one (see {@code ApiKeyProvisioningRunner}), and {@code --nkap.webhook.create} registers a
+ * merchant's webhook endpoint (see {@code WebhookEndpointProvisioningRunner}). Given one of
+ * those the context starts with no web server — it is a command, not a request — runs, and
+ * exits with a code that carries the outcome.
  */
 @SpringBootApplication
 @ConfigurationPropertiesScan
 public class NkapServerApplication {
 
     /** Arguments that select an off-line command instead of starting the server. */
-    private static final List<String> COMMAND_ARGS =
-            List.of("--nkap.statement.import", "--nkap.apikey.create", "--nkap.webhook.create");
+    private static final List<String> COMMAND_ARGS = List.of(
+            "--nkap.statement.import", "--nkap.apikey.create", "--nkap.apikey.revoke", "--nkap.webhook.create");
 
     public static void main(String[] args) {
         SpringApplication app = new SpringApplication(NkapServerApplication.class);

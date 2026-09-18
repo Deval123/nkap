@@ -10,6 +10,7 @@ import dev.nkap.server.statement.StatementImport;
 import dev.nkap.server.support.PostgresSpringBootIT;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -206,7 +207,62 @@ class AuthApiIT extends PostgresSpringBootIT {
         assertThat(jdbc.queryForList(
                 "SELECT column_name FROM information_schema.columns "
                         + "WHERE table_name = 'api_key' ORDER BY column_name", String.class))
-                .containsExactly("created_at", "id", "is_admin", "label", "last_used_at", "merchant_id", "token_sha256");
+                .containsExactly("created_at", "id", "is_admin", "label", "last_used_at", "merchant_id",
+                        "revoked_at", "token_sha256");
+    }
+
+    // === 7. revoking a key marks it, and it stops authenticating immediately =======
+
+    @Test
+    @DisplayName("a revoked key is refused on the very next request, with the same 401 an unknown key gets")
+    void a_revoked_key_is_refused_immediately() {
+        ApiKeyStore.Provisioned provisioned = apiKeys.provision("revoke-check-" + System.nanoTime(), false, "test");
+        String token = provisioned.token();
+        assertThat(get(token, UUID.randomUUID().toString()).getStatusCode())
+                .as("the key authenticates before revocation").isEqualTo(HttpStatus.NOT_FOUND);
+
+        boolean revoked = apiKeys.revoke(provisioned.credential().keyId());
+        assertThat(revoked).as("an active key was actually revoked").isTrue();
+
+        assertThat(get(token, UUID.randomUUID().toString()).getStatusCode())
+                .as("refused on the very next request, not at some later cache expiry")
+                .isEqualTo(HttpStatus.UNAUTHORIZED);
+    }
+
+    @Test
+    @DisplayName("revoking marks the row instead of deleting it, and last_used_at survives")
+    void revoking_marks_the_row_rather_than_deleting_it() {
+        String merchant = "revoke-mark-" + System.nanoTime();
+        ApiKeyStore.Provisioned provisioned = apiKeys.provision(merchant, false, "test-label");
+        UUID keyId = provisioned.credential().keyId();
+        get(provisioned.token(), UUID.randomUUID().toString()); // touches last_used_at
+
+        assertThat(apiKeys.revoke(keyId)).isTrue();
+
+        Map<String, Object> row = jdbc.queryForMap(
+                "SELECT merchant_id, label, revoked_at, last_used_at FROM api_key WHERE id = ?", keyId);
+        assertThat(row.get("merchant_id")).as("the row survives, not deleted").isEqualTo(merchant);
+        assertThat(row.get("label")).isEqualTo("test-label");
+        assertThat(row.get("revoked_at")).as("marked, not just absent").isNotNull();
+        assertThat(row.get("last_used_at")).as("operational history survives revocation").isNotNull();
+    }
+
+    @Test
+    @DisplayName("revoking an unknown or already-revoked key id changes nothing, and other keys keep working")
+    void revoking_an_unknown_or_already_revoked_key_is_a_no_op() {
+        assertThat(apiKeys.revoke(UUID.randomUUID())).as("no such key").isFalse();
+
+        String survivorMerchant = "revoke-survivor-" + System.nanoTime();
+        String survivorToken = apiKeys.provision(survivorMerchant, false, "test").token();
+        ApiKeyStore.Provisioned target = apiKeys.provision("revoke-twice-" + System.nanoTime(), false, "test");
+
+        assertThat(apiKeys.revoke(target.credential().keyId())).as("revoked once").isTrue();
+        assertThat(apiKeys.revoke(target.credential().keyId()))
+                .as("already revoked, the second call is a no-op").isFalse();
+
+        assertThat(get(survivorToken, UUID.randomUUID().toString()).getStatusCode())
+                .as("a different key is unaffected by another key's revocation")
+                .isEqualTo(HttpStatus.NOT_FOUND);
     }
 
     // === helpers ==================================================================

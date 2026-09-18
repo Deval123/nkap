@@ -6,6 +6,20 @@ All notable changes to Nkap are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- `compose.yaml` and `nkap-standalone.compose.yaml` no longer share a Compose project.
+  Both used to resolve to project `nkap`, so a machine that had run one and then the other
+  shared one PostgreSQL volume — PostgreSQL applies `POSTGRES_PASSWORD` only when it
+  initialises an empty data directory, so whichever file touched the volume first kept its
+  password and the other could never connect (issue #123). `compose.yaml` now names its own
+  project, `nkap-demo`; `nkap-standalone.compose.yaml` is unchanged, so no real deployment's
+  project or volume is renamed by this. **If you have run `compose.yaml` before this
+  release, its old `nkap_*` volume is orphaned by the rename** — unused, not deleted; remove
+  it by hand with `docker volume rm` if you want the disk space back.
+- A wrong database password now fails with a one-line diagnosis ("the database answered and
+  rejected these credentials") instead of a bare Flyway stack trace.
+
 ## [1.0.0] - 2026-09-14
 
 <!--

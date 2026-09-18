@@ -4,7 +4,37 @@ All notable changes to Nkap are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/); versioning follows
 [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [1.1.0]
+
+### Added
+
+- `nkap.public-base-url`: the deployment-level property that lets MTN call this gateway
+  back at all — without it, no deployment of Nkap can receive a callback. Unset (the
+  default) is safe: no `X-Callback-Url` is ever sent, and a payment still resolves through
+  the reconciler, only slower. **Read this before setting it: naming a host that does not
+  match `providerCallbackHost` as recorded at MTN API-user creation fails every submission
+  with `INVALID_CALLBACK_URL_HOST`.** See `docs/configuration-reference.md`'s entry for it
+  (issue #116).
+- `nkap_callback_received_total`, `nkap_callback_rejected_total` and
+  `nkap_callback_confirmed_total`: counters for traffic on the callback endpoint, which
+  previously exposed none (issue #129).
+
+### Changed
+
+- **`MtnStatusMap.stateFor` now reads both `status` and `reason` instead of `reason`
+  alone.** A payment MTN answered conclusively — `status: FAILED, reason:
+  INTERNAL_PROCESSING_ERROR` — used to sit `UNKNOWN`, get chased by the reconciler, and
+  eventually escalate; it now reaches `FAILED` immediately, on the first query. **Anyone
+  alerting on a count of `FAILED` payments will see a step change upward on upgrade;
+  anyone alerting on `nkap_payment_escalated_total` will see one downward.** Neither is a
+  new failure mode — both are the same corrected verdicts moving from one bucket to the
+  other (issue #115).
+- A payment whose operator answers `status: CREATED` was reported as `UNKNOWN` and is now
+  reported as `PENDING` (issue #117).
+- **The reconciler's per-attempt "not conclusive, changing nothing" line moved from INFO to
+  DEBUG.** Anything parsing logs for that line stops seeing it on upgrade. The counters
+  added above, and the reconciler's own escalation line (unchanged, still WARN), are what
+  to watch instead (issue #129).
 
 ### Fixed
 
@@ -19,6 +49,33 @@ All notable changes to Nkap are documented here. The format follows
   it by hand with `docker volume rm` if you want the disk space back.
 - A wrong database password now fails with a one-line diagnosis ("the database answered and
   rejected these credentials") instead of a bare Flyway stack trace.
+
+### Upgrading
+
+The first release carrying a schema migration: V9 adds `payment.provider_base_url`, the
+installation base URL a payment was actually submitted against, so a simulated settlement
+and a real one stop being indistinguishable in the ledger (issue #122).
+
+**Forward is automatic and additive.** Flyway runs V9 at startup — one nullable column, one
+trigger scoped to `BEFORE UPDATE OF provider_base_url` — and rewrites nothing already there.
+
+**Rolling the image back to 1.0.0 against a V9 database works.** Verified against the
+published 1.0.0 image, 2026-09-18: Flyway warns and proceeds.
+
+```
+WARN  Schema "public" has a version (9) that is newer than the latest available migration (8) !
+INFO  Schema "public" is up to date. No migration necessary.
+INFO  Started NkapServerApplication in 1.358 seconds
+```
+
+1.0.0 never names `provider_base_url` — not in its `INSERT`, its `ON CONFLICT` `SET` list,
+or its `SELECT` — so it neither writes the column nor fires the trigger.
+
+**The cost of rolling back, which the same run makes visible:** payments created while a
+deployment is back on 1.0.0 carry no provenance. `provider_base_url` stays `NULL`, and those
+rows become indistinguishable from the pre-migration ones — the same honest gap #122 chose,
+open again for as long as the rollback lasts. Nothing backfills it afterwards. Know this
+before rolling back, not after.
 
 ## [1.0.0] - 2026-09-14
 

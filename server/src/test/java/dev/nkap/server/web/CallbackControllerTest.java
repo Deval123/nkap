@@ -126,10 +126,22 @@ class CallbackControllerTest {
     void unconfigured_provider_is_counted_as_unknown() {
         assertThatThrownBy(() -> controller.receive("not-configured", Map.of(), "{}"))
                 .isInstanceOf(ApiException.class);
+        // A case variant of the provider this test class actually has configured ("mtn").
+        // ProviderId.of's shape check is case-sensitive today, so this also fails to
+        // resolve -- but the point being pinned is the tag, not that failure: even a
+        // string a human would read as naming the same operator must not surface as its
+        // own tag value, raw or otherwise. If ProviderId.of ever normalises case, this
+        // request would resolve, and the tag must still be "mtn" (the resolved id's own
+        // canonical value), never "MTN" (what the request supplied).
+        assertThatThrownBy(() -> controller.receive("MTN", Map.of(), "{}"))
+                .isInstanceOf(ApiException.class);
 
-        assertThat(counterTagged("nkap.callback.received", "provider", "unknown")).isEqualTo(1.0);
+        assertThat(counterTagged("nkap.callback.received", "provider", "unknown")).isEqualTo(2.0);
         assertThat(registry.find("nkap.callback.received").tags("provider", "not-configured").counter())
                 .as("the raw path segment must never become a tag value -- unbounded cardinality")
+                .isNull();
+        assertThat(registry.find("nkap.callback.received").tags("provider", "MTN").counter())
+                .as("nor a case variant of a configured provider's own spelling")
                 .isNull();
     }
 

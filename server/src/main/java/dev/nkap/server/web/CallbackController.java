@@ -94,13 +94,17 @@ class CallbackController {
                                  @RequestBody(required = false) String body) {
 
         // Every request, before anything else can reject it — "is this happening at all"
-        // must survive whatever the other branches below do.
-        Optional<ProviderAdapter> resolved = tryResolve(providerId);
-        String providerTag = resolved.isPresent() ? providerId : UNKNOWN_PROVIDER_TAG;
+        // must survive whatever the other branches below do. The tag is the *resolved*
+        // ProviderId's own canonical value, never the raw path segment: if ProviderId.of
+        // ever normalises (case, trimming), a raw-string tag would let every distinct
+        // spelling of one configured provider grow the registry, exactly the unbounded
+        // cardinality this class exists to avoid.
+        Optional<ProviderId> configured = tryResolve(providerId);
+        String providerTag = configured.map(ProviderId::toString).orElse(UNKNOWN_PROVIDER_TAG);
         countReceived(providerTag);
 
         ProviderId id = providerId(providerId);
-        ProviderAdapter adapter = resolved.orElseThrow(() -> new ApiException(
+        ProviderAdapter adapter = configured.flatMap(adapters::find).orElseThrow(() -> new ApiException(
                 HttpStatus.NOT_FOUND, ProblemTypes.UNKNOWN_CALLBACK_PROVIDER, "No such provider",
                 "This server has no adapter for provider '" + providerId + "'."));
 
@@ -114,7 +118,7 @@ class CallbackController {
                 // no signature to fail. Never notParseable.getMessage(): a parse failure can
                 // echo a substring pulled from the request body (see class javadoc).
                 log.warn("rejected an unparseable callback on /callbacks/{} "
-                        + "(further occurrences are counted, not logged)", providerId);
+                        + "(further occurrences are counted in nkap_callback_rejected, not logged)", providerId);
             }
             throw new ApiException(HttpStatus.BAD_REQUEST, ProblemTypes.UNPARSEABLE_CALLBACK,
                     "The callback could not be parsed",
@@ -132,7 +136,7 @@ class CallbackController {
                 // as cheap for an attacker to produce as an unparseable body, so it gets the
                 // same bounded treatment, not an unconditional line.
                 log.warn("callback on /callbacks/{} names reference {}, which this gateway never issued "
-                        + "(further occurrences are counted, not logged)", providerId, reference);
+                        + "(further occurrences are counted in nkap_callback_rejected, not logged)", providerId, reference);
             }
             return ResponseEntity.accepted().build();
         }
@@ -150,9 +154,13 @@ class CallbackController {
         return ResponseEntity.accepted().build();
     }
 
-    private Optional<ProviderAdapter> tryResolve(String raw) {
+    /** The configured {@link ProviderId} named by {@code raw}, or empty — never the adapter itself,
+     * so the caller always has the canonical id to tag with, whether or not it also needs the
+     * adapter. */
+    private Optional<ProviderId> tryResolve(String raw) {
         try {
-            return adapters.find(ProviderId.of(raw));
+            ProviderId candidate = ProviderId.of(raw);
+            return adapters.find(candidate).isPresent() ? Optional.of(candidate) : Optional.empty();
         } catch (RuntimeException notAProviderId) {
             return Optional.empty();
         }

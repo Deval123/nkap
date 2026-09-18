@@ -26,6 +26,7 @@ import dev.nkap.server.outbox.InMemoryOutbox;
 import dev.nkap.server.outbox.OutboxNotifier;
 import dev.nkap.server.support.LogCapture;
 import dev.nkap.server.webhook.InMemoryWebhookEndpointStore;
+import ch.qos.logback.classic.Level;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.Map;
 import org.junit.jupiter.api.DisplayName;
@@ -231,6 +232,45 @@ class SettlementServiceTest {
         assertThat(payment.state()).isEqualTo(PaymentState.SUBMITTED);
         assertThat(payment.history()).filteredOn(t -> t.cause() == PaymentTransition.Cause.CALLBACK).isEmpty();
         assertThat(ledger.entries()).isEmpty();
+    }
+
+    // --- issue #129: a line for a transition, at most DEBUG for "changing nothing" --------
+
+    @Test
+    @DisplayName("a callback that settles a payment logs the transition at INFO, naming the cause and both states")
+    void a_settling_callback_is_logged_at_info() throws Exception {
+        Payment payment = persisted(PaymentState.SUBMITTED);
+        when(adapter.query(any(), any())).thenReturn(status(PaymentState.SUCCEEDED, "SUCCESSFUL"));
+
+        try (LogCapture logs = new LogCapture(SettlementService.class)) {
+            settlement.confirm(MTN, payment.reference(), PaymentTransition.Cause.CALLBACK);
+
+            assertThat(logs.events())
+                    .as("issue #129: a callback that settled a payment left no line before this")
+                    .anySatisfy(event -> {
+                        assertThat(event.getLevel()).isEqualTo(Level.INFO);
+                        assertThat(event.getFormattedMessage())
+                                .contains("CALLBACK").contains("SUBMITTED").contains("SUCCEEDED");
+                    });
+        }
+    }
+
+    @Test
+    @DisplayName("a confirmation that changes nothing is DEBUG, not INFO -- the pair this settles against the resolving case above")
+    void an_inconclusive_confirmation_is_debug_not_info() throws Exception {
+        Payment payment = persisted(PaymentState.SUBMITTED);
+        when(adapter.query(any(), any())).thenReturn(status(PaymentState.UNKNOWN, "INTERNAL_PROCESSING_ERROR"));
+
+        try (LogCapture logs = new LogCapture(SettlementService.class)) {
+            settlement.confirm(MTN, payment.reference(), PaymentTransition.Cause.CALLBACK);
+
+            assertThat(logs.events())
+                    .as("issue #129: per-attempt, per-payment, on a loop -- too loud at INFO")
+                    .isNotEmpty()
+                    .allSatisfy(event -> assertThat(event.getLevel())
+                            .as("no line this confirmation writes reaches INFO")
+                            .isNotEqualTo(Level.INFO));
+        }
     }
 
     @Test

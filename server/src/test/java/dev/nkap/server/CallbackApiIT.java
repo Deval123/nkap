@@ -9,7 +9,10 @@ import dev.nkap.core.ledger.AccountId;
 import dev.nkap.core.ledger.Ledger;
 import dev.nkap.core.ledger.LedgerEntry;
 import dev.nkap.core.money.Currency;
+import dev.nkap.server.payment.SettlementService;
+import dev.nkap.server.support.LogCapture;
 import dev.nkap.server.support.PostgresSpringBootIT;
+import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Duration;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterAll;
@@ -67,6 +70,9 @@ class CallbackApiIT extends PostgresSpringBootIT {
 
     @Autowired
     Ledger ledger;
+
+    @Autowired
+    MeterRegistry registry;
 
     @Autowired
     dev.nkap.server.auth.ApiKeyStore apiKeys;
@@ -204,6 +210,25 @@ class CallbackApiIT extends PostgresSpringBootIT {
     }
 
     @Test
+    @DisplayName("issue #129: a callback that settles a payment produces both the transition line and the confirmed counter")
+    void a_settling_callback_produces_a_line_and_a_counter() {
+        SIMULATOR.declareScenario("""
+            {"rules":[{"scenario":{"onQuery":[{"status":"SUCCESSFUL"}]}}]}""");
+        String reference = submittedPayment();
+        double confirmedBefore = counter("nkap.callback.confirmed", "provider", "mtn-sandbox");
+
+        try (LogCapture logs = new LogCapture(SettlementService.class)) {
+            assertThat(postCallback(callback(reference, "SUCCESSFUL")).getStatusCode().value()).isEqualTo(202);
+
+            assertThat(logs.events())
+                    .as("the exact gap issue #129 found: a callback that settled a payment left nothing grep-able as CALLBACK")
+                    .anySatisfy(event -> assertThat(event.getFormattedMessage())
+                            .contains("CALLBACK").contains(reference).contains("SUCCEEDED"));
+        }
+        assertThat(counter("nkap.callback.confirmed", "provider", "mtn-sandbox")).isEqualTo(confirmedBefore + 1);
+    }
+
+    @Test
     @DisplayName("a callback for a reference this gateway never issued is 202 with nothing written or transitioned")
     void a_callback_for_an_unknown_reference_is_202_and_writes_nothing() {
         String strangerReference = UUID.randomUUID().toString();
@@ -226,6 +251,30 @@ class CallbackApiIT extends PostgresSpringBootIT {
         assertThat(answer.getStatusCode().value()).isEqualTo(400);
         assertThat(parse(answer.getBody()).get("type").asText()).endsWith("unparseable-callback");
         assertThat(ledger.entries()).hasSize(entriesBefore);
+    }
+
+    @Test
+    @DisplayName("issue #129: an unparseable callback's body never reaches the log, even a body that would be obvious if it did")
+    void an_unparseable_callback_body_never_reaches_the_log() {
+        // A valid JSON object, so it clears "not JSON" / "not an object" -- and fails at
+        // the next check instead, MtnCollectionsAdapter's own exception embedding this
+        // exact string, the way a real attacker-controlled body would. The deterministic
+        // regression guard is CallbackControllerTest, with a fresh controller per test; this
+        // one runs the real adapter, and shares the class's "log at most once ever" gate
+        // with the other unparseable-callback test above, so it can legitimately capture
+        // nothing at all if that one already ran first -- either way, the marker must not
+        // be among whatever was captured.
+        String marker = "MARKER-body-must-never-reach-the-log-" + System.nanoTime();
+        String bodyWithMarker = "{\"referenceId\":\"" + marker + "\",\"status\":\"SUCCESSFUL\"}";
+
+        try (LogCapture logs = new LogCapture("dev.nkap.server.web.CallbackController")) {
+            ResponseEntity<String> answer = postCallback(bodyWithMarker);
+
+            assertThat(answer.getStatusCode().value()).isEqualTo(400);
+            assertThat(logs.events())
+                    .as("the parse failure's own message embeds the offending field -- it must never be logged")
+                    .noneSatisfy(event -> assertThat(event.getFormattedMessage()).contains(marker));
+        }
     }
 
     @Test
@@ -265,6 +314,12 @@ class CallbackApiIT extends PostgresSpringBootIT {
 
     private String gatewayCallbackUrl() {
         return "http://localhost:" + port + "/callbacks/mtn-sandbox";
+    }
+
+    /** 0 rather than a lookup failure: a counter this test's own traffic has not touched yet is absent, not zero. */
+    private double counter(String name, String tagKey, String tagValue) {
+        var found = registry.find(name).tag(tagKey, tagValue).counter();
+        return found == null ? 0.0 : found.count();
     }
 
     private static long countCauses(JsonNode history, String cause) {

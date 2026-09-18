@@ -10,9 +10,14 @@ import dev.nkap.server.payment.PaymentRepository;
 import dev.nkap.server.payment.PaymentTransition;
 import dev.nkap.server.payment.SettlementService;
 import dev.nkap.server.provider.AdapterRegistry;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -43,6 +48,21 @@ import org.springframework.web.bind.annotation.RestController;
  *
  * <p>Nothing is written for an unparseable or unknown-reference callback — a conformance
  * rule.
+ *
+ * <p><strong>What this class does about being unauthenticated and internet-reachable by
+ * design (issue #129; {@code docs/security-notes.md} §5 records a public hostname scanned
+ * within forty-five minutes of coming up):</strong> every request increments a counter —
+ * O(1), and unbounded traffic cannot grow it — tagged only with a configured provider id or
+ * the fixed literal {@code "unknown"}, never the raw path segment, which an attacker could
+ * otherwise use to grow the metrics registry without bound. A line is written only for a
+ * callback naming a reference this deployment actually issued, since that traffic is bounded
+ * by real payments, not by an attacker's request rate. An unparseable callback, or one naming
+ * a reference this deployment never issued, is exactly what a scanner or a guess produces
+ * fast and free; both are counted on every request but logged <strong>at most once, ever, per
+ * process</strong> — not sampled, not rate-limited, so the log cannot be driven by volume at
+ * all — and never with the exception's own message or the request body: either can echo
+ * attacker-controlled text pulled from the body, which is a log-injection surface, not a
+ * debugging convenience.
  */
 @RestController
 @RequestMapping("/callbacks")
@@ -50,14 +70,22 @@ class CallbackController {
 
     private static final Logger log = LoggerFactory.getLogger(CallbackController.class);
 
+    private static final String UNKNOWN_PROVIDER_TAG = "unknown";
+
     private final AdapterRegistry adapters;
     private final PaymentRepository payments;
     private final SettlementService settlement;
+    private final MeterRegistry meterRegistry;
 
-    CallbackController(AdapterRegistry adapters, PaymentRepository payments, SettlementService settlement) {
+    private final AtomicBoolean loggedUnparseableOnce = new AtomicBoolean(false);
+    private final AtomicBoolean loggedUnknownReferenceOnce = new AtomicBoolean(false);
+
+    CallbackController(AdapterRegistry adapters, PaymentRepository payments, SettlementService settlement,
+                        MeterRegistry meterRegistry) {
         this.adapters = adapters;
         this.payments = payments;
         this.settlement = settlement;
+        this.meterRegistry = meterRegistry;
     }
 
     @PostMapping("/{providerId}")
@@ -65,8 +93,18 @@ class CallbackController {
                                  @RequestHeader Map<String, String> headers,
                                  @RequestBody(required = false) String body) {
 
+        // Every request, before anything else can reject it — "is this happening at all"
+        // must survive whatever the other branches below do. The tag is the *resolved*
+        // ProviderId's own canonical value, never the raw path segment: if ProviderId.of
+        // ever normalises (case, trimming), a raw-string tag would let every distinct
+        // spelling of one configured provider grow the registry, exactly the unbounded
+        // cardinality this class exists to avoid.
+        Optional<ProviderId> configured = tryResolve(providerId);
+        String providerTag = configured.map(ProviderId::toString).orElse(UNKNOWN_PROVIDER_TAG);
+        countReceived(providerTag);
+
         ProviderId id = providerId(providerId);
-        ProviderAdapter adapter = adapters.find(id).orElseThrow(() -> new ApiException(
+        ProviderAdapter adapter = configured.flatMap(adapters::find).orElseThrow(() -> new ApiException(
                 HttpStatus.NOT_FOUND, ProblemTypes.UNKNOWN_CALLBACK_PROVIDER, "No such provider",
                 "This server has no adapter for provider '" + providerId + "'."));
 
@@ -74,9 +112,14 @@ class CallbackController {
         try {
             event = adapter.parseCallback(new RawCallback(headers, body == null ? "" : body));
         } catch (UntrustedCallbackException notParseable) {
-            // For MTN this only ever means "not a well-formed MTN callback" — there is no
-            // signature to fail. 400 says exactly that and nothing about our data.
-            log.info("rejected an unparseable callback on /callbacks/{}: {}", providerId, notParseable.getMessage());
+            countRejected(providerTag, "unparseable");
+            if (loggedUnparseableOnce.compareAndSet(false, true)) {
+                // For MTN this only ever means "not a well-formed MTN callback" — there is
+                // no signature to fail. Never notParseable.getMessage(): a parse failure can
+                // echo a substring pulled from the request body (see class javadoc).
+                log.warn("rejected an unparseable callback on /callbacks/{} "
+                        + "(further occurrences are counted in nkap_callback_rejected, not logged)", providerId);
+            }
             throw new ApiException(HttpStatus.BAD_REQUEST, ProblemTypes.UNPARSEABLE_CALLBACK,
                     "The callback could not be parsed",
                     "The body is not a well-formed " + providerId + " callback.");
@@ -84,16 +127,43 @@ class CallbackController {
 
         ReferenceId reference = event.reference();
         if (payments.findByReference(reference).isEmpty()) {
-            // 202, not 404: this endpoint is public, and a 404-vs-202 difference here is an
-            // oracle for enumerating references. Write nothing; log it — misconfiguration
-            // or a probe, both worth seeing.
-            log.warn("callback on /callbacks/{} names reference {}, which this gateway never issued",
-                    providerId, reference);
+            countRejected(providerTag, "unknown_reference");
+            if (loggedUnknownReferenceOnce.compareAndSet(false, true)) {
+                // 202, not 404: this endpoint is public, and a 404-vs-202 difference here is
+                // an oracle for enumerating references. The reference itself is safe to log
+                // (it only reaches this line already shaped like this deployment's own
+                // reference), but a real reference this deployment never issued is exactly
+                // as cheap for an attacker to produce as an unparseable body, so it gets the
+                // same bounded treatment, not an unconditional line.
+                log.warn("callback on /callbacks/{} names reference {}, which this gateway never issued "
+                        + "(further occurrences are counted in nkap_callback_rejected, not logged)", providerId, reference);
+            }
             return ResponseEntity.accepted().build();
         }
 
+        countConfirmed(providerTag);
+        // A reference this deployment issued is not guessable, so this line is bounded by
+        // real traffic rather than by an attacker's request rate — safe to write every time,
+        // unlike the two branches above. MDC here, not just in the message, is what makes
+        // this line joinable to whatever SettlementService.confirm logs next on this same
+        // thread about the same reference (issue #75), including the transition it causes.
+        try (var ignored = MDC.putCloseable("reference", reference.toString())) {
+            log.info("callback on /callbacks/{} received for reference {}", providerId, reference);
+        }
         settlement.confirm(id, reference, PaymentTransition.Cause.CALLBACK);
         return ResponseEntity.accepted().build();
+    }
+
+    /** The configured {@link ProviderId} named by {@code raw}, or empty — never the adapter itself,
+     * so the caller always has the canonical id to tag with, whether or not it also needs the
+     * adapter. */
+    private Optional<ProviderId> tryResolve(String raw) {
+        try {
+            ProviderId candidate = ProviderId.of(raw);
+            return adapters.find(candidate).isPresent() ? Optional.of(candidate) : Optional.empty();
+        } catch (RuntimeException notAProviderId) {
+            return Optional.empty();
+        }
     }
 
     private static ProviderId providerId(String raw) {
@@ -103,5 +173,38 @@ class CallbackController {
             throw new ApiException(HttpStatus.NOT_FOUND, ProblemTypes.UNKNOWN_CALLBACK_PROVIDER, "No such provider",
                     "'" + raw + "' is not a provider this server knows.");
         }
+    }
+
+    private void countReceived(String providerTag) {
+        Counter.builder("nkap.callback.received")
+                .description("Every request to the callback endpoint, parseable or not, known "
+                        + "reference or not. Unauthenticated and internet-reachable by design "
+                        + "(docs/security-notes.md #5) -- this counter, not a log line, is how a "
+                        + "flood of it is answered.")
+                .tag("provider", providerTag)
+                .register(meterRegistry)
+                .increment();
+    }
+
+    private void countRejected(String providerTag, String reason) {
+        Counter.builder("nkap.callback.rejected")
+                .description("Callbacks this gateway would not act on: unparseable, or naming a "
+                        + "reference it never issued. Both are as cheap for an attacker to "
+                        + "produce as the request rate itself, so this counter carries the "
+                        + "count and the log carries at most one example, ever.")
+                .tag("provider", providerTag)
+                .tag("reason", reason)
+                .register(meterRegistry)
+                .increment();
+    }
+
+    private void countConfirmed(String providerTag) {
+        Counter.builder("nkap.callback.confirmed")
+                .description("Callbacks naming a reference this deployment issued -- bounded by "
+                        + "real traffic, since that reference is not guessable, unlike the "
+                        + "request rate itself.")
+                .tag("provider", providerTag)
+                .register(meterRegistry)
+                .increment();
     }
 }

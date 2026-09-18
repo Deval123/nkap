@@ -31,8 +31,19 @@
 #     docker compose run --rm gateway --nkap.apikey.create --nkap.apikey.merchant=<id>
 #
 # and reads the key off stdout once; it is stored only as a hash and cannot be recovered.
+#
+# `name: nkap-demo` (issue #123): this file and `nkap-standalone.compose.yaml` used to
+# resolve to the same project — both explicitly said `nkap` — so a machine that had run one
+# and then the other shared a data directory, and PostgreSQL applies `POSTGRES_PASSWORD` only
+# when it initialises an empty one. Whichever file touched the volume first kept its password;
+# the second could never connect, with the actual cause forty lines into a Flyway stack trace
+# in a different service's logs. Renaming this file's project is deliberately the only side
+# of the fix: this is the demo stack, its data is demo data, and orphaning a `nkap_*` volume
+# left over from before this change is acceptable — a fresh one is arguably what it should
+# have had all along. See `nkap-standalone.compose.yaml`'s own header for the other side,
+# which is not touched, and why.
 
-name: nkap
+name: nkap-demo
 
 services:
   db:

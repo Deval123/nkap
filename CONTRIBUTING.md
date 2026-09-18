@@ -98,38 +98,55 @@ error, amended the same way in the same section, each with its own inline marker
 
 ## Versioning and releases
 
-Semantic versioning, and a tag is a promise rather than a bookmark.
+Semantic versioning, and a tag is a promise rather than a bookmark. **A tag means a GitHub
+release.** If there is nothing worth writing release notes about, there is nothing worth
+tagging. Untagged `main` is the normal state of this project.
 
-- Tags are annotated and named `vX.Y.Z` (`git tag -a v0.1.0 -m "..."`). A lightweight
-  tag carries no author, no date and no message, which is exactly the information you
-  want a year later.
-- **A tag means a GitHub release.** If there is nothing worth writing release notes
-  about, there is nothing worth tagging. Untagged `main` is the normal state of this
-  project.
-- The `pom.xml` version drops `-SNAPSHOT` in the release commit, the tag points at that
-  commit, and the next commit opens the following `-SNAPSHOT`.
-- Until 1.0.0, the minor number carries breaking changes. `provider-api` is the surface
-  that matters: breaking it breaks every adapter, so it changes in a minor release and
-  never in a patch. From 1.0.0 it takes a major release, which is the discipline that
-  makes third-party adapters possible.
-- Releases are cut from `main` only, and only when the conformance kit passes.
-- Pushing an annotated `vX.Y.Z` tag runs `.github/workflows/release.yml`: the full reactor
-  build, then `ghcr.io/deval123/nkap-gateway` and `ghcr.io/deval123/nkap-simulator` published
-  for `linux/amd64` and `linux/arm64`, tagged `X.Y.Z` and the moving `latest` — never on a
-  push to `main`, and never a rolling `X.Y` or `X` tag (until 1.0.0, a minor release can
-  break `provider-api`; a tag that moves across one silently is the wrong default for a
-  payments gateway). The workflow then pulls what it just published, from a job with no
-  registry credentials, and runs `examples/demo.sh` against `nkap-standalone.compose.yaml` —
-  the file a real deployment downloads. A publish nobody can pull, or that only works from a
-  clone, fails the build. GHCR packages default to private on their first publish and there
-  is no supported way to flip that from the workflow alone (see the workflow's own comment);
-  after the very first tagged release, a maintainer sets both packages to public once, by
-  hand, in their package settings — the pull-and-verify step above is what catches this being
-  forgotten.
+Once that judgment is made, cut the release from `main` only, once the conformance kit
+passes, in exactly this order:
 
-`v1.0.0` is the first release, and its scope is fixed in
-[`docs/roadmap/v1.0.0-mtn-end-to-end.md`](docs/roadmap/v1.0.0-mtn-end-to-end.md): MTN,
-end to end. Until then `main` carries no tags.
+1. **Drop `-SNAPSHOT`, by hand.** Every POM in the reactor, and the CHANGELOG entry for the
+   version being cut gets its date. This is the release commit.
+2. **Tag it, by hand.** Annotated `vX.Y.Z` (why annotated, below), on the release commit,
+   once it is on `main`. Push the tag the same day the release commit merges: that commit
+   bumps `README.md`'s quickstart `curl` to
+   `raw.githubusercontent.com/deval123/nkap/v<version>/...`, and that URL 404s until the tag
+   exists — minutes apart if the two are done together, a day if the tag waits.
+3. **The workflow runs itself.** Pushing the tag triggers `.github/workflows/release.yml`
+   with nobody doing anything: the full reactor build, then the images published, then
+   pulled back down with no credentials and run through the demo to prove the publish
+   actually works. See below for exactly what it does, including the one manual step
+   inside it.
+4. **Create the GitHub release, by hand.** Nothing in this repository does this
+   automatically. Body: the version's own `CHANGELOG.md` entry, copied verbatim from below
+   its heading to the next one; title `Nkap X.Y.Z`; neither draft nor prerelease.
+5. **Reopen the next `-SNAPSHOT`, by hand.** Every POM in the reactor. Until this lands,
+   `main` sits on a released version, and a build from it produces an artifact claiming a
+   version it is not.
+
+- Tags are annotated (`git tag -a v0.1.0 -m "..."`), never lightweight: a lightweight tag
+  carries no author, no date and no message, which is exactly the information you want a
+  year later.
+- Until 1.0.0, the minor number carried breaking changes — `provider-api` is the surface
+  that matters, so breaking it took a minor release, never a patch. From 1.0.0 it takes a
+  major release, the discipline that makes third-party adapters possible.
+- Step 3, in full: the workflow runs the full reactor build, then publishes
+  `ghcr.io/deval123/nkap-gateway` and `ghcr.io/deval123/nkap-simulator` for `linux/amd64`
+  and `linux/arm64`, tagged `X.Y.Z` and the moving `latest` — never on a push to `main`, and
+  never a rolling `X.Y` or `X` tag (until 1.0.0, a minor release could break `provider-api`;
+  a tag that moves across one silently is the wrong default for a payments gateway). It then
+  pulls what it just published, from a job with no registry credentials, and runs
+  `examples/demo.sh` against `nkap-standalone.compose.yaml` — the file a real deployment
+  downloads. A publish nobody can pull, or that only works from a clone, fails the build.
+  GHCR packages default to private on their first publish and there is no supported way to
+  flip that from the workflow alone (see the workflow's own comment); after the very first
+  tagged release, a maintainer sets both packages to public once, by hand, in their package
+  settings — the pull-and-verify step above is what catches this being forgotten.
+
+`v1.0.0` was Nkap's first release; its scope was fixed in
+[`docs/roadmap/v1.0.0-mtn-end-to-end.md`](docs/roadmap/v1.0.0-mtn-end-to-end.md), which is a
+historical record now, not a plan — the file says so itself. `main` has carried a tag, cut
+by the sequence above, at every release since.
 
 ## Reporting a security issue
 

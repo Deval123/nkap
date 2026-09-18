@@ -6,7 +6,7 @@ All notable changes to Nkap are documented here. The format follows
 
 ## [Unreleased]
 
-## [1.1.0]
+## [1.1.0] - 2026-09-18
 
 ### Added
 

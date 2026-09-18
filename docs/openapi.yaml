@@ -12,12 +12,11 @@ info:
   # automating the day this project releases often enough that a human is no longer reading
   # this file closely each time; not yet.
   #
-  # Stays "1.0.0" while the POMs move to 1.1.0-SNAPSHOT, on purpose: this file describes the
-  # API as published, and the API has not changed since v1.0.0 -- calling it a -SNAPSHOT
-  # would say something untrue about a document people read as settled. Bump it only when a
-  # path, method, field or status code in this file actually changes, whatever the gateway's
-  # own version happens to be at the time (the same reasoning charts/nkap/Chart.yaml gives
-  # for its own version field moving independently of appVersion).
+  # Stays "1.0.0" on purpose, independent of whatever the POMs currently carry: this file
+  # describes the API as published, and the API has not changed since v1.0.0. Bump it only
+  # when a path, method, field or status code in this file actually changes, whatever the
+  # gateway's own version happens to be at the time (the same reasoning charts/nkap/Chart.yaml
+  # gives for its own version field moving independently of appVersion).
   version: "1.0.0"
   description: |
     A self-hosted mobile money gateway with a real double-entry ledger — MTN MoMo first,

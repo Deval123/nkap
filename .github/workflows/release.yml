@@ -159,6 +159,14 @@ jobs:
       NKAP_VERSION: ${{ needs.publish.outputs.version }}
       NKAP_DB_PASSWORD: release-check-not-for-production
       NKAP_MERCHANT_ID: acme
+      # Names the stack for the whole job, examples/demo.sh included (issue #137) -- Docker
+      # Compose's own variable, read the same way by every `docker compose` call below and
+      # by demo.sh's, so the project this job actually started and the project demo.sh
+      # addresses cannot drift apart. Both files set their own `name:` (issue #123), so this
+      # alone is enough to pick the project too; COMPOSE_PROJECT_NAME is deliberately not set
+      # here as well -- a project name given in two places is one that can disagree with
+      # itself.
+      COMPOSE_FILE: nkap-standalone.compose.yaml:.github/release-check.compose.yaml
     steps:
       - uses: actions/checkout@v5
 
@@ -187,10 +195,7 @@ jobs:
           docker pull "${SIMULATOR_IMAGE}:${NKAP_VERSION}"
 
       - name: Bring up the standalone file, plus the release-check overlay
-        run: |
-          docker compose \
-            -f nkap-standalone.compose.yaml -f .github/release-check.compose.yaml \
-            up -d --wait --wait-timeout 240
+        run: docker compose up -d --wait --wait-timeout 240
 
       # nkap-standalone.compose.yaml provisions no API key of its own -- an operator-chosen
       # one is exactly the weak-key risk issue #86's correction removed -- so key-init mints
@@ -200,8 +205,7 @@ jobs:
       - name: Read the API key key-init minted
         id: key
         run: |
-          key="$(docker compose -f nkap-standalone.compose.yaml -f .github/release-check.compose.yaml \
-            logs key-init | grep -oE 'nkap_[A-Za-z0-9_-]{43}' | head -n1)"
+          key="$(docker compose logs key-init | grep -oE 'nkap_[A-Za-z0-9_-]{43}' | head -n1)"
           if [ -z "$key" ]; then
             echo "::error::no API key found in key-init's log output" >&2
             exit 1
@@ -214,10 +218,8 @@ jobs:
 
       - name: Stack logs
         if: failure()
-        run: |
-          docker compose -f nkap-standalone.compose.yaml -f .github/release-check.compose.yaml logs
+        run: docker compose logs
 
       - name: Tear down
         if: always()
-        run: |
-          docker compose -f nkap-standalone.compose.yaml -f .github/release-check.compose.yaml down -v
+        run: docker compose down -v

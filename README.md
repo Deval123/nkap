@@ -9,10 +9,56 @@ others through the same contract — and gives you the three things every integr
 rebuilds badly from scratch: an accounting record you can prove, a payment state machine
 that never guesses, and a way to test the cases that actually break in production.
 
-> **Status: pre-alpha.** The core is implemented and tested. Nothing is deployable yet.
-> See the [roadmap](#roadmap).
+> **Status: released and runnable.** Every tagged release publishes public images for
+> `linux/amd64` and `linux/arm64`, no login needed to pull — see
+> [Run it without cloning](#run-it-without-cloning). **It has never handled real money** —
+> not in any country, by anyone, including its author: every observation this project has
+> made against MTN and M-Pesa was against a sandbox. Key revocation is a database delete
+> today (issue #112); [`docs/security-notes.md`](docs/security-notes.md) holds the rest of
+> what to know before you point this at anything real.
 
 ---
+
+## The five-minute path
+
+Three commands, from a cold clone, put one payment through the failure this project exists
+for — the operator accepts the submission, then goes silent — and show the ledger settle it
+anyway, without ever calling it a failure:
+
+```bash
+git clone https://github.com/Deval123/nkap
+cd nkap
+docker compose up --build -d && ./examples/demo.sh
+```
+
+What you should see, trimmed to the shape that matters — the full walkthrough is in
+[Quick start](#quick-start-the-contributors-path) below:
+
+```
+▸ 2. POST /payments — the network drops before the operator replies
+   ✓ HTTP 202 Accepted
+   ✓ state is UNKNOWN — the outcome is genuinely not known, and the gateway does not guess
+
+▸ 4. Waiting for the reconciler to re-query the operator and settle it
+     state: UNKNOWN
+     state: SUCCEEDED
+   ✓ resolved to SUCCEEDED
+   ✓ the transition into SUCCEEDED carries cause RECONCILER — the reconciler resolved it, no callback involved
+
+▸ 5. The ledger entry that settlement wrote
+
+     provider:mtn-cm:float:XAF             +5,000
+     merchant:acme:payable:XAF             -5,000
+                                       -----------
+                                                 0
+```
+
+`UNKNOWN`, not `FAILED` — nothing answered, and the gateway does not guess. The reconciler,
+not a callback, is what resolves it. And the ledger balances to zero, enforced by PostgreSQL
+as a constraint on the table — not printed because the script says it should.
+
+That is the whole argument this project makes, running, on your own machine, in about the
+time it took to read this section.
 
 ## Why this exists
 
@@ -170,11 +216,6 @@ obviously-named demo API key before the gateway starts, and the script sends it 
    resolve it;
 5. the payment resolves to `SUCCEEDED`, its transition attributed to `RECONCILER`: **one**
    ledger entry, **two** postings, summing to **zero**.
-
-The network dropped at the worst possible moment and the accounting truth was not lost.
-Nothing in the run is staged: it is the real gateway, the real reconciler, and a real
-PostgreSQL enforcing the ledger's invariants as constraints — the zero-sum check that
-prints at the end is the database's, not the script's.
 
 ```bash
 docker compose down -v            # stop, and wipe the database
@@ -363,12 +404,12 @@ mvn test
 
 ## Roadmap
 
-**v1.0.0 — MTN, end to end.** One operator, done properly: collections and disbursements
-across MTN's countries, a ledger persisted in PostgreSQL with its invariants as database
-constraints, reconciliation, signed webhooks, the conformance kit, and a `docker compose up`
-that puts a payment through. The full definition of done is
-[`docs/roadmap/v1.0.0-mtn-end-to-end.md`](docs/roadmap/v1.0.0-mtn-end-to-end.md) — nothing
-off that list ships in 1.0.0.
+**v1.0.0 shipped — MTN, end to end.** One operator, done properly: collections and
+disbursements across MTN's countries, a ledger persisted in PostgreSQL with its invariants as
+database constraints, reconciliation, signed webhooks, the conformance kit, and a
+`docker compose up` that puts a payment through.
+[`docs/roadmap/v1.0.0-mtn-end-to-end.md`](docs/roadmap/v1.0.0-mtn-end-to-end.md) was the full
+definition of done — a historical record now, not a plan.
 
 **After 1.0.0 — the other operators.** Orange Money, Wave, M-Pesa, Airtel. This is the
 contribution the architecture was built to accept: a new adapter is a self-contained module

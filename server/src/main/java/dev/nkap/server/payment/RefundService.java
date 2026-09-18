@@ -92,6 +92,10 @@ public class RefundService {
                     publicBaseUrl.providerOptionsFor(original.provider()));
             Payment refund = Payment.createRefund(refundReference, original.provider(), original.merchantId(),
                     refundIntent, originalReference);
+            // Which endpoint this refund is actually being submitted to, from configuration,
+            // before the operator is ever called (issue #122) — the same installation the
+            // original collection used, since a refund is submitted through original.provider().
+            adapters.settlementEndpoint(original.provider()).ifPresent(refund::recordProviderBaseUrl);
             payments.save(refund);
         });
 

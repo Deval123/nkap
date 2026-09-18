@@ -86,6 +86,14 @@ added a day later is not a correction — it is a second entry about a second re
 which is what an append-only ledger is for. Nkap charges no fee of its own. See
 [ADR 0006](docs/adr/0006-what-a-settled-collection-posts.md).
 
+An entry itself says nothing about whether the payment behind it was ever real: `provider_id`
+is derived from an installation's country, so a stack pointed at the simulator and one
+pointed at MTN write the same value. `ledger_entry.reference` is how an auditor follows an
+entry back to its payment, and `payment.provider_base_url` — the installation's own base URL,
+recorded once at creation and never changed after — is what settles the question there
+(issue #122). It began with the migration that added it; a payment recorded before that
+carries none, deliberately, rather than a backfilled guess.
+
 Where Nkap sits, and why it is not Mojaloop, not a ledger engine and not another
 unified API: [docs/positioning.md](docs/positioning.md).
 

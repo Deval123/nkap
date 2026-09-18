@@ -458,6 +458,31 @@ above). The consequence a reader hits directly: `GET /payments/{reference}` and 
 for a payment settled against the simulator carry `providerTransactionId: ""`, even for
 `SUCCEEDED` — not a Nkap bug, and not something the simulator was asked to model here.
 
+### Provenance: telling a simulated settlement from a real one
+
+That blank `providerTransactionId` is not the tell it looks like — it is also what a real
+operator returns for a payment that failed, so a signal indistinguishable from a legitimate
+empty value is not a signal (issue #122). `provider_id` doesn't help either: it is derived
+from the installation's country (#82's routing), so `mtn-cm` is written whether that
+installation's `base-url` points at `sandbox.momodeveloper.mtn.com` or at
+`http://simulator:8081` standing in for it. Two payments settled by different programs, same
+MSISDN, same `mtn-cm`, were byte-identical in the database on everything provenance-shaped.
+
+`payment.provider_base_url` (migration V9) records the installation's own base URL at the
+moment a payment is created — self-describing, and unlike a deployment-level label such as
+`nkap.environment: production`, it cannot lie about itself. Set once, from configuration,
+never from a caller, and never again afterward: a database trigger refuses any `UPDATE` that
+touches the column once a row exists. It is not returned by `GET /payments/{reference}` —
+information about which endpoint this deployment talks to is about the deployment, not the
+payment, the same reasoning that keeps the management port off the public API.
+
+Every payment recorded before this migration carries `NULL`, and nothing backfills one: the
+database this was found on already held simulator and real-operator payments side by side
+with no way to tell them apart after the fact, and writing a plausible guess onto either kind
+now would be the exact false statement this issue exists to remove — undetectable once
+written. `NULL` means "predates provenance tracking," which is true, not a guess dressed up
+as an answer.
+
 ## Callbacks
 
 One run against the real sandbox, 2026-09-16, from a `cloudflared` quick tunnel in front of a

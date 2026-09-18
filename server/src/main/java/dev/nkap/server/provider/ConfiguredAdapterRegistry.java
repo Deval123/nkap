@@ -19,6 +19,7 @@ public final class ConfiguredAdapterRegistry implements AdapterRegistry {
 
     private final Map<ProviderId, ProviderAdapter> byId;
     private final Map<ProviderId, Currency> settlementCurrencies;
+    private final Map<ProviderId, String> settlementEndpoints;
 
     public ConfiguredAdapterRegistry(List<ProviderAdapter> adapters, List<ProviderRouting> routes) {
         Map<ProviderId, ProviderAdapter> index = new LinkedHashMap<>();
@@ -31,13 +32,19 @@ public final class ConfiguredAdapterRegistry implements AdapterRegistry {
         this.byId = Map.copyOf(index);
 
         Map<ProviderId, Currency> currencies = new LinkedHashMap<>();
+        Map<ProviderId, String> endpoints = new LinkedHashMap<>();
         for (ProviderRouting route : routes) {
             Currency clash = currencies.putIfAbsent(route.provider(), route.currency());
             if (clash != null && clash != route.currency()) {
                 throw new IllegalStateException("two routes disagree on the currency for provider " + route.provider());
             }
+            String endpointClash = endpoints.putIfAbsent(route.provider(), route.baseUrl());
+            if (endpointClash != null && !endpointClash.equals(route.baseUrl())) {
+                throw new IllegalStateException("two routes disagree on the base URL for provider " + route.provider());
+            }
         }
         this.settlementCurrencies = Map.copyOf(currencies);
+        this.settlementEndpoints = Map.copyOf(endpoints);
     }
 
     @Override
@@ -57,6 +64,11 @@ public final class ConfiguredAdapterRegistry implements AdapterRegistry {
     @Override
     public Optional<Currency> settlementCurrency(ProviderId id) {
         return Optional.ofNullable(settlementCurrencies.get(id));
+    }
+
+    @Override
+    public Optional<String> settlementEndpoint(ProviderId id) {
+        return Optional.ofNullable(settlementEndpoints.get(id));
     }
 
     @Override

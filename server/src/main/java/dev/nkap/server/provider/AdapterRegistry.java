@@ -33,6 +33,16 @@ public interface AdapterRegistry {
     Optional<Currency> settlementCurrency(ProviderId id);
 
     /**
+     * The base URL a payment routed to {@code id} is actually submitted against, when
+     * routing for it is configured — {@code http://simulator:8081} for a stack pointed at
+     * the simulator, MTN's real sandbox or production host otherwise. Recorded on the
+     * payment itself so a simulated settlement and a real one stop being byte-identical in
+     * provenance (issue #122); {@code provider_id} alone cannot do this, since it is derived
+     * from the installation's country (#82) and is the same either way.
+     */
+    Optional<String> settlementEndpoint(ProviderId id);
+
+    /**
      * Every provider id this deployment has an adapter for. For a caller who named one that
      * is not configured — a request routing by country (issue #82) is the first place that
      * can be a client mistake rather than a server misconfiguration, and the answer should

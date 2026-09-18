@@ -70,6 +70,16 @@ import org.springframework.transaction.support.TransactionTemplate;
  * {@link #settle}, carries the reference as a structured field ({@code MDC}), the same field
  * {@code PaymentService} and the reconciler attach — one payment's story, filterable across
  * all three (issue #75).
+ *
+ * <p><strong>The logging rule this class installs (issue #129): a line at INFO for anything
+ * that changed a payment or was refused; a counter, or a line no louder than DEBUG, for
+ * everything else.</strong> A transition — whichever cause, whichever resulting state — is
+ * always a line, because nothing else in this codebase says "a callback settled this" or
+ * "a callback failed this" at all. The reconciler's own steady state — an attempt that
+ * answers but changes nothing, once per unresolved payment per pass — is DEBUG, not INFO:
+ * it is genuinely useful (it is how a payment stuck for thirty-six hours was diagnosed at
+ * all) but per-attempt and per-payment on a loop is too loud for the level every deployment
+ * actually reads by default.
  */
 @Service
 public class SettlementService {
@@ -123,7 +133,11 @@ public class SettlementService {
                 status = adapters.require(providerId)
                         .query(new QuerySubject(reference, peek.providerReference()), peek.intent().operation());
             } catch (ProviderUnavailableException noAnswer) {
-                log.info("{} for {}: the confirming query did not answer, changing nothing: {}",
+                // DEBUG, not INFO (issue #129): this fires on every reconciler attempt that
+                // still gets no answer, per unresolved payment, on a loop -- loud here is
+                // how a quiet gateway becomes an unreadable one. The line that changed a
+                // payment, below and in applyConfirmed, is the one that stays at INFO.
+                log.debug("{} for {}: the confirming query did not answer, changing nothing: {}",
                         cause, reference, noAnswer.getMessage());
                 return ConfirmationOutcome.noAnswer();
             }
@@ -141,7 +155,15 @@ public class SettlementService {
 
         PaymentState confirmed = status.state();
         if (confirmed == PaymentState.UNKNOWN) {
-            log.info("{} for {}: the operator's answer is not conclusive ({}), changing nothing",
+            // DEBUG, not INFO (issue #129): the rule this file installs is a line for
+            // anything that changed a payment or was refused, a counter for everything
+            // else. This is neither — it is the reconciler's own steady state, once per
+            // unresolved payment per pass, and was the loud half of a gateway that was
+            // otherwise silent about the callback that actually settled something. The
+            // line survives at DEBUG (issue #115 needed exactly this once) rather than
+            // being deleted, and stays paired with the resolving case's INFO line below so
+            // the two levels move together, not just this one.
+            log.debug("{} for {}: the operator's answer is not conclusive ({}), changing nothing",
                     cause, reference, blankToDash(status.providerStatusCode()));
             return ConfirmationOutcome.inconclusive(payment.state(), status.providerStatusCode());
         }
@@ -153,8 +175,11 @@ public class SettlementService {
         // request — that is what SUBMITTED means. Record that leg, then the one the query
         // reports. The state machine is not widened; both transitions happened.
         if (payment.state() == PaymentState.CREATED && !payment.state().canTransitionTo(confirmed)) {
+            PaymentState impliedFrom = payment.state();
             payment.applyTransition(PaymentState.SUBMITTED, cause,
                     "", "callback received before the submit response", status.rawResponse());
+            log.info("{} for {}: {} -> {} (implied by this confirmation)", cause, reference,
+                    impliedFrom, payment.state());
         }
 
         if (!payment.state().canTransitionTo(confirmed)) {
@@ -163,9 +188,17 @@ public class SettlementService {
             return ConfirmationOutcome.inconclusive(payment.state(), status.providerStatusCode());
         }
 
+        // INFO: this is the line issue #129 found missing entirely — a callback that
+        // settled a payment left no trace grep-able as "callback" because nothing here
+        // logged the transition itself, only settle()'s ledger line below (SUCCEEDED only)
+        // ever mentioned it. Every transition this method writes, whichever cause, is now
+        // a line: "a line for anything that changed a payment or was refused."
+        PaymentState previousState = payment.state();
         payment.applyTransition(confirmed, cause,
                 status.providerStatusCode(), status.failureReason(), status.rawResponse());
         status.transactionId().ifPresent(payment::recordProviderTransactionId);
+        log.info("{} for {}: {} -> {} ({})", cause, reference, previousState, confirmed,
+                blankToDash(status.providerStatusCode()));
 
         if (payment.state() == PaymentState.SUCCEEDED) {
             settle(payment);

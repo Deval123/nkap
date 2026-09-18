@@ -9,15 +9,40 @@ There is no Orange Money adapter in this repository and 1.0.0 does not plan one.
 is what the review found, so that whoever writes that adapter — most likely someone who is not
 us — starts from what we learned rather than from nothing.
 
-## Where this came from, and why it is all *assumed*
+## Where this came from, and why most of it is *assumed*
 
 `docs/providers/mtn.md` separates what was **observed** against a real sandbox from what was
 **assumed** from documentation, because a guess recorded as a fact is the failure that page
-exists to prevent. By that standard **every statement on this page is assumed**, and more
-weakly sourced than anything in `mtn.md`:
+exists to prevent. By that standard, the API shape below is **assumed**, and more weakly
+sourced than anything in `mtn.md` — with one exception, marked the way `mtn.md` marks its own:
+a fact about *access* to Orange's API, checked against Orange's own pages rather than inferred.
 
-- Orange's authoritative API reference sits behind a developer account nobody on this project
-  holds.
+**Observed, read on 2026-09-18 on Orange's own developer pages — the product overview
+(`om-webpay`) and its FAQ (`om-webpay/faq`), each fragment below checked verbatim against the
+page it is attributed to, not taken from a summary of either.** Access to Orange's
+authoritative API reference is not a developer account — it is Orange Money **merchant
+status**:
+
+- The overview: "officially registered retailers (Orange Money merchants — fully KYA
+  compliant)", supplying "Trade and Personal Property Credit Register or other documents as
+  per local legislation". The FAQ, in its own words: merchants must have an Orange Money
+  account and must be KYA compliant.
+- Testing exists, but the overview frames it as available to "merchants or their integrators
+  prior to going live" — after merchant status is granted, not before it.
+- There is no self-service enrolment: the overview directs a reader to "contact your local
+  Orange operator to know more about the registration process and compliance rules"; the FAQ
+  says the same, in different words, at more than one question.
+- **The two pages name different countries, and disagree — not a detail to flatten into one
+  list.** The overview: Mali, Cameroon, Côte d'Ivoire, Senegal, Madagascar, Botswana, Guinea
+  Conakry, Guinea Bissau, Sierra Leone, RD Congo, Central African Republic. The FAQ: Mali,
+  Cameroon, Senegal, Madagascar, Botswana, Guinea Conakry, Sierra Leone, Côte d'Ivoire, Guinea
+  Bissau, **Liberia** — present on the FAQ's list and absent from the overview's; RD Congo and
+  Central African Republic run the other way, on the overview's list and absent from the
+  FAQ's. An operator whose own pages do not agree on where its product exists is a fact about
+  the reliability of everything else stated here, not only about country coverage.
+
+Everything else on this page is **assumed**:
+
 - What was read is the public product portal — which describes the payer's journey — plus two
   third-party clients that really do call the API: a Java client and a PHP one. Field names
   below come from those clients, not from Orange.
@@ -88,10 +113,24 @@ disbursement nor refund; an adapter would declare `COLLECT` and not `DISBURSE`. 
 `capabilities()` is a set and callers go through `operations()` (#70), nothing in the gateway or
 the conformance kit assumes both exist.
 
+## What this means for the project
+
+This repository's premise is that the adapter for a second operator is written by someone who
+is not us — the conformance kit, `docs/providers/`'s whole existence, and this page's own
+opening sentence all assume that. MTN could be first because its sandbox is open to anyone with
+an email address. An operator whose API cannot be seen without a registered company and a
+compliance file is one that an outside contributor cannot approach, however good the contract
+turns out to be.
+
+That is a criterion for choosing a second operator this project had not written down:
+**observable without a company.** It does not disqualify Orange, and this page does not say
+that it does — it changes what the reader of this page has to weigh, which is exactly what the
+page is for.
+
 ## Still unknown
 
-Everything above, strictly speaking. The questions worth answering first, once someone holds a
-developer account:
+Everything above, strictly speaking. The questions worth answering first, once someone holds
+Orange Money merchant status:
 
 - **Does `transactionstatus` really require `pay_token` and `amount`, or does `order_id` alone
   suffice?** This single answer decides how much of finding 2 survives.
@@ -115,3 +154,12 @@ Read on 2026-09-14. None of these is Orange's authoritative API reference.
 - `om4j`, a third-party Java client: <https://github.com/pathus90/om4j>
 - `Ibracilinks/OrangeMoney`, a third-party PHP client:
   <https://github.com/Ibracilinks/OrangeMoney/blob/master/src/Api.php>
+
+Read on 2026-09-18, for the access-gate fact above — the same product's pages, read again for
+what they say about reaching the API rather than about the payer's journey through it. Still
+not Orange's authoritative API reference.
+
+- Orange Developer, *Orange Money Web Payment (OM WebPay)* — API overview, merchant access
+  requirements: <https://developer.orange.com/apis/om-webpay>
+- Orange Developer, *Orange Money Web Payment (OM WebPay)* — FAQ, registration and compliance:
+  <https://developer.orange.com/apis/om-webpay/faq>

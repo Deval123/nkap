@@ -1,0 +1,5 @@
+# Issue #123: makes a wrong database password fail with a one-line diagnosis instead of a
+# Flyway stack trace forty lines into a service's log. See
+# dev.nkap.server.persistence.WrongDatabasePasswordFailureAnalyzer's own javadoc.
+org.springframework.boot.diagnostics.FailureAnalyzer=\
+dev.nkap.server.persistence.WrongDatabasePasswordFailureAnalyzer

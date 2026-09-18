@@ -57,6 +57,45 @@ acceptable.
 - Comments explain *why*, never *what*. The code already says what.
 - Sign your commits off with `git commit -s` (Developer Certificate of Origin).
 
+## Amending an ADR
+
+An ADR records a decision and the reasoning that led to it — not a claim that stays true
+forever. When later work bounds, extends, or corrects what one says, without replacing the
+decision itself, amend it in place rather than rewriting it. The decision text and its
+reasoning are never edited — a reader must still be able to see what was decided then, and
+why it made sense at the time.
+
+1. **A dated `## Amendment, <date> — <issue>` section**, at the foot of the ADR, after
+   *Alternatives rejected* if it has one. Say what is no longer accurate, what changed it
+   and by which issue, and what of the original reasoning still stands.
+2. **An inline marker on every row or sentence the amendment affects**, pointing at that
+   section. A reader who reaches the affected passage first — which is the normal way an ADR
+   is read, a table consulted and the file closed — and never reaches the foot of it must
+   still see that it is bounded. The amendment section alone does not reach that reader.
+
+Both steps apply the same way whether what changed is a decision later work narrowed (the
+rule was right, its scope was too wide) or a plain factual error (a wrong number, a wrong
+name): a reader needs the same thing from either — this passage is no longer accurate, here
+is why, here is what still stands. A one-sentence amendment for a plain error is a complete
+amendment; it does not need the weight of the bounded-decision case to earn the same shape.
+
+**The amendment points; it does not copy.** If the rule as it stands today already has a
+home with a test that keeps it honest against the code — `docs/providers/mtn.md`'s
+status-and-error tables, guarded by `MtnStatusMappingDocTest`, are the model — the amendment
+names that file and section instead of restating the rule. A rule written in two places
+drifts from one of them, and it will: issue #126 removed exactly this kind of duplication
+from `docs/providers/mtn.md` itself, after it had drifted twice in two days.
+
+**Reach for a new, superseding ADR only when the original decision is actually replaced.**
+If the earlier decision would be actively wrong to follow today, write a new ADR that
+supersedes it and say so in both. If the earlier reasoning is still right for the case it
+addressed, and later work only narrowed, extended, or corrected it, amend instead — a
+superseding ADR overstates what happened.
+
+[ADR 0004](docs/adr/0004-mtn-adapter.md)'s `## Amendment, 2026-09-18` section is the worked
+example this convention was written for: a decision issue #115 bounded, and a plain factual
+error, amended the same way in the same section, each with its own inline marker.
+
 ## Versioning and releases
 
 Semantic versioning, and a tag is a promise rather than a bookmark.

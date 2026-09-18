@@ -55,10 +55,14 @@ new one, a typo — maps to `UNKNOWN`.
 | `APPROVAL_REJECTED` | `FAILED` | The payer declined. |
 | `EXPIRED` | `EXPIRED` | The payer never answered in time. |
 | `INVALID_CURRENCY`, `NOT_ALLOWED`, `INVALID_CALLBACK_URL_HOST` | `FAILED` | Our request was wrong. Answered. |
-| **`SERVICE_UNAVAILABLE`** | **`UNKNOWN`** | The operator's own system failed. It is not telling us the payment failed — it is telling us it does not know. |
-| **`INTERNAL_PROCESSING_ERROR`** | **`UNKNOWN`** | Same. |
+| **`SERVICE_UNAVAILABLE`**¹ | **`UNKNOWN`** | The operator's own system failed. It is not telling us the payment failed — it is telling us it does not know. |
+| **`INTERNAL_PROCESSING_ERROR`**¹ | **`UNKNOWN`** | Same. |
 | **`RESOURCE_NOT_FOUND`** (on a query) | **`UNKNOWN`** | MTN has never seen the reference. Since Nkap persists it before calling, this is either "never arrived" or "not visible yet", and one response cannot separate them. |
 | anything else | `UNKNOWN` | A code we do not recognise is not a failure we can assert. |
+
+¹ No longer unconditional — bounded by issue #115. See *Amendment, 2026-09-18* at the foot
+of this ADR, and `docs/providers/mtn.md`'s *Status and error mapping* for the rule as it
+actually behaves today.
 
 The last three rows are the reason this project exists. A naive adapter sees an error code
 and concludes failure; but "my system broke" says nothing about where the money went. Those
@@ -134,9 +138,12 @@ optional in the model.
 `message` is prose for a human and must never be parsed.
 
 Also observed, and recorded in `docs/providers/mtn.md` rather than here: the sandbox settles
-in EUR whatever the country, and the documented test MSISDN stays `PENDING` for longer than a
-few seconds — so a test that submits and immediately expects success will fail for reasons
+in EUR whatever the country, and the documented test MSISDN² stays `PENDING` for longer than
+a few seconds — so a test that submits and immediately expects success will fail for reasons
 that have nothing to do with the code.
+
+² Not accurate: MTN's published *Success* entry is `56733123453`. See *Amendment,
+2026-09-18* at the foot of this ADR for which number this one actually was.
 
 ## Follow-up, 2026-09-08 — the contract did change
 
@@ -155,3 +162,30 @@ ledger rather than failing.
 
 **Mapping unknown codes to `FAILED`.** The tempting default, and the exact bug this project
 exists to prevent.
+
+## Amendment, 2026-09-18 — issue #127
+
+Two statements above are no longer accurate. Both are marked inline, where they are read;
+this section says what changed and why each is an amendment rather than a rewrite.
+
+**§3's `SERVICE_UNAVAILABLE` and `INTERNAL_PROCESSING_ERROR` rows are no longer
+unconditional.** Since issue #115, `MtnStatusMap.stateFor` reads both `status` and `reason`,
+and a `status: FAILED, reason: INTERNAL_PROCESSING_ERROR` pair — observed against the real
+sandbox and confirmed end to end — comes out `FAILED`, not `UNKNOWN`. The reasoning beside
+those two rows is still exactly right for the case it was written about: a `reason` arriving
+*instead of* a `status` genuinely says nothing about where the money went. What was false is
+the shape, not the reasoning — a two-column table reads as a total function, and the answer
+is now conditional on `status`. Issue #115 bounded this decision; it did not replace it, so
+this is an amendment, not a superseding ADR. The rule as it stands today, including every
+conditional case and the test that holds it to the code, lives in `docs/providers/mtn.md`'s
+*Status and error mapping* — that is the one place it is stated, so there is nowhere for it
+to drift from this ADR.
+
+**"The documented test MSISDN" (*Correction, 2026-09-08*) named the wrong number.**
+`46733123453` is not documented by MTN anywhere; it was this repository's own fixture,
+predating issue #117. MTN's published *Success* entry is `56733123453`. Both numbers exist
+and behave differently — see `docs/providers/mtn.md`'s *MTN's published test MSISDNs*.
+Unlike the row above, nothing here was ever a decision to bound: it was a plain factual
+error. It is corrected the same way regardless — an inline marker where it is read, and this
+paragraph saying what is actually true — because a reader needs the same thing from both: this
+passage is no longer accurate, here is why, here is what still stands.

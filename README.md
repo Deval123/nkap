@@ -277,11 +277,18 @@ Any variable left unset fails fast with a one-line message naming it, before any
 starts. The last command prints your API key — **once**; only its hash is ever stored, and
 there is no command or route that reads it back. Save it now. Bringing the stack up again
 after a `docker compose down` runs `key-init` again too, which mints and prints a *new* key
-for the same merchant — the old one keeps working (there is no revocation command yet, only a
-direct database delete; see [`docs/security-notes.md`](docs/security-notes.md)), so this is a
-second credential, not a replacement, until you deliberately stop using the first one. If you
-only want the one key, leave the stack running rather than cycling it,
-or provision it once by hand instead (see below) and remove `key-init` from the file.
+for the same merchant — the old one keeps working until you revoke it:
+
+```bash
+docker compose -f nkap-standalone.compose.yaml run --rm gateway \
+  --nkap.apikey.revoke --nkap.apikey.id=<the old key's id>
+```
+
+so this is a second credential, not a replacement, until you deliberately revoke the first
+one — see [`docs/security-notes.md`](docs/security-notes.md) for what revoking actually does
+(it marks the row, and takes effect on the very next request). If you only want the one key,
+leave the stack running rather than cycling it, or provision it once by hand instead (see
+below) and remove `key-init` from the file.
 
 Once it is up, fill in your real MTN credentials the same way — the file lists every variable
 it reads, each defaulting to unconfigured rather than to a placeholder — and provision

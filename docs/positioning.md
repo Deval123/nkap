@@ -98,9 +98,10 @@ backend sends `Authorization: Bearer <key>`; the key is compared against a store
 the merchant is the one that key identifies — never a request-body field — and a merchant
 sees only its own payments. Keys are minted by a host-side command, not a route, and shown
 once. There are no sessions and no JWTs: the caller is a backend, not a browser, and
-issuance-and-refresh is a second system to get wrong. Rate limiting, key rotation, mTLS and
-an audit trail are later slices; TLS termination and network placement are the operator's,
-as for any service.
+issuance-and-refresh is a second system to get wrong. Key revocation and rotation are not
+later slices (issue #112): a host-side command retires a key immediately, and rotation is
+provisioning a new one and revoking the old. Rate limiting, mTLS and an audit trail are;
+TLS termination and network placement are the operator's, as for any service.
 
 **A webhook secret is stored differently from an API key, and that is a real trade-off.**
 An API key is hashed and unrecoverable — the gateway only ever checks one. A webhook

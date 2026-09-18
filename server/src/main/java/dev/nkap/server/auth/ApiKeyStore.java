@@ -1,15 +1,20 @@
 package dev.nkap.server.auth;
 
 import java.util.Optional;
+import java.util.UUID;
 
 /**
- * Where API keys live. Two operations, and deliberately no third:
+ * Where API keys live. A small set of operations, and deliberately no more:
  *
  * <ul>
  *   <li>{@link #authenticate} — presented a token, return the caller it identifies, or
- *       nothing. Called on every authenticated request.</li>
+ *       nothing. Called on every authenticated request. Never returns a revoked key's
+ *       credential.</li>
  *   <li>{@link #provision} — mint a key for a merchant. Called only by the host-side
  *       command, never from a route.</li>
+ *   <li>{@link #revoke} — retire a key by id. Called only by the host-side command, for the
+ *       same reason provisioning is: a route reachable with a stolen key would let its
+ *       holder revoke everyone else's.</li>
  * </ul>
  *
  * <p>There is <strong>no method that returns a key</strong>. The store keeps only a hash;
@@ -19,8 +24,8 @@ import java.util.Optional;
 public interface ApiKeyStore {
 
     /**
-     * The caller {@code presentedToken} identifies, if the token matches a stored key.
-     * Records the use ({@code last_used_at}) as a side effect.
+     * The caller {@code presentedToken} identifies, if the token matches a stored key that
+     * has not been revoked. Records the use ({@code last_used_at}) as a side effect.
      */
     Optional<ApiCredential> authenticate(String presentedToken);
 
@@ -47,6 +52,17 @@ public interface ApiKeyStore {
      * reject what is obviously not that.
      */
     Provisioned provisionWithToken(String token, String merchantId, boolean admin, String label);
+
+    /**
+     * Revokes the key identified by {@code keyId}: marks it, rather than deleting the row, so
+     * the merchant, the label and {@code last_used_at} survive for whoever asks later why a
+     * caller stopped working. Takes effect on the very next {@link #authenticate} call — there
+     * is no cache in front of it to invalidate.
+     *
+     * @return {@code true} if an active key was revoked just now; {@code false} if there was
+     *         no active key with that id — already revoked, or never issued.
+     */
+    boolean revoke(UUID keyId);
 
     /** A freshly minted key: the caller it authenticates, and the token, shown this once and never again. */
     record Provisioned(ApiCredential credential, String token) {

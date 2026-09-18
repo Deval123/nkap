@@ -1,0 +1,25 @@
+-- Revoking a key is now marking it, not deleting its row (issue #112). docs/security-notes.md
+-- §1 argues provisioning is a host-side command, never a route, because a route reachable
+-- with a stolen key is a wider blast radius than a command reachable only on the host;
+-- revocation is the same argument and then some -- a revocation *route* reachable with a
+-- stolen key would let its holder revoke everyone else's. --nkap.apikey.revoke, alongside
+-- --nkap.apikey.create, is the command (ApiKeyProvisioningRunner).
+--
+-- Marked, not deleted: api_key already carries last_used_at, operational history about a key
+-- that a DELETE would throw away at exactly the moment someone asks why a caller stopped
+-- working. A retained, revoked row is not the audit trail of "which key did what" --
+-- docs/security-notes.md still names that as a separate, open gap -- but deleting the row
+-- would make it strictly harder to build later, for nothing gained today.
+--
+-- NULL means active; a timestamp means revoked, and records when. PostgresApiKeyStore's
+-- authenticate() now reads "AND revoked_at IS NULL" -- the same lookup, one extra predicate,
+-- no cache to invalidate (there is none) -- so a revoked key is refused on the very next
+-- request, not at the next cache expiry that does not exist.
+--
+-- The table is still not append-only -- V6's own comment already said so, for last_used_at,
+-- and that has not changed. Marking here is a choice this migration makes, not a constraint
+-- the schema was already imposing.
+--
+-- Hand-written inverse: db/rollback/V10__api_key_revocation.sql, exercised by MigrationRollbackIT.
+
+ALTER TABLE api_key ADD COLUMN revoked_at timestamptz;

@@ -38,11 +38,11 @@
 #
 #      `key-init` mints a *new* key every time it runs, which is every fresh `up` after a
 #      `down` (a one-shot service that already exited is not re-run by `up` alone). The
-#      previous key keeps working -- there is no revocation command yet, only a direct
-#      database delete (see docs/security-notes.md) -- so repeated cycling piles up unused
-#      keys rather than replacing one. Leave the
-#      stack running if you only want the one, or provision by hand instead (see the README)
-#      and delete this service.
+#      previous key keeps working until you revoke it (`--nkap.apikey.revoke
+#      --nkap.apikey.id=<id>`, see docs/security-notes.md) -- so repeated cycling piles up
+#      unused keys rather than replacing one, unless you revoke each one you leave behind.
+#      Leave the stack running if you only want the one, or provision by hand instead (see
+#      the README) and delete this service.
 #   2. Nothing here overrides `application.yml`'s cadence. `compose.yaml` sets a PT2S MTN
 #      timeout and a three-second reconciler loop so the demo resolves while someone is
 #      watching a terminal; carried into a real deployment, that hammers MTN and burns the

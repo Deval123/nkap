@@ -23,6 +23,18 @@ never a route, for the same reason writing ledger entries is not a route: a rout
 credentials is worse than one that moves money, because a bug in it mints credentials for
 whoever finds it.
 
+**Revoking a key is the same shape, and it marks rather than deletes (issue #112).**
+`--nkap.apikey.revoke --nkap.apikey.id=<key id>` — the id `create` already printed — retires
+a key immediately: the very next authenticated request with it is refused, because
+`ApiKeyStore.authenticate` reads `revoked_at` on every call and there is no cache in front of
+it to invalidate. The row survives with `revoked_at` set; `merchant_id`, `label` and
+`last_used_at` stay exactly as they were, so it can still answer whose key this was and when
+it was last used after it stops working. A route would repeat provisioning's own mistake in
+reverse — a stolen key could revoke every other key on the account — which is why this is a
+command too. **Rotation needs nothing beyond this and `create`**: provision a new key, switch
+the merchant to it, then revoke the old one. There is no separate rotation command because
+there is nothing left for one to do.
+
 **The webhook signing secret is stored differently, and that is a real trade-off, not an
 oversight.** An API key only ever needs to be *compared*; a signing secret has to be
 *used* — HMAC-SHA256 needs the actual bytes on every delivery — so `webhook_endpoint` keeps
@@ -70,7 +82,7 @@ not a second copy:
 
 ## 3. What Nkap does not protect, by name
 
-Three things, deliberately out of this slice, each with the reason it was left out rather
+Two things, deliberately out of this slice, each with the reason it was left out rather
 than a silence a reader has to interpret for themselves:
 
 - **Rate limiting.** A reverse proxy does this better, and it is its job — caller
@@ -78,15 +90,6 @@ than a silence a reader has to interpret for themselves:
   the opposite problem. What a proxy cannot do is cap calls per authenticated merchant to
   protect the upstream operator's own quota; worth revisiting once a deployment has enough
   merchants for that to bite.
-- **Key rotation and revocation.** There is no application command for either — only for
-  *creating* a key (`--nkap.apikey.create`). Revoking one today means an operator with
-  direct database access deleting its row from `api_key` by hand (the table itself is not
-  append-only for exactly this reason: `last_used_at` updates in place, and a row can be
-  deleted, per its own migration's comment); rotating is provisioning a new key, switching a
-  merchant to it, then deleting the old row the same way. That is a real capability — nothing
-  stops an operator from doing it today — but it is a database operation, not a command or a
-  route this project ships, and a reader should not go looking for
-  `--nkap.apikey.revoke` and conclude something is broken when it does not exist.
 - **An audit trail of which key did what.** The payment history already answers what
   happened and why; who asked starts to matter once a merchant holds several keys, which is
   not yet the common case this project is built for.
@@ -146,5 +149,5 @@ writing anything — which is the fact worth recording, not a warning against do
 ## Not in this slice
 
 A threat model with severities or likelihoods. Anything Nkap does not actually implement
-today, however useful it would be — see §3 for the three named gaps, stated as gaps, not as
+today, however useful it would be — see §3 for the two named gaps, stated as gaps, not as
 half-built mitigations.

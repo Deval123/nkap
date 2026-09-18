@@ -12,11 +12,12 @@ import org.springframework.jdbc.core.RowMapper;
 
 /**
  * {@link ApiKeyStore} in PostgreSQL. The {@code api_key} table (migration {@code V6}) holds
- * {@code token_sha256}, the merchant, the admin flag; never the token.
+ * {@code token_sha256}, the merchant, the admin flag; never the token. {@code revoked_at}
+ * (migration {@code V10}) marks a key retired without deleting the row.
  *
- * <p>{@link #authenticate} is one indexed lookup on the hash plus a {@code last_used_at}
- * touch. The touch is best-effort — a row that vanished between the read and the update
- * (revoked mid-request) simply updates nothing.
+ * <p>{@link #authenticate} is one indexed lookup on the hash, filtered to unrevoked rows,
+ * plus a {@code last_used_at} touch. The touch is best-effort — a row that vanished or was
+ * revoked between the read and the update simply updates nothing.
  */
 public final class PostgresApiKeyStore implements ApiKeyStore {
 
@@ -32,13 +33,13 @@ public final class PostgresApiKeyStore implements ApiKeyStore {
             return Optional.empty();
         }
         List<ApiCredential> found = jdbc.query(
-                "SELECT id, merchant_id, is_admin FROM api_key WHERE token_sha256 = ?",
+                "SELECT id, merchant_id, is_admin FROM api_key WHERE token_sha256 = ? AND revoked_at IS NULL",
                 CREDENTIAL_MAPPER, ApiKeys.hash(presentedToken));
         if (found.isEmpty()) {
             return Optional.empty();
         }
         ApiCredential credential = found.get(0);
-        jdbc.update("UPDATE api_key SET last_used_at = ? WHERE id = ?",
+        jdbc.update("UPDATE api_key SET last_used_at = ? WHERE id = ? AND revoked_at IS NULL",
                 OffsetDateTime.now(ZoneOffset.UTC), credential.keyId());
         return Optional.of(credential);
     }
@@ -82,6 +83,15 @@ public final class PostgresApiKeyStore implements ApiKeyStore {
                 .stream().findFirst()
                 .orElseThrow(() -> new IllegalStateException("api key vanished between insert and read"));
         return new Provisioned(existing, token);
+    }
+
+    @Override
+    public boolean revoke(UUID keyId) {
+        Objects.requireNonNull(keyId, "keyId");
+        int updated = jdbc.update(
+                "UPDATE api_key SET revoked_at = ? WHERE id = ? AND revoked_at IS NULL",
+                OffsetDateTime.now(ZoneOffset.UTC), keyId);
+        return updated == 1;
     }
 
     private static final RowMapper<ApiCredential> CREDENTIAL_MAPPER = (ResultSet rs, int rowNum) -> new ApiCredential(

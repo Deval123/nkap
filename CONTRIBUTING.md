@@ -153,7 +153,8 @@ by the sequence above, at every release since.
 Contributions are accepted under the Apache License 2.0, the license this whole project is
 released under, certified by the Developer Certificate of Origin (DCO) — sign every commit
 off (`git commit -s`). See <https://developercertificate.org> for exactly what that
-certifies; it is not restated here.
+certifies; it is not restated here. **The sign-off is checked on every pull request** — a
+trailer that does not match the commit's own author, by name or by email, fails the build.
 
 This project asks for **no copyright assignment and no CLA**. You keep the copyright to your
 own contribution. The consequence — spelled out in

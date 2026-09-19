@@ -72,8 +72,21 @@ public interface ConformanceHarness extends AutoCloseable {
     Duration credentialLifetime();
 
     /**
-     * A callback the adapter must reject as {@link dev.nkap.provider.UntrustedCallbackException}:
-     * it names no payment the gateway issued, or cannot be parsed at all.
+     * A callback the adapter cannot extract a usable reference from — malformed for this
+     * provider's shape, not merely one naming a reference the gateway happens not to
+     * recognize. {@link dev.nkap.provider.ProviderAdapter#parseCallback} must reject it as
+     * {@link dev.nkap.provider.UntrustedCallbackException}.
+     *
+     * <p>Issue #39 named two meanings for that exception — unreadable, and readable but
+     * naming a reference this gateway never issued — and this rule exercises only the first.
+     * The second is not a {@code parseCallback} rule at all: recognizing an unfamiliar but
+     * well-formed reference means checking it against payments this gateway holds, which
+     * 0008 already forbids an adapter from doing, so {@code CallbackController} does it, not
+     * this kit. A third shape a callback can take — naming only the operator's own reference,
+     * never one Nkap chose (ADR 0011 §2, issue #149) — has no rule here either, and for the
+     * same reason this kit gives for everything it does not test: it is "extracted from a
+     * test that already passes against MTN," and MTN's callback always carries what Nkap
+     * sent, so no adapter here can supply a harness for it.
      */
     RawCallback anUntrustedCallback();
 

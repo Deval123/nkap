@@ -663,6 +663,8 @@ components:
         - updatedAt
         - detail
         - refundOf
+        - escalatedAt
+        - unresolvedSince
         - history
       properties:
         reference: { type: string, format: uuid }
@@ -694,6 +696,24 @@ components:
           type: string
           description: '`""` unless `state` is `UNKNOWN`, where it explains that the outcome is not yet known and names the poll URL.'
         refundOf: { type: string, description: "The original collection's reference, for a refund. `\"\"` for every payment that is not one." }
+        escalatedAt:
+          type: string
+          description: >
+            An RFC3339 timestamp for when the reconciler gave up chasing this payment
+            automatically and handed it to a human, because the operator answered
+            inconclusively past the escalation window — or `""` if this payment has never
+            been escalated. Not a `state` value — see the `state` enum above — because
+            escalation describes what this gateway did about the operator's silence, not
+            what the operator said; an escalated payment still shows `PENDING` or `UNKNOWN`
+            and still resolves by a later callback or query.
+        unresolvedSince:
+          type: string
+          description: >
+            An RFC3339 timestamp for when this payment last became unresolved — left
+            `CREATED` for `SUBMITTED`, `PENDING` or `UNKNOWN` — unchanged by a later hop
+            between those three, or `""` if this payment is not currently in that posture.
+            Answers how long a caller has been waiting, not how many times this gateway has
+            queried the operator about it (see `docs/integration-guide.md`'s step 3).
         history:
           type: array
           items: { $ref: "#/components/schemas/PaymentTransition" }

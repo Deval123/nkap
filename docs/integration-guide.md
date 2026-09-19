@@ -195,6 +195,14 @@ echo "resolved on its own to: $RESOLVED"
 `SUCCEEDED`, `FAILED` or `EXPIRED`, so you do not have to poll at all if your backend can
 receive one.
 
+While you are polling, `escalatedAt` is how you tell "still being actively chased" from
+"this gateway gave up asking automatically and handed it to a human": `""` means the
+reconciler is still querying the operator on its own schedule, and a non-empty timestamp
+means it stopped and someone was paged — worth knowing before deciding whether to warn your
+customer, since an escalated payment can still take longer to resolve than one just started.
+`unresolvedSince` says how long it has been in this posture either way, which is closer to
+what a customer-facing message needs than a raw attempt count.
+
 The one thing that is never correct: submitting the same intent again under a *new*
 `Idempotency-Key` because the first attempt "failed". It did not fail. Doing that is a second,
 real payment.

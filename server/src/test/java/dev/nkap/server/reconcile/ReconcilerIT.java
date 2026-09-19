@@ -28,6 +28,7 @@ import dev.nkap.server.persistence.PostgresPaymentRepository;
 import dev.nkap.server.provider.AdapterRegistry;
 import dev.nkap.server.support.DockerAvailable;
 import dev.nkap.server.support.PostgresDatabase;
+import dev.nkap.server.web.PaymentResponse;
 import dev.nkap.server.webhook.InMemoryWebhookEndpointStore;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.Clock;
@@ -413,6 +414,66 @@ class ReconcilerIT {
         assertThat(statesEverReached(reference))
                 .as("no transition to FAILED — giving up is not evidence")
                 .doesNotContain(PaymentState.FAILED.name());
+    }
+
+    // === issue #113: an escalated payment's response is distinguishable from an untouched
+    // one ================================================================================
+
+    @Test
+    @DisplayName("a payment genuinely never resolved, queried repeatedly and escalated, is distinguishable in its response from an untouched one")
+    void an_escalated_payments_response_is_distinguishable_from_an_untouched_payments() {
+        // Not the thirty-six-hour payment in issue #113's own description -- its second
+        // comment established that one was MtnStatusMap.stateFor discarding a terminal
+        // answer, a different defect. This one is what the issue actually asked for: an
+        // operator that never says anything conclusive, queried on a real backoff schedule
+        // across several genuine reconciler passes, until the window is spent.
+        ReconcilerProperties properties = new ReconcilerProperties(
+                Duration.ofSeconds(30), 50, Duration.ofSeconds(10), Duration.ofSeconds(10),
+                Duration.ofSeconds(35), Duration.ofMinutes(2));
+        Instant t0 = Instant.now().truncatedTo(ChronoUnit.SECONDS);
+        AdjustableClock clock = new AdjustableClock(t0);
+        Reconciler reconciler = reconcilerWith(properties, operatorThatIsSilent(), clock);
+
+        ReferenceId reference = anUnknownPaymentDueForReconciliation();
+        jdbc.update("UPDATE payment SET unresolved_since = ? WHERE reference = ?",
+                OffsetDateTime.ofInstant(t0, ZoneOffset.UTC), reference.value());
+
+        Map<String, Object> row;
+        Instant now = t0;
+        int pass = 0;
+        do {
+            clock.set(now);
+            reconciler.runOnce();
+            row = paymentRow(reference);
+            now = reconcileDueAt(reference);
+            pass++;
+        } while (row.get("escalated_at") == null && pass < 20);
+
+        assertThat(row.get("escalated_at")).as("the operator never answered — eventually escalated").isNotNull();
+        assertThat(((Number) row.get("reconcile_attempts")).intValue())
+                .as("genuinely queried more than once before giving up, not escalated on the first attempt")
+                .isGreaterThan(1);
+        assertThat(statesEverReached(reference))
+                .as("escalation is never a verdict — never FAILED")
+                .doesNotContain(PaymentState.FAILED.name());
+
+        PaymentResponse escalatedResponse = PaymentResponse.of(payments.findByReference(reference).orElseThrow());
+        assertThat(escalatedResponse.escalatedAt())
+                .as("a caller can see this payment was handed to a human")
+                .isNotEmpty();
+        assertThat(escalatedResponse.unresolvedSince())
+                .as("and how long it has been unresolved")
+                .isNotEmpty();
+
+        // A payment nobody has looked at yet — the other end of what issue #113 asked to be
+        // told apart. Not persisted; PaymentResponse.of needs nothing but the object.
+        PaymentResponse untouchedResponse = PaymentResponse.of(
+                Payment.create(ReferenceId.newReference(), MTN, "merchant-1", intent()));
+        assertThat(untouchedResponse.escalatedAt()).as("never escalated is \"\", not null or absent").isEmpty();
+        assertThat(untouchedResponse.unresolvedSince()).as("never unresolved is \"\", not null or absent").isEmpty();
+
+        assertThat(escalatedResponse.escalatedAt()).isNotEqualTo(untouchedResponse.escalatedAt());
+        assertThat(escalatedResponse.unresolvedSince()).isNotEqualTo(untouchedResponse.unresolvedSince());
     }
 
     // === 1. a resolving query settles, once, attributed to the reconciler ============

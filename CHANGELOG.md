@@ -28,6 +28,15 @@ All notable changes to Nkap are documented here. The format follows
   its own counter reason: reaching this branch takes only an invented value, not a correct
   guess, exactly like an invented Nkap reference, so it gets the same protection against being
   used to flood the log (ADR 0011 §2; issue #149).
+- `PaymentResponse.escalatedAt` and `.unresolvedSince`: a caller can now tell a payment
+  nobody has looked at apart from one this gateway is actively chasing, and both apart from
+  one it gave up chasing automatically and handed to a human — all three used to be
+  byte-identical (issue #113). Both are RFC3339 timestamps, `""` when they do not apply,
+  following the convention `refundOf` and `providerTransactionId` already use; neither is a
+  new `PaymentState` member, since escalation describes what this gateway did about the
+  operator's silence, not what the operator said. `reconcile_attempts` deliberately does not
+  reach the response: it describes this gateway's own backoff policy, not the payment, and
+  changing the reconciler's schedule would change the number for an identical payment.
 
 ### Changed
 

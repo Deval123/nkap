@@ -148,6 +148,20 @@ passes, in exactly this order:
 historical record now, not a plan — the file says so itself. `main` has carried a tag, cut
 by the sequence above, at every release since.
 
+## License
+
+Contributions are accepted under the Apache License 2.0, the license this whole project is
+released under, certified by the Developer Certificate of Origin (DCO) — sign every commit
+off (`git commit -s`). See <https://developercertificate.org> for exactly what that
+certifies; it is not restated here.
+
+This project asks for **no copyright assignment and no CLA**. You keep the copyright to your
+own contribution. The consequence — spelled out in
+[ADR 0012](docs/adr/0012-apache-2-0-no-cla.md) — is that this project's license cannot change
+without every contributor's agreement, which in practice means it will not change. That is a
+deliberate trade, not an oversight, and you should be able to learn it here before your first
+pull request rather than discover it later.
+
 ## Reporting a security issue
 
 Do not open a public issue. Write to security@nkap.dev with what you found and how to

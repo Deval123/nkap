@@ -37,10 +37,18 @@ down: every commit merged so far carries `Signed-off-by`.
 
 ## Reasoning
 
-**For it.** A CLA is friction placed directly on the door `docs/positioning.md` says this
-project depends on someone walking through — a contributor who signs a certificate about the
-commit they are already making is a different, and much smaller, ask than one who assigns
-rights to a document a lawyer has to read first. Apache 2.0 over MIT was already the right
+**For it.** This is not a forecast: four outside contributions have already landed under
+exactly this model — no CLA, a DCO certification — closing labelled issues nobody on this
+project opened for themselves: #16 (`good first issue`, a bounded-eviction fix for a memory
+leak in the simulator's callback-attempt storage), #4 (`good first issue`, tests for
+configurable simulator latency), #51 (`enhancement`, three core follow-ups), and #26
+(`good first issue`, MTN-shaped simulator error bodies). `docs/positioning.md`'s bet — that
+adapters get written by people who are not this project's author — is not a bet this ADR is
+asking anyone to place; it already paid out, before this ADR existed to record it. A CLA is
+friction placed directly on the door that already produced those four contributions: a
+contributor who signs a certificate about the commit they are already making is a different,
+and much smaller, ask than one who assigns rights to a document a lawyer has to read first.
+Apache 2.0 over MIT was already the right
 permissive choice, and not a new question this ADR reopens: its explicit patent grant matters
 to anyone evaluating this for a payment path, which `README.md`'s own License section already
 says. AGPL was also available and is rejected here, for a reason spelled out below rather than

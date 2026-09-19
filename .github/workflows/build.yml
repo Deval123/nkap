@@ -83,7 +83,18 @@ jobs:
   # check; its own comment has the rule, including the deliberate choice to match a trailer
   # against its commit's author by name as well as by email. No Docker, fast, like
   # release-tags above -- but unlike it, this only means anything against a pull request's own
-  # commit range, so it needs full history (fetch-depth: 0) and the PR's own base and head.
+  # commit range, so it needs full history (fetch-depth: 0).
+  #
+  # The range is origin/<base ref>..<head sha>, not <base sha>..<head sha> (issue #159):
+  # github.event.pull_request.base.sha is the base branch's tip at event time, a moving
+  # target, not a fixed ancestor of this branch. If a contributor merges the base branch into
+  # their own, the commits that merge brings are reachable from head but not from that stale
+  # base.sha, and land inside the range as false positives on commits already merged and
+  # already checked -- friction aimed squarely at outside contributors for doing something
+  # ordinary. Diffing against the base ref itself excludes everything already on it, whatever
+  # the branch's topology, because those commits arrived through a pull request this check
+  # already ran on, or predate the check.
+  #
   # This job failing does not by itself block a merge; making it required is a repository
   # ruleset setting, not something a workflow file can do.
   dco:
@@ -93,8 +104,17 @@ jobs:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
+      - name: Make sure the base branch is present locally
+        run: |
+          base_ref="${{ github.event.pull_request.base.ref }}"
+          if git rev-parse --verify --quiet "origin/${base_ref}" > /dev/null; then
+            echo "origin/${base_ref} is already present after checkout (fetch-depth: 0)."
+          else
+            echo "origin/${base_ref} is not present after checkout -- fetching it explicitly."
+            git fetch origin "${base_ref}"
+          fi
       - run: ./.github/scripts/check-dco.test.sh
-      - run: ./.github/scripts/check-dco.sh "${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}"
+      - run: ./.github/scripts/check-dco.sh "origin/${{ github.event.pull_request.base.ref }}..${{ github.event.pull_request.head.sha }}"
 
   # Issue #123: compose.yaml and nkap-standalone.compose.yaml must never resolve to the same
   # Compose project, or a volume either declares can become the exact same volume. This is a

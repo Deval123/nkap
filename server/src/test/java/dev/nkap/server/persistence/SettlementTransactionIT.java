@@ -92,6 +92,11 @@ class SettlementTransactionIT {
             }
 
             @Override
+            public Optional<Payment> findByProviderReference(ProviderId provider, String providerReference) {
+                return realRepo.findByProviderReference(provider, providerReference);
+            }
+
+            @Override
             public java.util.List<Payment> findEscalated() {
                 return realRepo.findEscalated();
             }

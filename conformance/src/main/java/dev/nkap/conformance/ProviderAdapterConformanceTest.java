@@ -267,10 +267,15 @@ public abstract class ProviderAdapterConformanceTest {
     }
 
     @Test
-    @DisplayName("a callback for a reference the gateway never issued is rejected, writing nothing")
+    @DisplayName("a callback the adapter cannot extract a usable reference from is rejected as unparseable")
     void an_untrusted_callback_is_rejected() {
         ProviderAdapter adapter = harness.adapter();
 
+        // Only one of UntrustedCallbackException's meanings, deliberately (see
+        // ConformanceHarness#anUntrustedCallback's own javadoc): recognizing a well-formed
+        // but unfamiliar reference is CallbackController's job, not an adapter's, and this
+        // kit has no way to drive an adapter that only ever names the operator's own
+        // reference (ADR 0011 §2, issue #149) — no adapter here is one.
         assertThrows(UntrustedCallbackException.class,
                 () -> adapter.parseCallback(harness.anUntrustedCallback()));
     }

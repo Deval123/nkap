@@ -97,8 +97,8 @@ class SettlementTransactionIT {
             }
 
             @Override
-            public java.util.List<Payment> findEscalated() {
-                return realRepo.findEscalated();
+            public java.util.List<Payment> findEscalated(int limit) {
+                return realRepo.findEscalated(limit);
             }
 
             @Override

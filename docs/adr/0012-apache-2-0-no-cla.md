@@ -52,11 +52,10 @@ asking anyone to place; it already paid out, before this ADR existed to record i
 friction placed directly on the door that already produced those four contributions: a
 contributor who signs a certificate about the commit they are already making is a different,
 and much smaller, ask than one who assigns rights to a document a lawyer has to read first.
-Apache 2.0 over MIT was already the right
-permissive choice, and not a new question this ADR reopens: its explicit patent grant matters
-to anyone evaluating this for a payment path, which `README.md`'s own License section already
-says. AGPL was also available and is rejected here, for a reason spelled out below rather than
-dismissed in passing.
+Apache 2.0 over MIT was already the right permissive choice, and not a new question this ADR
+reopens: its explicit patent grant matters to anyone evaluating this for a payment path, which
+`README.md`'s own License section already says. AGPL was also available and is rejected here,
+for a reason spelled out below rather than dismissed in passing.
 
 **What this forecloses, stated plainly.** Selling license exemptions — dual licensing, the
 model where a permissive default funds a paid alternative for anyone who cannot accept its

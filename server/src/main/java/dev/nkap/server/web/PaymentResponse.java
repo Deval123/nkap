@@ -16,6 +16,16 @@ import java.util.List;
  * <p>{@code refundOf} is the original collection's reference for a refund, else {@code ""}
  * — how a caller tells "your refund went through" apart from "your disbursement went
  * through" without any other signal.
+ *
+ * <p>{@code escalatedAt} and {@code unresolvedSince} (issue #113) are what let a caller
+ * tell a payment nobody has looked at apart from one this gateway is actively chasing, and
+ * both apart from one it has given up chasing automatically and handed to a human —
+ * otherwise all three are byte-identical. Neither is a {@link dev.nkap.core.payment.PaymentState}:
+ * escalation describes what this gateway did about the operator's silence, not what the
+ * operator said, and both are {@code ""} when they do not apply, the same convention as
+ * {@code refundOf} and {@code providerTransactionId}. {@code reconcile_attempts} is
+ * deliberately not here — it describes this gateway's own backoff policy, not the payment,
+ * and changing the reconciler's schedule would change the number for an identical payment.
  */
 public record PaymentResponse(
         String reference,
@@ -32,6 +42,8 @@ public record PaymentResponse(
         Instant updatedAt,
         String detail,
         String refundOf,
+        String escalatedAt,
+        String unresolvedSince,
         List<Transition> history) {
 
     public record Transition(
@@ -62,6 +74,8 @@ public record PaymentResponse(
                 payment.updatedAt(),
                 detailFor(payment),
                 payment.refundOf().map(Object::toString).orElse(""),
+                orEmpty(payment.escalatedAt()),
+                orEmpty(payment.unresolvedSince()),
                 history);
     }
 
@@ -81,5 +95,9 @@ public record PaymentResponse(
                     + "GET /payments/" + payment.reference() + " until it resolves.";
         }
         return "";
+    }
+
+    private static String orEmpty(Instant instant) {
+        return instant == null ? "" : instant.toString();
     }
 }

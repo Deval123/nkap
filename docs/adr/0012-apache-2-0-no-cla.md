@@ -33,11 +33,15 @@ a contributor sits directly in the path of that bet succeeding or not.
 
 **Nkap stays Apache License 2.0.** No CLA. Contributions are accepted under the Developer
 Certificate of Origin (DCO), which this project already practices more than it has written
-down: three of the four outside commits merged so far carry `Signed-off-by`. The fourth — PR
+down¹: three of the four outside commits merged so far carry `Signed-off-by`. The fourth — PR
 #79, "Add configurable MTN simulator error codes", closing #26 — does not; its own description
 says `Closes #26`, but nothing at merge time checked for the trailer, and nothing caught its
 absence. An unwritten rule is a rule nobody is checking, and this is what that looks like in
 practice — the argument for writing it down, not evidence it was never needed.
+
+¹ No longer accurate on its own — since issue #155, it is also checked. See *Amendment,
+2026-09-19* at the foot of this ADR, and `.github/scripts/check-dco.sh` for the rule as it
+actually runs today.
 
 ## Reasoning
 
@@ -132,3 +136,24 @@ ever asked for one. Relicensing flexibility is not something this decision choos
 deliberately distinct from deciding not to: a trademark filing is a different kind of
 commitment, in a specific jurisdiction, and bundling it here would let a decision this ADR is
 not equipped to make ride in on one that it is.
+
+## Amendment, 2026-09-19 — issue #155
+
+One statement above is no longer accurate on its own, marked inline where it is read; this
+section says what changed and why it is an amendment rather than a rewrite.
+
+**The decision's "practices more than it has written down"¹ described a gap that has since
+been closed, not narrowed.** This ADR itself named the reason PR #79 carries no
+`Signed-off-by` — nothing at merge time checked for the trailer — as the argument for writing
+the rule down rather than evidence it was never needed. Issue #155 finished that argument: a
+`dco` job in `.github/workflows/build.yml` now runs `.github/scripts/check-dco.sh` on every
+pull request, failing any commit whose `Signed-off-by` trailer is missing or names someone
+other than its own author (by email, or by name for a contributor whose commits are authored
+under a GitHub `noreply` address — see the script's own comment for why that match is
+deliberate). The decision this ADR records — Apache 2.0, no CLA, contributions certified by
+the DCO — has not changed; what changed is that the certification is now checked as well as
+practiced. The rule as it is enforced today lives in `check-dco.sh`, which is the one place it
+can be read without drifting from this ADR.
+
+This does not rewrite history: `b0d94b2` (PR #79) is unaffected, and the check runs on pull
+requests only.

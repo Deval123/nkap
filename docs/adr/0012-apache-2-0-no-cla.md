@@ -121,10 +121,12 @@ trade for what this project is betting on.
 do with contributions, only make contributing harder for the person this project most needs to
 attract — friction on the one door `docs/positioning.md` says the whole strategy depends on,
 for a benefit a CLA adopted today could not actually deliver: it would bind only future
-contributions, and the four already merged, from two authors who signed nothing but a DCO
-certification, would still block a relicense without their agreement. Relicensing flexibility
-is not something this decision chooses to give up — it is already gone, and a CLA adopted now
-cannot buy it back.
+contributions, and the four already merged would still block a relicense without their
+authors' agreement regardless — a DCO certification, present or missing, only asserts the
+right to contribute under this project's existing license; it grants no rights to a future
+one. A CLA is what would have granted those rights, and none of the four contributions was
+ever asked for one. Relicensing flexibility is not something this decision chooses to give up
+— it is already gone, and a CLA adopted now cannot buy it back.
 
 **Registering "Nkap" as a trademark now, alongside this ADR.** Considered and left undone,
 deliberately distinct from deciding not to: a trademark filing is a different kind of

@@ -44,10 +44,12 @@ public final class InMemoryPaymentRepository implements PaymentRepository {
         if (providerReference == null || providerReference.isBlank()) {
             throw new IllegalArgumentException("providerReference must not be blank");
         }
-        return byReference.values().stream()
+        // Matches PostgresPaymentRepository's own rule: exactly one match resolves; zero or
+        // more than one both return empty, never a guess among candidates.
+        List<Payment> matches = byReference.values().stream()
                 .filter(payment -> payment.provider().equals(provider) && providerReference.equals(payment.providerReference()))
-                .sorted(Comparator.comparing(Payment::createdAt).reversed())
-                .findFirst();
+                .toList();
+        return matches.size() == 1 ? Optional.of(matches.get(0)) : Optional.empty();
     }
 
     @Override

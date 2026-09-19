@@ -20,13 +20,14 @@ All notable changes to Nkap are documented here. The format follows
   `CallbackEvent(ReferenceId, ProviderStatus)` is unchanged and every adapter written against
   `1.0.0` keeps compiling. `CallbackController` resolves an unattributed callback against the
   `reference ↔ provider_reference` association `PaymentRepository` already builds for
-  `query()` (issue #96), through a new `PaymentRepository.findByProviderReference` and a
-  matching index (`V11__provider_reference_lookup`). A callback naming a provider reference
-  this gateway has never recorded — most likely a submission whose response was lost — is
-  still `202` with nothing written, the same as an unknown reference, but is logged on every
-  occurrence rather than at most once: unlike a guessed reference, a real provider reference
-  costs an attacker nothing less to produce than a real one, so this traffic is bounded by
-  real operator activity (ADR 0011 §2; issue #149).
+  `query()` (issue #96), through a new `PaymentRepository.findByProviderReference` (never a
+  guess between more than one match) and a matching index
+  (`V11__provider_reference_lookup`). A callback naming a provider reference nothing matches
+  — most likely a submission whose response was lost — is still `202` with nothing written,
+  the same as an unknown reference and logged with the same "at most once, ever" bound, under
+  its own counter reason: reaching this branch takes only an invented value, not a correct
+  guess, exactly like an invented Nkap reference, so it gets the same protection against being
+  used to flood the log (ADR 0011 §2; issue #149).
 
 ### Changed
 

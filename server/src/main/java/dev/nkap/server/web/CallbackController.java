@@ -56,12 +56,17 @@ import org.springframework.web.bind.annotation.RestController;
  * {@code reference ↔ provider_reference} association {@code PaymentRepository} has held on
  * every payment since {@code V1__initial_schema.sql}, the same association {@code query}
  * already reads in the other direction. When nothing matches — a submission whose response
- * never arrived, so the association itself was never recorded — the answer is still {@code
- * 202} with nothing written, for the same anti-oracle reason as an unknown reference, but the
- * two are <strong>not</strong> logged the same way: a real provider reference is exactly as
- * unguessable as a real Nkap reference, so this traffic is bounded by real operator activity,
- * not by an attacker's request rate, and is logged on every occurrence rather than at most
- * once.
+ * never arrived, so the association itself was never recorded, <em>or</em> more than one
+ * payment matches, which {@link PaymentRepository#findByProviderReference} refuses to guess
+ * between — the answer is still {@code 202} with nothing written, for the same anti-oracle
+ * reason as an unknown reference. <strong>The value itself is never logged</strong>: unlike
+ * Nkap's own reference, {@code providerReference} is whatever the adapter read out of the
+ * request body, so it is exactly as attacker-controlled as the body itself, and reaching this
+ * branch costs an attacker nothing — inventing one is free, no guessing of a real value
+ * required, since a miss is what gets here. It gets the same bounded log treatment as an
+ * unparseable or unknown-reference callback, under its own reason, so the two kinds of
+ * "cannot act on this" traffic can still be told apart by whoever is alerting on the counter,
+ * even though neither is safe to write one line per request for.
  *
  * <p><strong>What this class does about being unauthenticated and internet-reachable by
  * design (issue #129; {@code docs/security-notes.md} §5 records a public hostname scanned
@@ -70,13 +75,15 @@ import org.springframework.web.bind.annotation.RestController;
  * the fixed literal {@code "unknown"}, never the raw path segment, which an attacker could
  * otherwise use to grow the metrics registry without bound. A line is written only for a
  * callback naming a reference this deployment actually issued, since that traffic is bounded
- * by real payments, not by an attacker's request rate. An unparseable callback, or one naming
- * a reference this deployment never issued, is exactly what a scanner or a guess produces
- * fast and free; both are counted on every request but logged <strong>at most once, ever, per
+ * by real payments, not by an attacker's request rate. An unparseable callback, one naming a
+ * reference this deployment never issued, or one naming only a provider reference that never
+ * resolves to a payment is exactly what a scanner or an invented value produces fast and free —
+ * none of the three needs a correct guess, only a miss, and a miss is what reaches every one of
+ * them. All three are counted on every request but logged <strong>at most once, ever, per
  * process</strong> — not sampled, not rate-limited, so the log cannot be driven by volume at
- * all — and never with the exception's own message or the request body: either can echo
- * attacker-controlled text pulled from the body, which is a log-injection surface, not a
- * debugging convenience.
+ * all — and never with the exception's own message, the request body, or the provider reference
+ * an adapter read out of it: each can echo attacker-controlled text, which is a log-injection
+ * surface, not a debugging convenience.
  */
 @RestController
 @RequestMapping("/callbacks")
@@ -93,6 +100,7 @@ class CallbackController {
 
     private final AtomicBoolean loggedUnparseableOnce = new AtomicBoolean(false);
     private final AtomicBoolean loggedUnknownReferenceOnce = new AtomicBoolean(false);
+    private final AtomicBoolean loggedUnresolvedProviderReferenceOnce = new AtomicBoolean(false);
 
     CallbackController(AdapterRegistry adapters, PaymentRepository payments, SettlementService settlement,
                         MeterRegistry meterRegistry) {
@@ -150,17 +158,23 @@ class CallbackController {
             Optional<Payment> resolved = payments.findByProviderReference(id, event.providerReference());
             if (resolved.isEmpty()) {
                 countRejected(providerTag, "unresolved_provider_reference");
-                // Logged on every occurrence, unlike the two branches above: those are
-                // exactly as cheap for an attacker to produce as guessing costs nothing, but
-                // a real provider reference is exactly as unguessable as a real Nkap
-                // reference, so this traffic is bounded by real operator activity, not by an
-                // attacker's request rate. Most likely a submission whose response was lost
-                // before this gateway ever recorded the operator's reference against a
-                // payment (docs/providers/m-pesa.md) -- worth a human's attention every time,
-                // not a line thrown away after the first.
-                try (var ignored = MDC.putCloseable("providerReference", event.providerReference())) {
-                    log.warn("callback on /callbacks/{} names provider reference {}, which this gateway has "
-                            + "never recorded against a payment", providerId, event.providerReference());
+                if (loggedUnresolvedProviderReferenceOnce.compareAndSet(false, true)) {
+                    // The same bounded treatment as unparseable/unknown_reference, and for
+                    // the same reason: this branch is reached by a miss, not a correct guess
+                    // -- an attacker who invents any provider reference gets here for free,
+                    // at their own request rate, exactly like an invented Nkap reference.
+                    // Never event.providerReference() itself: it is whatever the adapter
+                    // read out of the request body, on an unauthenticated endpoint, so it is
+                    // exactly as attacker-controlled as the body itself (issue #129) -- and
+                    // never logged, not even MDC-only, for the same reason the parse
+                    // failure's own message above never is. Distinguished from
+                    // unknown_reference by its own counter reason rather than by log volume:
+                    // this one may mean a real payment's submit response was lost
+                    // (docs/providers/m-pesa.md), which is worth alerting on differently, not
+                    // worth logging more often.
+                    log.warn("callback on /callbacks/{} names a provider reference this gateway has never "
+                            + "recorded against a payment "
+                            + "(further occurrences are counted in nkap_callback_rejected, not logged)", providerId);
                 }
                 return ResponseEntity.accepted().build();
             }
@@ -231,11 +245,13 @@ class CallbackController {
                 .description("Callbacks this gateway would not act on: unparseable, naming a "
                         + "reference it never issued, or (reason=unresolved_provider_reference, "
                         + "issue #149) naming only a provider reference it has never recorded "
-                        + "against a payment. The first two are as cheap for an attacker to "
-                        + "produce as the request rate itself, so the log carries at most one "
-                        + "example of each, ever; the third is bounded by real operator "
-                        + "activity like a known reference is, so it is logged every time -- "
-                        + "this counter carries the count either way.")
+                        + "against a payment. All three are reached by a miss, not a correct "
+                        + "guess -- an attacker gets here as cheaply by inventing a value as by "
+                        + "guessing a real one -- so the log carries at most one example of "
+                        + "each, ever; this counter carries the full count for all three, and "
+                        + "its own reason tag is what lets unresolved_provider_reference be "
+                        + "watched more closely than an ordinary unknown reference, since it "
+                        + "may mean a real payment's submit response was lost.")
                 .tag("provider", providerTag)
                 .tag("reason", reason)
                 .register(meterRegistry)

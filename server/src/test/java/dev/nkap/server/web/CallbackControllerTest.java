@@ -143,9 +143,9 @@ class CallbackControllerTest {
     }
 
     @Test
-    @DisplayName("a callback naming a provider reference this gateway has never recorded is 202, discarded, and — unlike an "
-            + "unparseable or unknown-reference callback — logged every time, not at most once")
-    void unresolved_provider_reference_callbacks_are_logged_every_time() throws Exception {
+    @DisplayName("a callback naming a provider reference this gateway has never recorded is 202, discarded, and logged at "
+            + "most once, however many arrive — reaching this branch takes only an invented value, not a correct guess")
+    void unresolved_provider_reference_callbacks_are_logged_at_most_once() throws Exception {
         String providerReference = "ws_CO_a_lost_submit_response";
         stubParsedUnattributed(providerReference);
         when(payments.findByProviderReference(MTN, providerReference)).thenReturn(Optional.empty());
@@ -157,13 +157,34 @@ class CallbackControllerTest {
             }
 
             assertThat(logs.events())
-                    .as("ADR 0011 §2: a real provider reference is exactly as unguessable as a real Nkap "
-                            + "reference, so this is bounded by real operator activity, not an attacker's request rate")
-                    .hasSize(5);
+                    .as("this branch is reached by a miss, exactly as cheap for an attacker to produce as an "
+                            + "unparseable body or a guessed Nkap reference — it gets the same bounded treatment")
+                    .hasSizeLessThanOrEqualTo(1);
+            assertThat(logs.events())
+                    .as("the provider reference is attacker-controlled request-body content (issue #129) and must "
+                            + "never appear in the log, even in the one line that is written")
+                    .noneSatisfy(event -> assertThat(event.getFormattedMessage()).contains(providerReference));
         }
         assertThat(counter("nkap.callback.received")).isEqualTo(5.0);
         assertThat(counterTagged("nkap.callback.rejected", "reason", "unresolved_provider_reference")).isEqualTo(5.0);
         assertThat(counter("nkap.callback.confirmed")).isZero();
+        verifyNoInteractions(settlement);
+    }
+
+    @Test
+    @DisplayName("a callback naming a provider reference more than one payment shares is refused, exactly like an "
+            + "unresolved one — never a guess at which payment it belongs to")
+    void ambiguous_provider_reference_callbacks_are_refused() throws Exception {
+        String providerReference = "shared-by-two-payments-somehow";
+        stubParsedUnattributed(providerReference);
+        // PaymentRepository's own contract: empty for zero matches AND for more than one --
+        // the controller cannot tell them apart, and must not need to.
+        when(payments.findByProviderReference(MTN, providerReference)).thenReturn(Optional.empty());
+
+        ResponseEntity<Void> response = controller.receive("mtn", Map.of(), "{}");
+
+        assertThat(response.getStatusCode().value()).isEqualTo(202);
+        assertThat(counterTagged("nkap.callback.rejected", "reason", "unresolved_provider_reference")).isEqualTo(1.0);
         verifyNoInteractions(settlement);
     }
 

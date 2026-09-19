@@ -40,6 +40,14 @@ public interface PaymentRepository {
      * namespace, and the caller (the callback endpoint) always has it before it has anything
      * else.
      *
+     * <p><strong>Empty when zero payments match, and empty when more than one does — never a
+     * guess between candidates.</strong> {@code provider_reference} carries no uniqueness
+     * constraint, so nothing here assumes at most one row can ever match; picking one (the
+     * newest, say) would decide which payment a real callback settles on no stronger basis
+     * than which row happened to come back first. A caller that gets empty back cannot tell
+     * "never recorded" from "recorded more than once" apart, and does not need to: neither
+     * case is safe to act on, so both are refused the same way.
+     *
      * @throws IllegalArgumentException if {@code providerReference} is blank — there would be
      *                                   nothing to resolve, and most rows carry exactly that
      *                                   blank default

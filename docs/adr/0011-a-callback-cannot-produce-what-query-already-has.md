@@ -5,25 +5,45 @@
 
 ## Context
 
-This is ADR 0008 happening a third time, and — by this repository's own precedent — that is
-why it belongs beside 0008 rather than inside it as an amendment.
+By this repository's own precedent, this belongs beside 0008 rather than inside it as an
+amendment. 0008 modelled that precedent on 0005 rather than sharing a rule with it: its own
+first line reads "This is ADR 0005 happening a second time, and it belongs beside it for that
+reason," because `CONTRIBUTING.md`'s own convention asks the same question of any later work —
+does it narrow or correct a standing decision, or has the same class of mistake simply recurred
+in a shape the earlier text did not anticipate? 0008 answered that question about itself,
+borrowing 0005's precedent for how to record the answer. This ADR answers the same question
+about 0008, on its own terms — the rule below is 0008's, not 0005's, and it has now failed on
+its own three times.
 
-0008's own first line already named the pattern once: "This is ADR 0005 happening a second
-time, and it belongs beside it for that reason." 0005 found that a contract written before any
-adapter existed could not report a refusal. 0008 found, twice, that `query` could not reach an
-identifier only the operator held — once implementing MTN's two products, once reading Orange
-Money's documentation with no Orange adapter to test it against. Neither occurrence was folded
-into the other as an amendment, because the earlier decision was not wrong for the case it
-addressed; the same class of mistake had simply recurred in a shape the original text did not
-anticipate. `CONTRIBUTING.md`'s own rule agrees: amend when later work narrows or corrects a
-decision, write beside it when the mistake itself recurs. **This is the third occurrence.** The
-project has now watched one assumption — that an adapter can always do its job with what it is
-handed — fail three times, each time found by the next operator examined, in a method written
-before that operator existed.
+**Each of those three times, what was missing was a different kind of thing, not the same
+thing recurring:**
 
-M-Pesa is also the first of these three findings backed by a real sandbox rather than
-documentation or a third-party client (`docs/providers/m-pesa.md`), which is why its evidence
-carries more weight below than Orange's own, admittedly weaker, assumed evidence.
+1. **Gateway state, the first time.** 0008's original finding: MTN's Collections and
+   Disbursements sit behind different base paths, so `query(ReferenceId)` could not work
+   without the adapter first discovering which product a reference belonged to — a fact
+   recorded on the payment, in the gateway, not supplied by the operator at all.
+2. **An operator-held identifier, the second.** 0008's amendment (issue #96): Orange's
+   documented `transactionstatus` appears to need `pay_token`, a value the *operator* returns
+   at submission and the gateway merely persists. `query` was not missing gateway state this
+   time; it was missing a value the operator itself had already handed back once.
+3. **Gateway state again, but not the same gateway state — the third, this ADR.** M-Pesa's
+   sandbox confirms occurrence 2 was the right shape for `query` (§1, below). It also exposes a
+   new gap, on a different method: `parseCallback` cannot attribute a callback to a payment
+   without the very association the gateway built in response to occurrence 2 — the persisted
+   link between Nkap's own reference and the operator's identifier. That is gateway state, like
+   occurrence 1, but a different fact, on a different method, found by a different operator.
+
+Neither of 0008's two findings was folded into the other as an amendment to something else,
+because the earlier decision was not wrong for the case it addressed each time — the same class
+of mistake had simply recurred, differently shaped. The same is true here, for the third.
+
+Occurrences 2 and 3 both come from reading an operator's documented or observed behaviour
+against the contract, with no adapter here to implement it against — occurrence 1 came from
+building MTN's adapter for real. Between 2 and 3, M-Pesa is the stronger source: `m-pesa.md`
+reports occurrence 3 (and confirms occurrence 2) from a real sandbox run, while
+`orange-money.md`, the page that first produced occurrence 2, says plainly that everything on
+it is assumed from documentation and third-party clients, not observed. That is why M-Pesa's
+evidence carries more weight below than Orange's own.
 
 0008's boundary sentence still does all the work:
 

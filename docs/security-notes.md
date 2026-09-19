@@ -109,8 +109,11 @@ than a silence a reader has to interpret for themselves:
   unpublished by every compose file in this repository and must stay that way behind a proxy
   or on an internal network only — it carries payments-by-state, reconciler passes and
   escalations, and the suspense balance in a real currency, unauthenticated by convention on
-  the assumption that only a scraper on an internal network ever reaches it
-  (`application.yml`'s own comment, and `docs/configuration-reference.md`'s row for it).
+  the assumption that only a scraper on an internal network ever reaches it. Since issue #113
+  it also carries the list of escalated payments by reference and merchant, the first
+  row-level rather than aggregate data on this port — a fact that strengthens the "keep it
+  internal" reasoning, not one that reopens it (`application.yml`'s own comment, and
+  `docs/configuration-reference.md`'s row for it).
   `charts/nkap`, the Helm chart, holds the same line: the `Service` an `Ingress` fronts
   exposes only the API port, and a metrics `Service` on `9464` exists only if turned on by
   name (`charts/nkap/README.md`, "The management port").

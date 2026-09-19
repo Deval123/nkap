@@ -71,8 +71,9 @@ commercial actor from building a product on Nkap and giving nothing back — net
 trigger the copyleft, unlike ordinary GPL. For a generic developer tool that risk is remote
 enough to ignore. For a mobile money gateway aimed at Africa, it is not: commercial
 aggregators already sell unified access to these same operators (`docs/positioning.md`'s own
-comparison — Payfonte, Simiz, Kollekt, Zirzir), and a double-entry ledger with a conformance
-kit already built and already tested is months of their own work they would not have to do.
+comparison — Payfonte, Simiz, Kollekt commercially; Zirzir and others as open source, so not
+the risk this paragraph is about), and a double-entry ledger with a conformance kit already
+built and already tested is months of their own work a commercial one would not have to do.
 **This ADR accepts that risk rather than dismissing it**, because the alternative — AGPL, to
 foreclose it — would also foreclose the contribution model the whole project is betting its
 success on, measured by `docs/positioning.md`'s own metric: applications running Nkap that its

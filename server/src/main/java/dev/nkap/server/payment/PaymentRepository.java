@@ -58,8 +58,16 @@ public interface PaymentRepository {
      * The payments the reconciler has given up retrying and flagged for a human: still
      * unresolved ({@code SUBMITTED}, {@code PENDING} or {@code UNKNOWN}), {@code escalated_at}
      * set, oldest escalation first. This is how an escalation is found without reading logs.
+     *
+     * <p>Bounded to at most {@code limit} rows, enforced in the query itself rather than by
+     * trimming an already-loaded list: the moment this is read is the moment escalations are
+     * rising, which is exactly when an unbounded read — and the one extra {@code load()} per
+     * reference it would pay for beyond the cap — is most expensive (issue #113). The one
+     * caller, {@code dev.nkap.server.management.EscalatedPaymentsEndpoint}, asks for one more
+     * row than it shows, so it can tell a full page from a truncated one without a separate
+     * {@code COUNT} query.
      */
-    List<Payment> findEscalated();
+    List<Payment> findEscalated(int limit);
 
     /**
      * Refund payments ({@code refund_of IS NOT NULL}) still in {@code CREATED}, created

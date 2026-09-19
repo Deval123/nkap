@@ -183,11 +183,11 @@ public final class PostgresPaymentRepository implements PaymentRepository {
     }
 
     @Override
-    public List<Payment> findEscalated() {
+    public List<Payment> findEscalated(int limit) {
         List<UUID> references = jdbc.queryForList(
                 "SELECT reference FROM payment WHERE escalated_at IS NOT NULL "
-                        + "AND state IN ('SUBMITTED', 'PENDING', 'UNKNOWN') ORDER BY escalated_at",
-                UUID.class);
+                        + "AND state IN ('SUBMITTED', 'PENDING', 'UNKNOWN') ORDER BY escalated_at LIMIT ?",
+                UUID.class, limit);
         List<Payment> escalated = new ArrayList<>(references.size());
         for (UUID reference : references) {
             load(new ReferenceId(reference), false).ifPresent(escalated::add);

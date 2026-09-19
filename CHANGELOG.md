@@ -37,6 +37,18 @@ All notable changes to Nkap are documented here. The format follows
   operator's silence, not what the operator said. `reconcile_attempts` deliberately does not
   reach the response: it describes this gateway's own backoff policy, not the payment, and
   changing the reconciler's schedule would change the number for an identical payment.
+- `GET /actuator/escalatedPayments`: the operator half of issue #113, closing it. Exposed by
+  name on the management port, never on the API port — the audience is the operator across
+  every merchant, not a merchant holding an API key. Calls `PaymentRepository.findEscalated`,
+  which has existed since the reconciler shipped and which nothing in production ever called.
+  Returns `reference`, `provider`, `merchantId`, `state`, `escalatedAt`, `unresolvedSince` and
+  `reconcileAttempts` — this is `reconcileAttempts`'s home, deliberately left off the caller
+  response above — and deliberately excludes `counterpartyMsisdn`, `amountMinorUnits`,
+  `currency`, `payerMessage` and `payeeNote`: the first row-level data this port carries, and
+  adding customer PII or per-payment business volume to an unauthenticated port would
+  contradict the reasoning `application.yml` already gives for keeping it internal. Bounded to
+  100 rows, enforced in the query itself so a rising backlog costs one read, not one avoided
+  load per reference beyond the cap; `truncated` in the response says when that happened.
 
 ### Changed
 

@@ -194,11 +194,13 @@ was intended rather than infer it from the absence of a warning.
 ## The management port
 
 `9464` (`management.server.port`, `application.yml`) carries payments-by-state, reconciler
-passes, escalations and the suspense balance in a real currency — every compose file in this
-repository refuses to publish it, and this chart holds the same line. `templates/service.yaml`
-— the only `Service` an `Ingress` should ever front — exposes `8080` only. Liveness and
-readiness probes target `9464` directly on the pod, where it is reachable regardless of what
-any `Service` exposes, the same way `compose.yaml`'s own healthcheck does.
+passes, escalations, the suspense balance in a real currency, and, since issue #113, the list
+of escalated payments by reference and merchant — the first row-level rather than aggregate
+data this port carries. Every compose file in this repository refuses to publish it, and this
+chart holds the same line. `templates/service.yaml` — the only `Service` an `Ingress` should
+ever front — exposes `8080` only. Liveness and readiness probes target `9464` directly on the
+pod, where it is reachable regardless of what any `Service` exposes, the same way
+`compose.yaml`'s own healthcheck does.
 
 A second, separate `Service` for a Prometheus scrape target exists at
 `templates/service-metrics.yaml`, gated behind `metrics.service.enabled` (default `false`) and

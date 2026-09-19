@@ -53,10 +53,11 @@ public final class InMemoryPaymentRepository implements PaymentRepository {
     }
 
     @Override
-    public List<Payment> findEscalated() {
+    public List<Payment> findEscalated(int limit) {
         return byReference.values().stream()
                 .filter(payment -> payment.escalatedAt() != null && payment.state().isUnresolved())
                 .sorted(Comparator.comparing(Payment::escalatedAt))
+                .limit(limit)
                 .toList();
     }
 

@@ -28,6 +28,13 @@ All notable changes to Nkap are documented here. The format follows
   costs an attacker nothing less to produce than a real one, so this traffic is bounded by
   real operator activity (ADR 0011 §2; issue #149).
 
+### Changed
+
+- `UntrustedCallbackException`'s javadoc no longer says it is thrown when a callback "fails
+  authentication" — no operator observed against this project offers a callback anything to
+  authenticate. The type itself is unchanged (ADR 0011's own "Alternatives rejected": a
+  published type is not renamed for a naming preference).
+
 ## [1.1.0] - 2026-09-18
 
 ### Added

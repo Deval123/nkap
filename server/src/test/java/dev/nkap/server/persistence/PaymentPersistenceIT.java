@@ -126,4 +126,52 @@ class PaymentPersistenceIT {
                 "DELETE FROM payment_transition WHERE payment_reference = ?", reference.value()))
                 .isInstanceOf(DataAccessException.class).hasMessageContaining("append-only");
     }
+
+    @Test
+    @DisplayName("findByProviderReference resolves the one payment recorded under a provider reference")
+    void findByProviderReference_resolves_the_one_match() {
+        ReferenceId reference = ReferenceId.newReference();
+        Payment payment = Payment.create(reference, ProviderId.of("mtn"), "merchant-1", intent());
+        payment.recordProviderReference("ws_CO_180920261803512708374149");
+        payments.save(payment);
+
+        assertThat(payments.findByProviderReference(ProviderId.of("mtn"), "ws_CO_180920261803512708374149"))
+                .isPresent().get().extracting(Payment::reference).isEqualTo(reference);
+    }
+
+    @Test
+    @DisplayName("findByProviderReference is empty for a provider reference no payment carries")
+    void findByProviderReference_is_empty_for_no_match() {
+        assertThat(payments.findByProviderReference(ProviderId.of("mtn"), "never-recorded-by-anything"))
+                .isEmpty();
+    }
+
+    @Test
+    @DisplayName("findByProviderReference refuses to guess when more than one payment shares one provider reference")
+    void findByProviderReference_refuses_to_guess_between_more_than_one_match() {
+        String sharedProviderReference = "shared-somehow-" + UUID.randomUUID();
+        Payment first = Payment.create(ReferenceId.newReference(), ProviderId.of("mtn"), "merchant-1", intent());
+        first.recordProviderReference(sharedProviderReference);
+        payments.save(first);
+        Payment second = Payment.create(ReferenceId.newReference(), ProviderId.of("mtn"), "merchant-1", intent());
+        second.recordProviderReference(sharedProviderReference);
+        payments.save(second);
+
+        // provider_reference carries no uniqueness constraint -- this should not happen, and
+        // when it does, the rule is refuse rather than pick one, exactly as when it does not
+        // happen at all. Not IllegalArgumentException, not a guess: empty, same as no match.
+        assertThat(payments.findByProviderReference(ProviderId.of("mtn"), sharedProviderReference))
+                .isEmpty();
+    }
+
+    @Test
+    @DisplayName("findByProviderReference is scoped to the provider: a match for another operator does not resolve")
+    void findByProviderReference_is_scoped_to_provider() {
+        Payment payment = Payment.create(ReferenceId.newReference(), ProviderId.of("mtn"), "merchant-1", intent());
+        payment.recordProviderReference("op-ref-under-mtn");
+        payments.save(payment);
+
+        assertThat(payments.findByProviderReference(ProviderId.of("mtn-cg"), "op-ref-under-mtn"))
+                .isEmpty();
+    }
 }

@@ -14,6 +14,27 @@ All notable changes to Nkap are documented here. The format follows
   authenticating on its very next request, not at some later cache expiry (there is none).
   Rotation is provisioning a new key and revoking the old one — no separate command needed
   (issue #112).
+- `CallbackEvent.unattributed(String, ProviderStatus)`: lets an adapter for an operator whose
+  callback never carries any reference Nkap chose (M-Pesa's does not) report the operator's
+  own reference instead. `provider-api`'s existing two-argument
+  `CallbackEvent(ReferenceId, ProviderStatus)` is unchanged and every adapter written against
+  `1.0.0` keeps compiling. `CallbackController` resolves an unattributed callback against the
+  `reference ↔ provider_reference` association `PaymentRepository` already builds for
+  `query()` (issue #96), through a new `PaymentRepository.findByProviderReference` (never a
+  guess between more than one match) and a matching index
+  (`V11__provider_reference_lookup`). A callback naming a provider reference nothing matches
+  — most likely a submission whose response was lost — is still `202` with nothing written,
+  the same as an unknown reference and logged with the same "at most once, ever" bound, under
+  its own counter reason: reaching this branch takes only an invented value, not a correct
+  guess, exactly like an invented Nkap reference, so it gets the same protection against being
+  used to flood the log (ADR 0011 §2; issue #149).
+
+### Changed
+
+- `UntrustedCallbackException`'s javadoc no longer says it is thrown when a callback "fails
+  authentication" — no operator observed against this project offers a callback anything to
+  authenticate. The type itself is unchanged (ADR 0011's own "Alternatives rejected": a
+  published type is not renamed for a naming preference).
 
 ## [1.1.0] - 2026-09-18
 

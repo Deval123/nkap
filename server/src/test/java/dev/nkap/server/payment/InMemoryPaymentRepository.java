@@ -3,6 +3,7 @@ package dev.nkap.server.payment;
 import dev.nkap.core.money.Money;
 import dev.nkap.core.payment.PaymentState;
 import dev.nkap.core.payment.ReferenceId;
+import dev.nkap.provider.ProviderId;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
@@ -36,6 +37,19 @@ public final class InMemoryPaymentRepository implements PaymentRepository {
     @Override
     public Optional<Payment> findByReferenceForUpdate(ReferenceId reference) {
         return findByReference(reference);
+    }
+
+    @Override
+    public Optional<Payment> findByProviderReference(ProviderId provider, String providerReference) {
+        if (providerReference == null || providerReference.isBlank()) {
+            throw new IllegalArgumentException("providerReference must not be blank");
+        }
+        // Matches PostgresPaymentRepository's own rule: exactly one match resolves; zero or
+        // more than one both return empty, never a guess among candidates.
+        List<Payment> matches = byReference.values().stream()
+                .filter(payment -> payment.provider().equals(provider) && providerReference.equals(payment.providerReference()))
+                .toList();
+        return matches.size() == 1 ? Optional.of(matches.get(0)) : Optional.empty();
     }
 
     @Override

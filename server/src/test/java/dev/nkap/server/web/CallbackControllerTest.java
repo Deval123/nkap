@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import dev.nkap.core.payment.ReferenceId;
@@ -25,6 +26,7 @@ import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.ResponseEntity;
 
 /**
  * Issue #129's security constraint, at the one seam it actually governs: every request is
@@ -122,6 +124,71 @@ class CallbackControllerTest {
     }
 
     @Test
+    @DisplayName("a callback naming only the operator's own reference settles once the gateway resolves it to a payment it issued")
+    void a_provider_reference_only_callback_resolves_and_confirms() throws Exception {
+        String providerReference = "ws_CO_180920261803512708374149";
+        ReferenceId resolved = ReferenceId.newReference();
+        stubParsedUnattributed(providerReference);
+        Payment resolvedPayment = mock(Payment.class);
+        when(resolvedPayment.reference()).thenReturn(resolved);
+        when(payments.findByProviderReference(MTN, providerReference)).thenReturn(Optional.of(resolvedPayment));
+        when(payments.findByReference(resolved)).thenReturn(Optional.of(resolvedPayment));
+
+        ResponseEntity<Void> response = controller.receive("mtn", Map.of(), "{}");
+
+        assertThat(response.getStatusCode().value()).isEqualTo(202);
+        verify(settlement).confirm(MTN, resolved, PaymentTransition.Cause.CALLBACK);
+        assertThat(counter("nkap.callback.confirmed")).isEqualTo(1.0);
+        assertThat(counter("nkap.callback.rejected")).isZero();
+    }
+
+    @Test
+    @DisplayName("a callback naming a provider reference this gateway has never recorded is 202, discarded, and logged at "
+            + "most once, however many arrive — reaching this branch takes only an invented value, not a correct guess")
+    void unresolved_provider_reference_callbacks_are_logged_at_most_once() throws Exception {
+        String providerReference = "ws_CO_a_lost_submit_response";
+        stubParsedUnattributed(providerReference);
+        when(payments.findByProviderReference(MTN, providerReference)).thenReturn(Optional.empty());
+
+        try (LogCapture logs = new LogCapture(CallbackController.class)) {
+            for (int i = 0; i < 5; i++) {
+                ResponseEntity<Void> response = controller.receive("mtn", Map.of(), "{}");
+                assertThat(response.getStatusCode().value()).isEqualTo(202);
+            }
+
+            assertThat(logs.events())
+                    .as("this branch is reached by a miss, exactly as cheap for an attacker to produce as an "
+                            + "unparseable body or a guessed Nkap reference — it gets the same bounded treatment")
+                    .hasSizeLessThanOrEqualTo(1);
+            assertThat(logs.events())
+                    .as("the provider reference is attacker-controlled request-body content (issue #129) and must "
+                            + "never appear in the log, even in the one line that is written")
+                    .noneSatisfy(event -> assertThat(event.getFormattedMessage()).contains(providerReference));
+        }
+        assertThat(counter("nkap.callback.received")).isEqualTo(5.0);
+        assertThat(counterTagged("nkap.callback.rejected", "reason", "unresolved_provider_reference")).isEqualTo(5.0);
+        assertThat(counter("nkap.callback.confirmed")).isZero();
+        verifyNoInteractions(settlement);
+    }
+
+    @Test
+    @DisplayName("a callback naming a provider reference more than one payment shares is refused, exactly like an "
+            + "unresolved one — never a guess at which payment it belongs to")
+    void ambiguous_provider_reference_callbacks_are_refused() throws Exception {
+        String providerReference = "shared-by-two-payments-somehow";
+        stubParsedUnattributed(providerReference);
+        // PaymentRepository's own contract: empty for zero matches AND for more than one --
+        // the controller cannot tell them apart, and must not need to.
+        when(payments.findByProviderReference(MTN, providerReference)).thenReturn(Optional.empty());
+
+        ResponseEntity<Void> response = controller.receive("mtn", Map.of(), "{}");
+
+        assertThat(response.getStatusCode().value()).isEqualTo(202);
+        assertThat(counterTagged("nkap.callback.rejected", "reason", "unresolved_provider_reference")).isEqualTo(1.0);
+        verifyNoInteractions(settlement);
+    }
+
+    @Test
     @DisplayName("a request naming no configured provider is still counted, tagged \"unknown\", never the raw attacker-supplied value")
     void unconfigured_provider_is_counted_as_unknown() {
         assertThatThrownBy(() -> controller.receive("not-configured", Map.of(), "{}"))
@@ -148,6 +215,11 @@ class CallbackControllerTest {
     private void stubParsed(ReferenceId reference) throws UntrustedCallbackException {
         when(adapter.parseCallback(any()))
                 .thenReturn(new CallbackEvent(reference, ProviderStatus.unknown("PENDING", "")));
+    }
+
+    private void stubParsedUnattributed(String providerReference) throws UntrustedCallbackException {
+        when(adapter.parseCallback(any()))
+                .thenReturn(CallbackEvent.unattributed(providerReference, ProviderStatus.unknown("PENDING", "")));
     }
 
     private double counter(String name) {

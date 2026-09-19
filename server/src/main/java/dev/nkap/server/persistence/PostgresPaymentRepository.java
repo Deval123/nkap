@@ -166,6 +166,23 @@ public final class PostgresPaymentRepository implements PaymentRepository {
     }
 
     @Override
+    public Optional<Payment> findByProviderReference(ProviderId provider, String providerReference) {
+        Objects.requireNonNull(provider, "provider");
+        if (providerReference == null || providerReference.isBlank()) {
+            throw new IllegalArgumentException("providerReference must not be blank");
+        }
+        // provider_reference carries no uniqueness constraint (unlike reference, the primary
+        // key), so more than one row can match in principle -- nothing here assumes it can't.
+        // Exactly one match resolves; zero or more than one both return empty, never a guess:
+        // picking one among several would be deciding, on no stronger basis than which row
+        // happened to come back first, which payment a real callback settles.
+        List<UUID> references = jdbc.queryForList(
+                "SELECT reference FROM payment WHERE provider = ? AND provider_reference = ?",
+                UUID.class, provider.toString(), providerReference);
+        return references.size() == 1 ? load(new ReferenceId(references.get(0)), false) : Optional.empty();
+    }
+
+    @Override
     public List<Payment> findEscalated() {
         List<UUID> references = jdbc.queryForList(
                 "SELECT reference FROM payment WHERE escalated_at IS NOT NULL "

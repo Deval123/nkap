@@ -1,4 +1,4 @@
-# ADR 0012 — Nkap stays Apache 2.0, with no CLA, while that is still one person's decision
+# ADR 0012 — Nkap stays Apache 2.0, with no CLA, now that the license is no longer one person's to change
 
 - **Status:** accepted
 - **Date:** 2026-09-19
@@ -8,21 +8,26 @@
 **This is the first ADR in this repository that is not about code.** Every other one records
 a contract shape or a state-machine rule, each defensible by a test. This one is not, and it
 still belongs here, for a reason specific to what it decides rather than to precedent: a
-license can only be changed while one person holds the copyright to everything it covers.
-Nkap's copyright is one person's today, because no outside contribution has landed yet.
-The moment one does, its author owns that contribution, and changing the license from there
-needs their agreement too — not this project's alone, and not retroactively. Thirty
-contributors from now, changing it is not a decision anyone can make; it is a negotiation
-with everyone who has ever sent a pull request, and in practice it does not happen. **This ADR
-exists to say: decided on this date, deliberately, while the alternative was still available
-to choose.** No other file in this repository can carry that fact, because no other file is
-read for what was still possible on the day it was written.
+license can only be changed unilaterally while one person holds the copyright to everything it
+covers. **That stopped being true on 2026-09-08**, when PR #21 merged Cid-oe's bounded-eviction
+fix for a memory leak in the simulator's callback-attempt storage (closing #16) — the first
+outside contribution to land on `main`, six days before `v1.0.0` was tagged. From that commit
+on, Cid-oe holds the copyright to their part of this codebase, and changing the license needs
+their agreement too — not this project's alone, and not retroactively. Three more outside
+contributions have landed since. Thirty contributors from now, changing it will not be a
+decision anyone can make; it will be a negotiation with everyone who has ever sent a pull
+request, and in practice it will not happen. **This ADR is not written while a window is still
+open — the window closed before it was written. It records which license `main` was already
+carrying past the point of no return, deliberately, rather than by default.** That the choice
+was already made by events rather than by this document is not a reason to skip writing it
+down; it is the stronger one. No other file in this repository says so, because no other file
+is read for what was still possible on the day it was written.
 
-The reason this window matters now rather than later is `docs/positioning.md`'s own bet:
-Nkap's entire strategy is that adapters — the part of this project an aggregator does not
-need to write itself — are written by people who are not its author. The conformance kit
-exists so that work can be reviewed without an account with the operator it targets. Whatever
-this project asks of a contributor sits directly in the path of that bet succeeding or not.
+The reason recording it here matters is `docs/positioning.md`'s own bet: Nkap's entire
+strategy is that adapters — the part of this project an aggregator does not need to write
+itself — are written by people who are not its author. The conformance kit exists so that work
+can be reviewed without an account with the operator it targets. Whatever this project asks of
+a contributor sits directly in the path of that bet succeeding or not.
 
 ## The decision
 

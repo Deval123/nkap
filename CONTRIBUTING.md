@@ -164,8 +164,8 @@ pull request rather than discover it later.
 
 ## Reporting a security issue
 
-Do not open a public issue. Write to security@nkap.dev with what you found and how to
-reproduce it. You will get an acknowledgement within 72 hours.
+Do not open a public issue. See [`SECURITY.md`](SECURITY.md) for how to report one and what
+happens next.
 
 ## Code of conduct
 

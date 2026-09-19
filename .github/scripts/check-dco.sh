@@ -25,6 +25,9 @@ set -euo pipefail
 #     addresses match exactly would reject them for a reason that has nothing to do with
 #     whether they certified their own commit. Rejecting them here would be friction placed
 #     exactly where docs/positioning.md says this project cannot afford it.
+#   - An empty range fails. A pull request always has at least one commit, so seeing zero
+#     means the range itself was computed wrong -- and that must be loud, not a silent pass
+#     reported as "all commits are clean" about commits it never looked at (issue #157).
 
 range="${1:?usage: check-dco.sh <range>}"
 
@@ -33,9 +36,11 @@ lower() {
 }
 
 failures=0
+examined=0
 
 while IFS= read -r sha; do
   [ -z "$sha" ] && continue
+  examined=$((examined + 1))
 
   short="$(git rev-parse --short "$sha")"
   subject="$(git show -s --format='%s' "$sha")"
@@ -76,8 +81,13 @@ while IFS= read -r sha; do
   fi
 done < <(git log --no-merges --format='%H' "$range")
 
-if [ "$failures" -gt 0 ]; then
-  echo "${failures} commit(s) failed the DCO check"
+if [ "$examined" -eq 0 ]; then
+  echo "::error::${range} produced no commits to check -- this means the range is wrong, not that the commits are clean"
   exit 1
 fi
-echo "all commits in ${range} carry a Signed-off-by trailer matching their author"
+
+if [ "$failures" -gt 0 ]; then
+  echo "${failures} of ${examined} commit(s) failed the DCO check"
+  exit 1
+fi
+echo "all ${examined} commit(s) in ${range} carry a Signed-off-by trailer matching their author"

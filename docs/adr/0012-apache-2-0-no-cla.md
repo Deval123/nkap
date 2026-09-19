@@ -32,8 +32,12 @@ a contributor sits directly in the path of that bet succeeding or not.
 ## The decision
 
 **Nkap stays Apache License 2.0.** No CLA. Contributions are accepted under the Developer
-Certificate of Origin (DCO), which this project already practices without having written it
-down: every commit merged so far carries `Signed-off-by`.
+Certificate of Origin (DCO), which this project already practices more than it has written
+down: three of the four outside commits merged so far carry `Signed-off-by`. The fourth — PR
+#79, "Add configurable MTN simulator error codes", closing #26 — does not; its own description
+says `Closes #26`, but nothing at merge time checked for the trailer, and nothing caught its
+absence. An unwritten rule is a rule nobody is checking, and this is what that looks like in
+practice — the argument for writing it down, not evidence it was never needed.
 
 ## Reasoning
 

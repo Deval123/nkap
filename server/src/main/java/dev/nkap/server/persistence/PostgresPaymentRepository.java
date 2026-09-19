@@ -166,6 +166,19 @@ public final class PostgresPaymentRepository implements PaymentRepository {
     }
 
     @Override
+    public Optional<Payment> findByProviderReference(ProviderId provider, String providerReference) {
+        Objects.requireNonNull(provider, "provider");
+        if (providerReference == null || providerReference.isBlank()) {
+            throw new IllegalArgumentException("providerReference must not be blank");
+        }
+        List<UUID> references = jdbc.queryForList(
+                "SELECT reference FROM payment WHERE provider = ? AND provider_reference = ? "
+                        + "ORDER BY created_at DESC",
+                UUID.class, provider.toString(), providerReference);
+        return references.isEmpty() ? Optional.empty() : load(new ReferenceId(references.get(0)), false);
+    }
+
+    @Override
     public List<Payment> findEscalated() {
         List<UUID> references = jdbc.queryForList(
                 "SELECT reference FROM payment WHERE escalated_at IS NOT NULL "

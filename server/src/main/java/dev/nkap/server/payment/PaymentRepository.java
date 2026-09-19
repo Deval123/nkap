@@ -2,6 +2,7 @@ package dev.nkap.server.payment;
 
 import dev.nkap.core.money.Money;
 import dev.nkap.core.payment.ReferenceId;
+import dev.nkap.provider.ProviderId;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -30,6 +31,20 @@ public interface PaymentRepository {
      * construction, does not lock.
      */
     Optional<Payment> findByReferenceForUpdate(ReferenceId reference);
+
+    /**
+     * The payment {@code provider} submitted under the operator's own {@code providerReference}
+     * — the mirror of {@link #findByReference}, resolving in the other direction, for a
+     * callback that names only what the operator chose (issue #149, ADR 0011 §2). Scoped to
+     * {@code provider}: a provider reference is only meaningful within one operator's own
+     * namespace, and the caller (the callback endpoint) always has it before it has anything
+     * else.
+     *
+     * @throws IllegalArgumentException if {@code providerReference} is blank — there would be
+     *                                   nothing to resolve, and most rows carry exactly that
+     *                                   blank default
+     */
+    Optional<Payment> findByProviderReference(ProviderId provider, String providerReference);
 
     /**
      * The payments the reconciler has given up retrying and flagged for a human: still

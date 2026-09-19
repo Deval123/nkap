@@ -6,6 +6,7 @@ import dev.nkap.provider.ProviderAdapter;
 import dev.nkap.provider.ProviderId;
 import dev.nkap.provider.RawCallback;
 import dev.nkap.provider.UntrustedCallbackException;
+import dev.nkap.server.payment.Payment;
 import dev.nkap.server.payment.PaymentRepository;
 import dev.nkap.server.payment.PaymentTransition;
 import dev.nkap.server.payment.SettlementService;
@@ -46,8 +47,21 @@ import org.springframework.web.bind.annotation.RestController;
  *   <li><strong>404</strong> when {@code providerId} names no configured adapter.</li>
  * </ul>
  *
- * <p>Nothing is written for an unparseable or unknown-reference callback — a conformance
- * rule.
+ * <p>Nothing is written for an unparseable, unknown-reference or unresolved-provider-reference
+ * callback — a conformance rule.
+ *
+ * <p><strong>Some operators' callbacks never carry any reference Nkap chose (issue #149, ADR
+ * 0011 §2)</strong> — the adapter hands back {@link CallbackEvent#unattributed}, carrying only
+ * the operator's own reference, and this class resolves it against the
+ * {@code reference ↔ provider_reference} association {@code PaymentRepository} has held on
+ * every payment since {@code V1__initial_schema.sql}, the same association {@code query}
+ * already reads in the other direction. When nothing matches — a submission whose response
+ * never arrived, so the association itself was never recorded — the answer is still {@code
+ * 202} with nothing written, for the same anti-oracle reason as an unknown reference, but the
+ * two are <strong>not</strong> logged the same way: a real provider reference is exactly as
+ * unguessable as a real Nkap reference, so this traffic is bounded by real operator activity,
+ * not by an attacker's request rate, and is logged on every occurrence rather than at most
+ * once.
  *
  * <p><strong>What this class does about being unauthenticated and internet-reachable by
  * design (issue #129; {@code docs/security-notes.md} §5 records a public hostname scanned
@@ -126,6 +140,32 @@ class CallbackController {
         }
 
         ReferenceId reference = event.reference();
+        if (reference == null) {
+            // This operator's callback never carries a value Nkap chose (issue #149, ADR
+            // 0011 §2) -- only the operator's own reference, which the adapter has already
+            // handed back as event.providerReference() (never blank here: CallbackEvent's
+            // own compact constructor refuses a callback with neither identity). Resolve it
+            // against the association PaymentRepository already builds for query() (issue
+            // #96), in the other direction.
+            Optional<Payment> resolved = payments.findByProviderReference(id, event.providerReference());
+            if (resolved.isEmpty()) {
+                countRejected(providerTag, "unresolved_provider_reference");
+                // Logged on every occurrence, unlike the two branches above: those are
+                // exactly as cheap for an attacker to produce as guessing costs nothing, but
+                // a real provider reference is exactly as unguessable as a real Nkap
+                // reference, so this traffic is bounded by real operator activity, not by an
+                // attacker's request rate. Most likely a submission whose response was lost
+                // before this gateway ever recorded the operator's reference against a
+                // payment (docs/providers/m-pesa.md) -- worth a human's attention every time,
+                // not a line thrown away after the first.
+                try (var ignored = MDC.putCloseable("providerReference", event.providerReference())) {
+                    log.warn("callback on /callbacks/{} names provider reference {}, which this gateway has "
+                            + "never recorded against a payment", providerId, event.providerReference());
+                }
+                return ResponseEntity.accepted().build();
+            }
+            reference = resolved.get().reference();
+        }
         if (payments.findByReference(reference).isEmpty()) {
             countRejected(providerTag, "unknown_reference");
             if (loggedUnknownReferenceOnce.compareAndSet(false, true)) {
@@ -188,10 +228,14 @@ class CallbackController {
 
     private void countRejected(String providerTag, String reason) {
         Counter.builder("nkap.callback.rejected")
-                .description("Callbacks this gateway would not act on: unparseable, or naming a "
-                        + "reference it never issued. Both are as cheap for an attacker to "
-                        + "produce as the request rate itself, so this counter carries the "
-                        + "count and the log carries at most one example, ever.")
+                .description("Callbacks this gateway would not act on: unparseable, naming a "
+                        + "reference it never issued, or (reason=unresolved_provider_reference, "
+                        + "issue #149) naming only a provider reference it has never recorded "
+                        + "against a payment. The first two are as cheap for an attacker to "
+                        + "produce as the request rate itself, so the log carries at most one "
+                        + "example of each, ever; the third is bounded by real operator "
+                        + "activity like a known reference is, so it is logged every time -- "
+                        + "this counter carries the count either way.")
                 .tag("provider", providerTag)
                 .tag("reason", reason)
                 .register(meterRegistry)

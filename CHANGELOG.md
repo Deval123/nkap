@@ -14,6 +14,19 @@ All notable changes to Nkap are documented here. The format follows
   authenticating on its very next request, not at some later cache expiry (there is none).
   Rotation is provisioning a new key and revoking the old one — no separate command needed
   (issue #112).
+- `CallbackEvent.unattributed(String, ProviderStatus)`: lets an adapter for an operator whose
+  callback never carries any reference Nkap chose (M-Pesa's does not) report the operator's
+  own reference instead. `provider-api`'s existing two-argument
+  `CallbackEvent(ReferenceId, ProviderStatus)` is unchanged and every adapter written against
+  `1.0.0` keeps compiling. `CallbackController` resolves an unattributed callback against the
+  `reference ↔ provider_reference` association `PaymentRepository` already builds for
+  `query()` (issue #96), through a new `PaymentRepository.findByProviderReference` and a
+  matching index (`V11__provider_reference_lookup`). A callback naming a provider reference
+  this gateway has never recorded — most likely a submission whose response was lost — is
+  still `202` with nothing written, the same as an unknown reference, but is logged on every
+  occurrence rather than at most once: unlike a guessed reference, a real provider reference
+  costs an attacker nothing less to produce than a real one, so this traffic is bounded by
+  real operator activity (ADR 0011 §2; issue #149).
 
 ## [1.1.0] - 2026-09-18
 

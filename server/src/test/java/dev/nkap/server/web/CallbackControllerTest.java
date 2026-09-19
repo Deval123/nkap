@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import dev.nkap.core.payment.ReferenceId;
@@ -25,6 +26,7 @@ import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.ResponseEntity;
 
 /**
  * Issue #129's security constraint, at the one seam it actually governs: every request is
@@ -122,6 +124,50 @@ class CallbackControllerTest {
     }
 
     @Test
+    @DisplayName("a callback naming only the operator's own reference settles once the gateway resolves it to a payment it issued")
+    void a_provider_reference_only_callback_resolves_and_confirms() throws Exception {
+        String providerReference = "ws_CO_180920261803512708374149";
+        ReferenceId resolved = ReferenceId.newReference();
+        stubParsedUnattributed(providerReference);
+        Payment resolvedPayment = mock(Payment.class);
+        when(resolvedPayment.reference()).thenReturn(resolved);
+        when(payments.findByProviderReference(MTN, providerReference)).thenReturn(Optional.of(resolvedPayment));
+        when(payments.findByReference(resolved)).thenReturn(Optional.of(resolvedPayment));
+
+        ResponseEntity<Void> response = controller.receive("mtn", Map.of(), "{}");
+
+        assertThat(response.getStatusCode().value()).isEqualTo(202);
+        verify(settlement).confirm(MTN, resolved, PaymentTransition.Cause.CALLBACK);
+        assertThat(counter("nkap.callback.confirmed")).isEqualTo(1.0);
+        assertThat(counter("nkap.callback.rejected")).isZero();
+    }
+
+    @Test
+    @DisplayName("a callback naming a provider reference this gateway has never recorded is 202, discarded, and — unlike an "
+            + "unparseable or unknown-reference callback — logged every time, not at most once")
+    void unresolved_provider_reference_callbacks_are_logged_every_time() throws Exception {
+        String providerReference = "ws_CO_a_lost_submit_response";
+        stubParsedUnattributed(providerReference);
+        when(payments.findByProviderReference(MTN, providerReference)).thenReturn(Optional.empty());
+
+        try (LogCapture logs = new LogCapture(CallbackController.class)) {
+            for (int i = 0; i < 5; i++) {
+                ResponseEntity<Void> response = controller.receive("mtn", Map.of(), "{}");
+                assertThat(response.getStatusCode().value()).isEqualTo(202);
+            }
+
+            assertThat(logs.events())
+                    .as("ADR 0011 §2: a real provider reference is exactly as unguessable as a real Nkap "
+                            + "reference, so this is bounded by real operator activity, not an attacker's request rate")
+                    .hasSize(5);
+        }
+        assertThat(counter("nkap.callback.received")).isEqualTo(5.0);
+        assertThat(counterTagged("nkap.callback.rejected", "reason", "unresolved_provider_reference")).isEqualTo(5.0);
+        assertThat(counter("nkap.callback.confirmed")).isZero();
+        verifyNoInteractions(settlement);
+    }
+
+    @Test
     @DisplayName("a request naming no configured provider is still counted, tagged \"unknown\", never the raw attacker-supplied value")
     void unconfigured_provider_is_counted_as_unknown() {
         assertThatThrownBy(() -> controller.receive("not-configured", Map.of(), "{}"))
@@ -148,6 +194,11 @@ class CallbackControllerTest {
     private void stubParsed(ReferenceId reference) throws UntrustedCallbackException {
         when(adapter.parseCallback(any()))
                 .thenReturn(new CallbackEvent(reference, ProviderStatus.unknown("PENDING", "")));
+    }
+
+    private void stubParsedUnattributed(String providerReference) throws UntrustedCallbackException {
+        when(adapter.parseCallback(any()))
+                .thenReturn(CallbackEvent.unattributed(providerReference, ProviderStatus.unknown("PENDING", "")));
     }
 
     private double counter(String name) {

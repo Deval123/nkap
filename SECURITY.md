@@ -34,8 +34,9 @@ a table would list guarantees this project cannot honour.
 Please hold public disclosure until a release carries the fix, or 90 days from your report,
 whichever comes first.
 
-If you want credit, it goes in the release notes for the version that carries the fix. If you
-don't ask for it, you are not named.
+If you want credit, it goes in the release notes for the version that carries the fix, and in
+the advisory's own credits field if you reported through GitHub. If you don't ask for it, you
+are not named.
 
 ## Bounty
 

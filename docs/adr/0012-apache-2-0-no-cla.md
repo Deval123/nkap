@@ -60,7 +60,7 @@ dismissed in passing.
 
 **What this forecloses, stated plainly.** Selling license exemptions — dual licensing, the
 model where a permissive default funds a paid alternative for anyone who cannot accept its
-terms — is off the table the moment an outside contribution is merged, because the project no
+terms — has been off the table since PR #21 merged on 2026-09-08, because the project no
 longer holds every right needed to offer one. This decision gives that model up, deliberately,
 in exchange for the contribution model `docs/positioning.md` bets on instead. **It does not
 foreclose** support contracts, hosting Nkap as a service, consulting, or sponsorship: the
@@ -99,8 +99,8 @@ imply has already been made.
 - A contributor signs their commits off (`git commit -s`) and nothing else. No CLA to sign, no
   copyright to assign. `CONTRIBUTING.md` says this in the same place a contributor already
   reads before their first pull request.
-- The project cannot relicense unilaterally once outside contributions exist, because it will
-  no longer hold every right a relicense needs. That is this decision's whole point, not a
+- The project cannot relicense unilaterally — outside contributions already exist, so it no
+  longer holds every right a relicense needs. That is this decision's whole point, not a
   side effect discovered later.
 - Dual licensing is not a future option for this project's own code. Support, hosting,
   consulting and sponsorship remain open; they were never licensing questions.

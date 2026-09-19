@@ -20,18 +20,28 @@ thing recurring:**
 
 1. **Gateway state, the first time.** 0008's original finding: MTN's Collections and
    Disbursements sit behind different base paths, so `query(ReferenceId)` could not work
-   without the adapter first discovering which product a reference belonged to — a fact
-   recorded on the payment, in the gateway, not supplied by the operator at all.
+   without the adapter first discovering which product a reference belonged to — a fact the
+   `payment` table has recorded as `operation` since `V1__initial_schema.sql`, this project's
+   first migration. `query` simply wasn't handed it.
 2. **An operator-held identifier, the second.** 0008's amendment (issue #96): Orange's
    documented `transactionstatus` appears to need `pay_token`, a value the *operator* returns
-   at submission and the gateway merely persists. `query` was not missing gateway state this
-   time; it was missing a value the operator itself had already handed back once.
-3. **Gateway state again, but not the same gateway state — the third, this ADR.** M-Pesa's
-   sandbox confirms occurrence 2 was the right shape for `query` (§1, below). It also exposes a
-   new gap, on a different method: `parseCallback` cannot attribute a callback to a payment
-   without the very association the gateway built in response to occurrence 2 — the persisted
-   link between Nkap's own reference and the operator's identifier. That is gateway state, like
-   occurrence 1, but a different fact, on a different method, found by a different operator.
+   at submission. That value, too, is one the `payment` table has stored — as
+   `provider_reference` — since the same first migration; it was persisted from day one and
+   simply went unread by `query` until the amendment gave it a path there.
+3. **The same association again, reached from the wrong side — the third, this ADR.** M-Pesa's
+   sandbox confirms occurrence 2 gave `query` the right path (§1, below). It also exposes what
+   that path doesn't cover: `parseCallback` needs the same `reference ↔ provider_reference`
+   link — present in `payment` since `V1__initial_schema.sql`, the same column occurrence 2
+   taught `query` to read — but nothing gives an inbound callback, carrying only the operator's
+   own identifier, any way to reach it. Occurrence 2 did not create that association; it got
+   `query` a way to receive it. `parseCallback` has no such way at all.
+
+None of the three, read this way, is a fact the system lacked. `operation` and
+`provider_reference` have both sat on `payment` since the first migration this project ever
+wrote. Each occurrence is that same, already-recorded fact failing to reach the one method that
+needed it right then — a sharper reading of 0008's own rule than "the contract is missing an
+argument" states, and the same reading: an adapter handed everything it needs is not being
+given new information. It is being given a path to information the gateway already had.
 
 Neither of 0008's two findings was folded into the other as an amendment to something else,
 because the earlier decision was not wrong for the case it addressed each time — the same class
@@ -101,13 +111,14 @@ operator's own identifier — is reaching into gateway state, which 0008 already
 adapter from doing, for the same reasons it forbade it the first time.
 
 **The direction 0008 already set answers this too: hand back what the adapter actually has, and
-let whichever side already holds the persisted association — the gateway, which records
-`providerReference` at submission exactly for `query`'s benefit — complete the attribution.**
-Concretely, and without deciding the exact shape (naming that is for the implementing pull
-request, not this ADR): a callback carrier able to report the provider's own reference for a
-payment it cannot itself resolve to a `ReferenceId`, so that the gateway — already holding the
-persisted `reference ↔ providerReference` association it built for `query` — can complete the
-match itself, the same lookup it already performs, from the same table, in the other direction.
+let whichever side already holds the persisted association — the gateway, which has recorded
+`provider_reference` on `payment` since `V1__initial_schema.sql`, and has read it for `query`'s
+benefit only since occurrence 2 — complete the attribution.** Concretely, and without deciding
+the exact shape (naming that is for the implementing pull request, not this ADR): a callback
+carrier able to report the provider's own reference for a payment it cannot itself resolve to a
+`ReferenceId`, so that the gateway — already holding that association, in the same column, from
+the same first migration — can complete the match itself, the mirror image of the lookup it
+already performs for `query`.
 
 This is not free the way `query`'s fix was. `QuerySubject` is constructed only by the gateway
 (`SettlementService`) and merely read by adapters, which is exactly why growing it cost nothing

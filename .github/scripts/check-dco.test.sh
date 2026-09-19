@@ -99,6 +99,10 @@ commit_as "Jane Doe" "1234+janedoe@users.noreply.github.com" \
   "$(printf 'add a thing\n\nSigned-off-by: Jane Doe <jane@example.test>')"
 assert_pass "a trailer matching the author by name rather than email still passes" "$base"
 
+new_repo
+base="$(base_sha)"
+assert_fail "a range covering no commits fails, instead of passing on nothing" "$base" "produced no commits"
+
 if [ "$failures" -gt 0 ]; then
   echo "${failures} assertion(s) failed"
   exit 1

@@ -2,9 +2,17 @@
 
 ## Reporting a vulnerability
 
-Do not open a public issue, a pull request, or a discussion. Write to
-**security@nkap.dev**. Say what you found, how to reproduce it, and what you think an
-attacker gets from it. No template, no form — those three things are enough.
+Prefer [GitHub's private vulnerability reporting](https://github.com/Deval123/nkap/security/advisories/new)
+(the repository's Security tab → "Report a vulnerability"). It reaches the maintainer
+through a channel already being watched, with no mailbox or DNS record in between that could
+silently fail.
+
+If you would rather not use a GitHub account, write to **security@nkap.dev** instead — the
+same commitments below apply either way.
+
+Do not open a public issue, a pull request, or a discussion. Say what you found, how to
+reproduce it, and what you think an attacker gets from it. No template, no form — those three
+things are enough.
 
 ## What to expect, and when
 

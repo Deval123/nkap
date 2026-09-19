@@ -122,7 +122,6 @@ attract — friction on the one door `docs/positioning.md` says the whole strate
 for a benefit (relicensing flexibility) this decision has already chosen not to keep.
 
 **Registering "Nkap" as a trademark now, alongside this ADR.** Considered and left undone,
-deliberately distinct from deciding not to: this ADR records a licensing decision within one
-person's power to make today; a trademark filing is a different kind of commitment, in a
-specific jurisdiction, and bundling it here would let a decision this ADR is not equipped to
-make ride in on one that it is.
+deliberately distinct from deciding not to: a trademark filing is a different kind of
+commitment, in a specific jurisdiction, and bundling it here would let a decision this ADR is
+not equipped to make ride in on one that it is.

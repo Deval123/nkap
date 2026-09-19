@@ -167,13 +167,16 @@ class CallbackController {
                     // read out of the request body, on an unauthenticated endpoint, so it is
                     // exactly as attacker-controlled as the body itself (issue #129) -- and
                     // never logged, not even MDC-only, for the same reason the parse
-                    // failure's own message above never is. Distinguished from
-                    // unknown_reference by its own counter reason rather than by log volume:
-                    // this one may mean a real payment's submit response was lost
-                    // (docs/providers/m-pesa.md), which is worth alerting on differently, not
-                    // worth logging more often.
-                    log.warn("callback on /callbacks/{} names a provider reference this gateway has never "
-                            + "recorded against a payment "
+                    // failure's own message above never is. The message says only what is
+                    // true either way -- findByProviderReference returns empty for zero
+                    // matches and for more than one alike (PaymentRepository's own contract),
+                    // so this line cannot claim "never recorded" without claiming more than it
+                    // knows. Distinguished from unknown_reference by its own counter reason
+                    // rather than by log volume: this one may mean a real payment's submit
+                    // response was lost (docs/providers/m-pesa.md), which is worth alerting on
+                    // differently, not worth logging more often.
+                    log.warn("callback on /callbacks/{} names a provider reference this gateway cannot resolve "
+                            + "to exactly one payment "
                             + "(further occurrences are counted in nkap_callback_rejected, not logged)", providerId);
                 }
                 return ResponseEntity.accepted().build();

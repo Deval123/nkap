@@ -120,6 +120,50 @@ class MtnCollectionsAdapterTest {
                 .isInstanceOf(ProviderUnavailableException.class);
     }
 
+    /**
+     * Issue #28: only {@code RESOURCE_ALREADY_EXIST} on a 409 means a previous attempt
+     * reached MTN. Any other code is unexpected -- the gateway does not know what happened
+     * to this submission, so it is treated exactly like any other unrecognised status, never
+     * as an outright refusal. {@code PaymentApiIT.a_409_with_a_different_code_is_202_unknown_and_persisted}
+     * pins what a payment actually becomes when this is reached through the server; this
+     * pins the adapter's own contract.
+     */
+    @Test
+    @DisplayName("a 409 carrying a code other than RESOURCE_ALREADY_EXIST is unavailable, not already-submitted")
+    void a_409_with_a_different_code_is_unavailable() throws Exception {
+        simulator.declare("""
+                {"rules":[{"scenario":{"onSubmit":{"outcome":"CONFLICT","code":"SOME_OTHER_CODE"}}}]}""");
+
+        assertThatThrownBy(() -> adapter().submit(collectIntent(), ReferenceId.newReference()))
+                .isInstanceOf(ProviderUnavailableException.class);
+    }
+
+    @Test
+    @DisplayName("a 409 carrying RESOURCE_ALREADY_EXIST is still acknowledged, exactly as before issue #28")
+    void a_409_with_resource_already_exist_is_still_acknowledged() throws Exception {
+        // The default code CONFLICT carries with no override -- MtnErrorResponse.duplicateReference().
+        simulator.declare("{\"rules\":[{\"scenario\":{\"onSubmit\":{\"outcome\":\"CONFLICT\"}}}]}");
+
+        SubmitResult submitted = adapter().submit(collectIntent(), ReferenceId.newReference());
+
+        assertThat(submitted).isInstanceOfSatisfying(SubmitResult.Acknowledged.class,
+                acknowledged -> assertThat(acknowledged.state()).isEqualTo(PaymentState.SUBMITTED));
+    }
+
+    @Test
+    @DisplayName("a 409 whose body cannot be read as MTN's error shape at all is unavailable, not already-submitted")
+    void a_409_with_an_unreadable_body_is_unavailable() throws Exception {
+        try (StubMtn mtn = new StubMtn()) {
+            mtn.respondWith(request -> request.path().equals("/collection/token/")
+                    ? new StubResponse(200, StubMtn.tokenJson("tok", 3600))
+                    : new StubResponse(409, "this is not JSON"));
+            MtnCollectionsAdapter adapter = new MtnCollectionsAdapter(profileAt(mtn.baseUrl()), Duration.ofSeconds(3));
+
+            assertThatThrownBy(() -> adapter.submit(collectIntent(), ReferenceId.newReference()))
+                    .isInstanceOf(ProviderUnavailableException.class);
+        }
+    }
+
     @Test
     @DisplayName("the adapter advertises the mtn id and exactly the COLLECT capability")
     void identity_and_capabilities() {

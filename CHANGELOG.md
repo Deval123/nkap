@@ -18,6 +18,18 @@ All notable changes to Nkap are documented here. The format follows
   a file that does not parse as that document fails the simulator at startup, naming the
   path and what was wrong with it (issue #99).
 
+### Changed
+
+- **The MTN Collections adapter no longer treats every `409` on `requesttopay` as
+  "already submitted."** It now reads the error body's `code` the same way a `400` already
+  does, and only acknowledges when that code is `RESOURCE_ALREADY_EXIST` — a previous
+  attempt genuinely reached MTN. Any other `409`, including one whose body cannot be read
+  at all, now falls through to `ProviderUnavailableException`, exactly like any other
+  unrecognised status: the payment is `202 UNKNOWN` and the reconciler chases it, rather
+  than being silently recorded as submitted on a guess. This was deliberately loose until
+  the simulator could return MTN-shaped error bodies (issue #26); it now can, so the
+  looseness is gone (issue #28).
+
 ## [1.2.0] - 2026-09-20
 
 ### Added

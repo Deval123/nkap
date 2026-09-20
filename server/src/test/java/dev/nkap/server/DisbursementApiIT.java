@@ -25,6 +25,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 
@@ -34,12 +35,21 @@ import org.springframework.test.context.DynamicPropertySource;
  * <strong>same</strong> reconciler and the same settlement path as collections.
  *
  * <p>Not a {@code PostgresSpringBootIT}: that base turns the reconciler off, and two of
- * these tests are about the reconciler resolving a disbursement. The reconciler is on but
- * its scheduled interval is an hour, so the only pass that runs is the one a test calls by
- * hand.
+ * these tests are about the reconciler resolving a disbursement. The whole
+ * {@code ReconcilerConfiguration}, not just its scheduled pass, is conditional on
+ * {@code nkap.reconciler.enabled} (see {@code ReconcilerWiringTest}), so {@code enabled=true}
+ * is what lets {@code runOnce()} be autowired and called by hand below. A long interval does
+ * not by itself stop the scheduled pass from firing -- its first tick fires as soon as the
+ * context comes up, no matter the interval -- and this class shares its context with
+ * {@code RefundApiIT} (identical {@code @DynamicPropertySource} values), so a live scheduler
+ * would otherwise outlive both classes and keep sweeping the PostgreSQL instance every
+ * {@code *IT} shares ({@code PostgresDatabase.shared()}) for the rest of the JVM's life
+ * (issue #162). {@code @DirtiesContext(classMode = AFTER_CLASS)} below closes that context
+ * once this class is done, which is what actually stops it.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ExtendWith(DockerAvailable.class)
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class DisbursementApiIT {
 
     private static final EmbeddedSimulator SIMULATOR = EmbeddedSimulator.start();
@@ -65,7 +75,8 @@ class DisbursementApiIT {
         registry.add("nkap.provider.mtn.installations[0].disbursement.api-key", () -> "disbursement-key");
         registry.add("nkap.provider.default", () -> "mtn-sandbox");
 
-        // Reconciler on, but only when a test asks for a pass.
+        // Reconciler on for runOnce() below; see the class javadoc for why enabled=true does
+        // not by itself keep the scheduled pass from firing, and @DirtiesContext for what does.
         registry.add("nkap.reconciler.enabled", () -> "true");
         registry.add("nkap.reconciler.interval", () -> "PT1H");
         registry.add("nkap.reconciler.batch-size", () -> "50");

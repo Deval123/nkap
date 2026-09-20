@@ -655,6 +655,13 @@ way a balance and a status query are:
 
 Left open deliberately rather than guessed. Each is worth a pull request adding a line here.
 
+- **Whether a real MTN answers `404` when a collections reference is queried on the
+  disbursements path (or the mirror), and what code it carries if so.** Issue #69 gave the
+  simulator that behaviour — Collections and Disbursements are documented as separate
+  products (*Disbursements*, above), so treating one product's reference as unknown to the
+  other is the conservative choice, not a guess dressed up as one — but it was modelled, not
+  observed: no real account has ever been asked. Whether the operator agrees, and whether it
+  answers `RESOURCE_NOT_FOUND` or something else, is unconfirmed.
 - **Which field a callback for a gateway-submitted payment actually carries — `referenceId`
   or only `externalId` — and therefore whether `parseCallback`'s fallback to `externalId` has
   ever been exercised against a real operator.** *A callback reaches the gateway* confirms the

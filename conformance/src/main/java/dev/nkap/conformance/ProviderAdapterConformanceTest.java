@@ -38,11 +38,13 @@ import org.junit.jupiter.api.function.Executable;
  * extractable yet. At the time, saying "for each capability the adapter declares" meant
  * hardcoding which members were submittable, because {@link Capability} mixed operations
  * with features — issue #70 closed that gap; {@link ProviderAdapter#operations()} is exactly
- * that iteration, with nothing to hardcode. What still blocks the rule is the simulator: it
- * keeps one reference store across both products, so a reference submitted on the
- * collections path is answered on the disbursements path too. The rule would pass whether or
- * not an adapter routed correctly, and a green test that cannot fail is worse than an absent
- * one. Partitioning the simulator per product is what unblocks it.
+ * that iteration, with nothing to hardcode. What blocked the rule after that was the
+ * simulator: it kept one reference store across both products, so a reference submitted on
+ * the collections path was answered on the disbursements path too, and the rule would pass
+ * whether or not an adapter routed correctly — a green test that cannot fail is worse than an
+ * absent one. Issue #69 partitioned the simulator per product, so that is no longer true.
+ * <strong>The rule itself is still to be written</strong> — closing that gap made it
+ * extractable, not extracted; whoever picks it up next should start from #67, not from here.
  */
 public abstract class ProviderAdapterConformanceTest {
 

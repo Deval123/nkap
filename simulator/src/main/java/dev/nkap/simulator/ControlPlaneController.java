@@ -8,6 +8,8 @@ import dev.nkap.simulator.scenario.TokenBehaviour;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -36,10 +38,10 @@ import org.springframework.web.server.ResponseStatusException;
 public class ControlPlaneController {
 
     private final ScenarioEngine engine;
-    private final CollectionRequestStore store;
+    private final ReferenceStore store;
     private final CallbackDispatcher callbacks;
 
-    ControlPlaneController(ScenarioEngine engine, CollectionRequestStore store, CallbackDispatcher callbacks) {
+    ControlPlaneController(ScenarioEngine engine, ReferenceStore store, CallbackDispatcher callbacks) {
         this.engine = engine;
         this.store = store;
         this.callbacks = callbacks;
@@ -81,9 +83,21 @@ public class ControlPlaneController {
         engine.resetConfiguration();
     }
 
+    /**
+     * Issue #69: once a reference can exist under more than one {@link Product}, this route
+     * cannot answer from the reference alone without risking an answer for the wrong one.
+     * Answers only when <strong>exactly one</strong> product holds {@code referenceId} —
+     * {@code 404} both when neither does (unchanged: unknown reference, as before) and when
+     * both do (new: a test that deliberately reused a reference across products gets a
+     * refusal, not a silent guess at which one it meant) — the same reasoning
+     * {@code PaymentRepository.findByProviderReference} applies on the gateway side.
+     */
     @GetMapping("/state/{referenceId}")
     public StateView state(@PathVariable String referenceId) {
-        return engine.state(References.canonical(referenceId))
+        String reference = References.canonical(referenceId);
+        Product product = onlyProductHolding(reference)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "unknown reference"));
+        return engine.state(product, reference)
             .map(s -> new StateView(s.scenario().name(), s.queryCount(), s.submittedAt()))
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "unknown reference"));
     }
@@ -91,13 +105,22 @@ public class ControlPlaneController {
     /**
      * The callback delivery attempts for a submission reference, oldest first.
      * An empty list when none were attempted — polling for "have the callbacks
-     * gone out yet?" should not have to distinguish "not yet" from "never".
-     * This is what lets a test assert two callbacks were sent, at the right
-     * interval, without standing up a server to receive them.
+     * gone out yet?" should not have to distinguish "not yet" from "never", and that
+     * reasoning is unaffected by issue #69: a reference neither product has ever seen is
+     * still just that, not an error. Delivery itself is not partitioned per product (out of
+     * scope for #69 — the callback mechanism), so the one new refusal this route needs is
+     * the one case where that matters: {@code referenceId} used by <strong>both</strong>
+     * products, where the log under it would otherwise silently mix two products' deliveries
+     * under one answer. {@code 404} there, not a guess at whose callbacks these are.
      */
     @GetMapping("/callbacks/{referenceId}")
     public List<CallbackDispatcher.Attempt> callbackAttempts(@PathVariable String referenceId) {
-        return callbacks.attemptsFor(References.canonical(referenceId));
+        String reference = References.canonical(referenceId);
+        if (engine.productsHolding(reference).size() > 1) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND,
+                    "reference is used by more than one product; ask each product's own state instead");
+        }
+        return callbacks.attemptsFor(reference);
     }
 
     /**
@@ -142,5 +165,11 @@ public class ControlPlaneController {
                 .collect(Collectors.joining("."));
         }
         return "(unknown)";
+    }
+
+    /** {@code reference}'s one product, or empty when neither or both hold it (issue #69). */
+    private Optional<Product> onlyProductHolding(String reference) {
+        Set<Product> holders = engine.productsHolding(reference);
+        return holders.size() == 1 ? holders.stream().findFirst() : Optional.empty();
     }
 }

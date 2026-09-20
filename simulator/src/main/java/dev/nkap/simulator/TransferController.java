@@ -35,12 +35,12 @@ import org.springframework.web.server.ResponseStatusException;
 @RestController
 public class TransferController {
 
-    private final CollectionRequestStore store;
+    private final ReferenceStore store;
     private final ScenarioEngine engine;
     private final CallbackDispatcher callbacks;
     private final TokenAuthenticator authenticator;
 
-    TransferController(CollectionRequestStore store, ScenarioEngine engine,
+    TransferController(ReferenceStore store, ScenarioEngine engine,
                        CallbackDispatcher callbacks, TokenAuthenticator authenticator) {
         this.store = store;
         this.engine = engine;
@@ -62,11 +62,11 @@ public class TransferController {
         String amount = field(body, "amount");
         String currency = field(body, "currency");
 
-        if (!store.record(reference)) {
+        if (!store.record(Product.DISBURSEMENTS, reference)) {
             throw new MtnErrorException(HttpStatus.CONFLICT, MtnErrorResponse.duplicateReference());
         }
 
-        Scenario scenario = engine.resolveForSubmission(reference, msisdn, amount, currency);
+        Scenario scenario = engine.resolveForSubmission(Product.DISBURSEMENTS, reference, msisdn, amount, currency);
 
         String url = (callbackUrl != null && !callbackUrl.isBlank()) ? callbackUrl : engine.callbackUrl();
         callbacks.schedule(reference, amount, currency, scenario.callbacks(), url);
@@ -91,7 +91,7 @@ public class TransferController {
 
         authenticator.require(authorization);
 
-        QueryBehaviour behaviour = engine.nextQueryBehaviour(References.canonical(referenceId))
+        QueryBehaviour behaviour = engine.nextQueryBehaviour(Product.DISBURSEMENTS, References.canonical(referenceId))
                 .orElseThrow(() -> new MtnErrorException(HttpStatus.NOT_FOUND, MtnErrorResponse.notFound()));
 
         sleep(behaviour.delay());

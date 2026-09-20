@@ -136,6 +136,8 @@ public final class MtnDisbursementsAdapter implements ProviderAdapter {
             // to ProviderUnavailableException below, exactly like collections -- the full
             // argument for why is on MtnCollectionsAdapter.submit's own 409 branch (issue
             // #28), mirrored here rather than re-argued (issue #171).
+            // Modelled from the collections observation; no real transfer has been asked
+            // (docs/providers/mtn.md, Still unknown).
             return SubmitResult.acknowledged("", response.body());
         }
         if (code == 400) {

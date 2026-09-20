@@ -27,7 +27,7 @@ class RequestToPayApiTest {
     MockMvc mvc;
 
     @Autowired
-    CollectionRequestStore store;
+    ReferenceStore store;
 
     @BeforeEach
     void reset() {

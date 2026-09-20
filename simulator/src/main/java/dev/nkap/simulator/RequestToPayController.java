@@ -40,12 +40,12 @@ import org.springframework.web.server.ResponseStatusException;
 @RestController
 public class RequestToPayController {
 
-    private final CollectionRequestStore store;
+    private final ReferenceStore store;
     private final ScenarioEngine engine;
     private final CallbackDispatcher callbacks;
     private final TokenAuthenticator authenticator;
 
-    RequestToPayController(CollectionRequestStore store, ScenarioEngine engine,
+    RequestToPayController(ReferenceStore store, ScenarioEngine engine,
                            CallbackDispatcher callbacks, TokenAuthenticator authenticator) {
         this.store = store;
         this.engine = engine;
@@ -77,11 +77,11 @@ public class RequestToPayController {
         String amount = field(body, "amount");
         String currency = field(body, "currency");
 
-        if (!store.record(reference)) {
+        if (!store.record(Product.COLLECTIONS, reference)) {
             throw new MtnErrorException(HttpStatus.CONFLICT, MtnErrorResponse.duplicateReference());
         }
 
-        Scenario scenario = engine.resolveForSubmission(reference, msisdn, amount, currency);
+        Scenario scenario = engine.resolveForSubmission(Product.COLLECTIONS, reference, msisdn, amount, currency);
 
         // Schedule callbacks now — when the scenario resolves, and BEFORE the
         // submit delay below. Schedule first, sleep second, respond third: that
@@ -116,7 +116,7 @@ public class RequestToPayController {
         // come first, unlike the submit path.
         authenticator.require(authorization);
 
-        QueryBehaviour behaviour = engine.nextQueryBehaviour(References.canonical(referenceId))
+        QueryBehaviour behaviour = engine.nextQueryBehaviour(Product.COLLECTIONS, References.canonical(referenceId))
             .orElseThrow(() -> new MtnErrorException(HttpStatus.NOT_FOUND, MtnErrorResponse.notFound()));
 
         sleep(behaviour.delay());

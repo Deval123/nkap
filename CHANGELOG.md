@@ -30,6 +30,18 @@ All notable changes to Nkap are documented here. The format follows
   the simulator could return MTN-shaped error bodies (issue #26); it now can, so the
   looseness is gone (issue #28).
 
+### Fixed
+
+- **`nkap-simulator` no longer answers a Collections reference on the Disbursements path,
+  or the mirror.** It used to keep one reference space across both MTN products, so a
+  reference submitted on `/collection/v1_0/requesttopay` would also answer on
+  `/disbursement/v1_0/transfer/{reference}` — and the reverse — exactly as if it were the
+  same payment under both. Each product now has its own reference space: a status query for
+  the wrong product gets the same answer as a reference that was never submitted at all,
+  `404`. This is what makes a conformance rule about product routing possible to write at
+  all — against the old, shared reference space, that rule would have passed whether or not
+  an adapter actually routed correctly (issue #69).
+
 ## [1.2.0] - 2026-09-20
 
 ### Added

@@ -55,7 +55,8 @@ class OutboxNotifierTest {
         assertThat(outbox.events()).singleElement().satisfies(event -> {
             assertThat(event.eventType()).isEqualTo("payment.succeeded");
             assertThat(event.merchantId()).isEqualTo("merchant-1");
-            assertThat(event.payload()).contains(payment.reference().toString(), "\"state\":\"SUCCEEDED\"");
+            assertThat(event.payload()).contains(payment.reference().toString(), "\"state\":\"SUCCEEDED\"",
+                    "\"cause\":\"QUERY\"");
         });
     }
 
@@ -81,6 +82,32 @@ class OutboxNotifierTest {
 
         assertThat(outbox.events()).singleElement()
                 .satisfies(event -> assertThat(event.eventType()).isEqualTo("payment.expired"));
+    }
+
+    /**
+     * Issue #177's own hazard: two independent lookups, one for {@code cause} and one for
+     * {@code providerCode}, could each pick a different transition and describe a row that
+     * never existed. This payment's two transitions carry deliberately distinct causes and
+     * codes, so the two fields landing on the <em>same</em> row is only true if one helper
+     * reads both from it -- a wrong pairing (this row's cause with the other row's code, or
+     * the reverse) would mean the two were found independently.
+     */
+    @Test
+    @DisplayName("cause and providerCode both come from the transition that made the payment terminal, not two independent lookups")
+    void cause_and_provider_code_come_from_the_same_transition() {
+        endpoints.provision("merchant-1", "https://merchant.example/hooks");
+        PaymentIntent intent = new PaymentIntent(Capability.Operation.COLLECT, Money.of(5000, Currency.EUR),
+                "46733123453", "rent", "march", Map.of());
+        Payment payment = Payment.create(ReferenceId.newReference(), MTN, "merchant-1", intent);
+        payment.applyTransition(PaymentState.SUBMITTED, PaymentTransition.Cause.SUBMIT_RESPONSE, "SUBMIT_CODE", "", "");
+        payment.applyTransition(PaymentState.FAILED, PaymentTransition.Cause.QUERY, "QUERY_CODE", "", "");
+
+        notifier.notifyIfTerminal(payment);
+
+        assertThat(outbox.events()).singleElement().satisfies(event -> {
+            assertThat(event.payload()).contains("\"cause\":\"QUERY\"", "\"providerCode\":\"QUERY_CODE\"");
+            assertThat(event.payload()).doesNotContain("SUBMIT_CODE");
+        });
     }
 
     @Test

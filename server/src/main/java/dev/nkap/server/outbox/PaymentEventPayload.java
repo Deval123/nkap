@@ -17,6 +17,21 @@ package dev.nkap.server.outbox;
  * @param amountMinor           the payment's amount, as an integer count of minor units — never a decimal
  * @param currency              the payment's currency
  * @param state                 the terminal state this event announces — matches {@code type}
+ * @param cause                 what attributed the transition this event announces — one of
+ *                              {@code PaymentTransition.Cause}, e.g. {@code SUBMIT_RESPONSE},
+ *                              {@code CALLBACK}, {@code QUERY}, {@code RECONCILER} or
+ *                              {@code GATEWAY}. Present on every event, not only a failure: a
+ *                              {@code payment.succeeded} carrying {@code CALLBACK} says the
+ *                              operator's own webhook settled it, not a later reconciler pass.
+ *                              For a {@code payment.failed} or {@code refund.failed} it is what
+ *                              a receiver needs to tell the two kinds of refusal apart —
+ *                              {@code SUBMIT_RESPONSE} means the operator was asked and
+ *                              refused; {@code GATEWAY} means this gateway refused the request
+ *                              itself and never asked the operator anything (ADR 0013). The
+ *                              two call for different reactions: an operator refusal is about
+ *                              the payment and may be worth telling a payer about; a gateway
+ *                              refusal is about the request — a client bug or a misconfigured
+ *                              installation — and is not.
  * @param providerCode          the operator's own code for the terminal transition, or {@code ""}
  * @param providerTransactionId the operator's transaction id, set only for a {@code succeeded} event, else {@code ""}
  * @param occurredAt            when the payment reached this state, ISO-8601 ({@code Instant.toString()}) —
@@ -33,6 +48,7 @@ public record PaymentEventPayload(
         long amountMinor,
         String currency,
         String state,
+        String cause,
         String providerCode,
         String providerTransactionId,
         String occurredAt,

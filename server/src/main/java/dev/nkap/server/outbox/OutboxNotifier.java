@@ -60,6 +60,7 @@ public final class OutboxNotifier {
     private OutboxEvent buildEvent(String type, Payment payment) {
         UUID id = UUID.randomUUID();
         Money amount = payment.intent().amount();
+        PaymentTransition transition = terminalTransition(payment);
         PaymentEventPayload data = new PaymentEventPayload(
                 id.toString(),
                 type,
@@ -69,7 +70,8 @@ public final class OutboxNotifier {
                 amount.amount(),
                 amount.currency().name(),
                 payment.state().name(),
-                lastOperatorCode(payment.history()),
+                transition.cause().name(),
+                transition.operatorCode(),
                 payment.providerTransactionId(),
                 Instant.now().toString(),
                 payment.refundOf().map(Object::toString).orElse(""));
@@ -101,7 +103,27 @@ public final class OutboxNotifier {
         };
     }
 
-    private static String lastOperatorCode(List<PaymentTransition> history) {
-        return history.isEmpty() ? "" : history.get(history.size() - 1).operatorCode();
+    /**
+     * The transition the event announces — {@code cause} and {@code providerCode} in
+     * {@link PaymentEventPayload} both read from this <strong>one</strong> row, never two
+     * independent lookups: a helper each for {@code cause} and {@code providerCode} could each
+     * pick a different transition and describe a row that never existed, silently.
+     *
+     * <p>{@link Payment} is born {@link dev.nkap.core.payment.PaymentState#CREATED} with an
+     * empty history — "a birth, not a transition," its own javadoc says — and {@code CREATED}
+     * cannot itself be {@code SUCCEEDED}, {@code FAILED} or {@code EXPIRED}. {@link
+     * #notifyIfTerminal} only reaches {@link #buildEvent} once {@code payment.state()} is one
+     * of those three, which is only ever reached by at least one {@code applyTransition} call.
+     * So a terminal payment's history cannot be empty here; if it ever is, something upstream
+     * already broke that invariant, and a webhook with a guessed or blank {@code cause} would
+     * hide the break rather than surface it — failing loudly is the honest answer.
+     */
+    private static PaymentTransition terminalTransition(Payment payment) {
+        List<PaymentTransition> history = payment.history();
+        if (history.isEmpty()) {
+            throw new IllegalStateException("payment " + payment.reference() + " is terminal ("
+                    + payment.state() + ") with no history -- impossible, see terminalTransition's javadoc");
+        }
+        return history.get(history.size() - 1);
     }
 }

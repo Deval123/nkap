@@ -130,11 +130,12 @@ public final class MtnDisbursementsAdapter implements ProviderAdapter {
         if (code >= 200 && code < 300) {
             return SubmitResult.acknowledged("", "");
         }
-        if (code == 409) {
+        if (code == 409 && "RESOURCE_ALREADY_EXIST".equals(codeIn(response.body()))) {
             // The reference was already used: a previous attempt reached MTN. Idempotency
-            // worked. Acknowledge and let query() settle it. Collections narrowed this to
-            // RESOURCE_ALREADY_EXIST specifically (issue #28); this leniency is now this
-            // adapter's alone, tracked by issue #171.
+            // worked; acknowledge and let query() settle it. Every other 409 falls through
+            // to ProviderUnavailableException below, exactly like collections -- the full
+            // argument for why is on MtnCollectionsAdapter.submit's own 409 branch (issue
+            // #28), mirrored here rather than re-argued (issue #171).
             return SubmitResult.acknowledged("", response.body());
         }
         if (code == 400) {

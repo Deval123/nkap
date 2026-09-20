@@ -617,7 +617,11 @@ call proves otherwise:
   the credentials are each installation's own `nkap.provider.mtn.installations[n].disbursement.*`.
 - `POST /disbursement/v1_0/transfer` — `202` with an empty body, `X-Reference-Id` the
   idempotency key, exactly like `requesttopay`. The body names the counterparty **`payee`**
-  where a collection says `payer`.
+  where a collection says `payer`. A reused reference is handled the same way collections
+  narrowed it to (issue #28, applied here by issue #171): only a `409` whose body's `code` is
+  `RESOURCE_ALREADY_EXIST` is acknowledged as already-submitted; every other `409`, and any
+  `409` whose body cannot be read at all, is `ProviderUnavailableException` -- `UNKNOWN` and
+  the reconciler, never an outright refusal, since the transfer may well have reached MTN.
 - `GET /disbursement/v1_0/transfer/{ref}` — assumed to return the same
   `{status, reason, financialTransactionId}` shape; `404` `RESOURCE_NOT_FOUND` for an
   unknown reference, handled as `UNKNOWN` the same way.
@@ -662,6 +666,16 @@ Left open deliberately rather than guessed. Each is worth a pull request adding 
   other is the conservative choice, not a guess dressed up as one — but it was modelled, not
   observed: no real account has ever been asked. Whether the operator agrees, and whether it
   answers `RESOURCE_NOT_FOUND` or something else, is unconfirmed.
+- **Whether a real MTN transfer answers `409 RESOURCE_ALREADY_EXIST` for a reused reference
+  the same way a real MTN collection does.** Issue #171 narrowed `MtnDisbursementsAdapter`'s
+  409 handling to match the collections rule issue #28 observed against the sandbox — the
+  conservative and almost certainly correct reading, since both products document the same
+  requesttopay-shaped behaviour — but no real disbursements account has been asked, so the
+  narrowing rests on an assumption, not an observation of this product. If a real transfer
+  turned out to answer some other code for a reused reference, that code would fall through
+  to `ProviderUnavailableException` exactly like any other unrecognised `409` — `UNKNOWN` and
+  the reconciler, not a wrong "already submitted" — so the cost of the assumption being wrong
+  is a slower resolution, not an incorrect one.
 - **Which field a callback for a gateway-submitted payment actually carries — `referenceId`
   or only `externalId` — and therefore whether `parseCallback`'s fallback to `externalId` has
   ever been exercised against a real operator.** *A callback reaches the gateway* confirms the

@@ -12,9 +12,12 @@ import dev.nkap.provider.Capability;
 import dev.nkap.provider.PaymentIntent;
 import dev.nkap.provider.ProviderId;
 import dev.nkap.provider.ProviderStatus;
+import dev.nkap.provider.ProviderUnavailableException;
 import dev.nkap.provider.QuerySubject;
 import dev.nkap.provider.RawCallback;
 import dev.nkap.provider.SubmitResult;
+import dev.nkap.provider.mtn.StubMtn.StubResponse;
+import java.net.URI;
 import java.time.Duration;
 import java.util.Map;
 import org.junit.jupiter.api.AfterAll;
@@ -51,9 +54,16 @@ class MtnDisbursementsAdapterTest {
     }
 
     private MtnDisbursementsAdapter adapter() {
-        MtnProfile profile = new MtnProfile(simulator.baseUrl(), "sandbox", "disb-sub-key", "disb-user", "disb-key",
+        return new MtnDisbursementsAdapter(profile(), Duration.ofSeconds(2));
+    }
+
+    private MtnProfile profile() {
+        return new MtnProfile(simulator.baseUrl(), "sandbox", "disb-sub-key", "disb-user", "disb-key",
                 Currency.EUR, "sandbox");
-        return new MtnDisbursementsAdapter(profile, Duration.ofSeconds(2));
+    }
+
+    private MtnProfile profileAt(URI base) {
+        return new MtnProfile(base, "sandbox", "disb-sub-key", "disb-user", "disb-key", Currency.EUR, "sandbox");
     }
 
     private PaymentIntent disburseIntent() {
@@ -106,6 +116,49 @@ class MtnDisbursementsAdapterTest {
     @DisplayName("a query on a reference the operator has never seen is UNKNOWN, not a failure")
     void a_query_on_an_unknown_reference_is_unknown() throws Exception {
         assertThat(adapter().query(QuerySubject.of(ReferenceId.newReference()), Capability.Operation.DISBURSE).state()).isEqualTo(PaymentState.UNKNOWN);
+    }
+
+    /**
+     * Issue #171, the mirror of #28: only {@code RESOURCE_ALREADY_EXIST} on a 409 means a
+     * previous transfer attempt reached MTN. {@link MtnCollectionsAdapterTest}'s three 409
+     * tests pin the same rule for collections; this pins it for disbursements, the more
+     * expensive of the two products to get wrong, since a wrong "already submitted" here
+     * means money that was never sent looks sent.
+     */
+    @Test
+    @DisplayName("a 409 carrying a code other than RESOURCE_ALREADY_EXIST is unavailable, not already-submitted")
+    void a_409_with_a_different_code_is_unavailable() throws Exception {
+        simulator.declare("""
+                {"rules":[{"scenario":{"onSubmit":{"outcome":"CONFLICT","code":"SOME_OTHER_CODE"}}}]}""");
+
+        assertThatThrownBy(() -> adapter().submit(disburseIntent(), ReferenceId.newReference()))
+                .isInstanceOf(ProviderUnavailableException.class);
+    }
+
+    @Test
+    @DisplayName("a 409 carrying RESOURCE_ALREADY_EXIST is still acknowledged, exactly as before issue #171")
+    void a_409_with_resource_already_exist_is_still_acknowledged() throws Exception {
+        // The default code CONFLICT carries with no override -- MtnErrorResponse.duplicateReference().
+        simulator.declare("{\"rules\":[{\"scenario\":{\"onSubmit\":{\"outcome\":\"CONFLICT\"}}}]}");
+
+        SubmitResult submitted = adapter().submit(disburseIntent(), ReferenceId.newReference());
+
+        assertThat(submitted).isInstanceOfSatisfying(SubmitResult.Acknowledged.class,
+                acknowledged -> assertThat(acknowledged.state()).isEqualTo(PaymentState.SUBMITTED));
+    }
+
+    @Test
+    @DisplayName("a 409 whose body cannot be read as MTN's error shape at all is unavailable, not already-submitted")
+    void a_409_with_an_unreadable_body_is_unavailable() throws Exception {
+        try (StubMtn mtn = new StubMtn()) {
+            mtn.respondWith(request -> request.path().equals(MtnDisbursementsAdapter.TOKEN_PATH)
+                    ? new StubResponse(200, StubMtn.tokenJson("tok", 3600))
+                    : new StubResponse(409, "this is not JSON"));
+            MtnDisbursementsAdapter adapter = new MtnDisbursementsAdapter(profileAt(mtn.baseUrl()), Duration.ofSeconds(3));
+
+            assertThatThrownBy(() -> adapter.submit(disburseIntent(), ReferenceId.newReference()))
+                    .isInstanceOf(ProviderUnavailableException.class);
+        }
     }
 
     @Test

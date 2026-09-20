@@ -167,6 +167,38 @@ class DisbursementApiIT {
                 .satisfies(DisbursementApiIT::assertMirrorPostings);
     }
 
+    /**
+     * Issue #171, the mirror of #28: {@code MtnDisbursementsAdapterTest} pins that an
+     * unexpected 409 throws {@code ProviderUnavailableException}; this pins what the
+     * disbursement actually becomes when that is reached through the server -- the
+     * behaviour the narrowing is for, not an implementation detail of how the adapter gets
+     * there. Getting this wrong is worse for a disbursement than a collection: it would mean
+     * money that was never sent is recorded as submitted.
+     */
+    @Test
+    @DisplayName("a 409 carrying a code other than RESOURCE_ALREADY_EXIST is 202 and UNKNOWN, never silently submitted")
+    void a_409_with_a_different_code_is_202_unknown_and_persisted() {
+        SIMULATOR.declareScenario("""
+            {"rules":[{"scenario":{"onSubmit":{"outcome":"CONFLICT","code":"SOME_OTHER_CODE"}}}]}""");
+
+        ResponseEntity<String> created = postDisbursement(5000);
+
+        assertThat(created.getStatusCode().value()).isEqualTo(202);
+        JsonNode payment = parse(created.getBody());
+        assertThat(payment.get("state").asText()).isEqualTo("UNKNOWN");
+        String reference = payment.get("reference").asText();
+
+        JsonNode stored = getDisbursement(reference);
+        assertThat(stored.get("state").asText())
+                .as("not SUBMITTED -- an unrecognised 409 is not treated as already-submitted")
+                .isEqualTo("UNKNOWN");
+        assertThat(stored.get("history")).hasSize(1);
+        assertThat(stored.get("history").get(0).get("from").asText()).isEqualTo("CREATED");
+        assertThat(stored.get("history").get(0).get("to").asText()).isEqualTo("UNKNOWN");
+        assertThat(stored.get("history").get(0).get("cause").asText()).isEqualTo("SUBMIT_RESPONSE");
+        assertThat(ledger.entriesForReference(reference)).isEmpty();
+    }
+
     @Test
     @DisplayName("a callback for a disbursement settles it, confirmed by query like any other")
     void a_callback_settles_a_disbursement() {

@@ -36,6 +36,7 @@ twice a day.
   "amountMinor": 5000,
   "currency": "EUR",
   "state": "SUCCEEDED",
+  "cause": "CALLBACK",
   "providerCode": "SUCCESSFUL",
   "providerTransactionId": "628f36",
   "occurredAt": "2026-09-11T14:32:07.123Z",
@@ -48,6 +49,21 @@ the same fact a poll would eventually see, not a separate model. `amountMinor` i
 integer count of minor units, the same rule as everywhere else in this project: never a
 decimal. `providerTransactionId` is set only for a `*.succeeded` event; a failure or
 expiry has no operator transaction to point to.
+
+`cause` is what attributed the transition this event announces — `SUBMIT_RESPONSE`,
+`QUERY`, `CALLBACK`, `RECONCILER` or `GATEWAY`, the same values `GET
+/payments/{reference}`'s `history[].cause` carries (`docs/openapi.yaml`), and membership
+only grows. It is present on every event type, not only a failure — the example above is a
+`payment.succeeded` whose `CALLBACK` says the operator's own webhook settled it, not a later
+reconciler pass. **On a `*.failed` event it is the one field that tells two opposite things
+apart.** `SUBMIT_RESPONSE` or `QUERY` means the operator was asked and refused or reported a
+failure — about the payment, and a receiver may want to tell a payer about it.  `GATEWAY`
+means this gateway refused the request itself and never asked the operator anything (ADR
+0013) — an intent for an operation the addressed installation does not support, or a
+currency its adapter does not settle in. That is about the *request*, not the payment: a
+client bug or a misconfigured integration to fix, not something to surface to a payer.
+`providerCode` does not separate the two on its own — it is often `""` for an operator
+refusal too — so check `cause`.
 
 `refundOf` is `""` for every event that is not a refund's. A `refund.succeeded` event carries
 the original collection's own reference there — the same one `operation` alone cannot tell
@@ -63,6 +79,7 @@ you, since a refund's `operation` is `DISBURSE` like any other transfer out:
   "amountMinor": 2000,
   "currency": "EUR",
   "state": "SUCCEEDED",
+  "cause": "QUERY",
   "providerCode": "SUCCESSFUL",
   "providerTransactionId": "628f41",
   "occurredAt": "2026-09-13T09:12:44.501Z",

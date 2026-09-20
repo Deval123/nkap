@@ -156,7 +156,8 @@ class PaymentServiceTest {
         assertThat(outbox.events()).singleElement().satisfies((OutboxEvent event) -> {
             assertThat(event.eventType()).isEqualTo("payment.failed");
             assertThat(event.merchantId()).isEqualTo("merchant-1");
-            assertThat(event.payload()).contains(payment.reference().toString(), "INVALID_MSISDN");
+            assertThat(event.payload()).contains(payment.reference().toString(), "INVALID_MSISDN",
+                    "\"cause\":\"SUBMIT_RESPONSE\"");
         });
     }
 

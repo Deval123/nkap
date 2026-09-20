@@ -31,6 +31,17 @@ All notable changes to Nkap are documented here. The format follows
 
 ### Added
 
+- **A payment webhook's body gains a `cause` field** (issue #177), carrying what attributed
+  the transition the event announces — `SUBMIT_RESPONSE`, `QUERY`, `CALLBACK`, `RECONCILER`
+  or the new `GATEWAY` (ADR 0013) — the same values `GET /payments/{reference}`'s
+  `history[].cause` already carries. Present on every event type, not only a failure: what a
+  receiver actually needs it for is telling a `*.failed` event the operator refused
+  (`SUBMIT_RESPONSE`/`QUERY`) from one this gateway refused itself without ever asking the
+  operator (`GATEWAY`) — `providerCode` does not separate the two, since it is often `""` for
+  an operator refusal too. Adding a field is not a breaking change — only renaming or
+  removing one is, per `PaymentEventPayload`'s own javadoc — so a receiver written against
+  the old shape keeps working unchanged and simply ignores it; a receiver that wants the
+  distinction stops needing a second `GET` to get it. See `docs/webhooks.md`.
 - `nkap-simulator` reads a scenario declaration from a file at startup: mount one at
   `/etc/nkap/scenario.json` (`nkap.scenario.file`) and the simulator comes up already
   misbehaving, with no `curl` first. Read once, applied exactly as if it had been `POST`ed

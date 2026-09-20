@@ -122,15 +122,25 @@ public class ControlPlaneController {
      */
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<Map<String, String>> malformedScenario(HttpMessageNotReadableException e) {
-        String field = "(unknown)";
-        if (e.getCause() instanceof JsonMappingException mapping && !mapping.getPath().isEmpty()) {
-            field = mapping.getPath().stream()
+        return ResponseEntity.badRequest().body(Map.of(
+            "error", "malformed scenario",
+            "field", offendingField(e.getCause()),
+            "detail", e.getMostSpecificCause().getMessage()));
+    }
+
+    /**
+     * The offending field of a malformed {@link Declaration}, walked from Jackson's own
+     * path — {@code "(unknown)"} when the failure is not attributable to one field (a
+     * syntax error, for instance). Shared with {@link ScenarioFileLoader}, which binds the
+     * same document from a file at startup: the two ways of declaring a scenario diagnose a
+     * mistake in exactly the same words, not two messages that happen to agree today.
+     */
+    static String offendingField(Throwable cause) {
+        if (cause instanceof JsonMappingException mapping && !mapping.getPath().isEmpty()) {
+            return mapping.getPath().stream()
                 .map(ref -> ref.getFieldName() != null ? ref.getFieldName() : "[" + ref.getIndex() + "]")
                 .collect(Collectors.joining("."));
         }
-        return ResponseEntity.badRequest().body(Map.of(
-            "error", "malformed scenario",
-            "field", field,
-            "detail", e.getMostSpecificCause().getMessage()));
+        return "(unknown)";
     }
 }

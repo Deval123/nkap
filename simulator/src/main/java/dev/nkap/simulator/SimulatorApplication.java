@@ -8,7 +8,8 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  *
  * <p>It exposes the Collections API surface and plays a scenario — a timeline of
  * what happens at each interaction point of a payment (ADR 0002). Scenarios are
- * selected by ordered rules declared over HTTP under {@code /_nkap/}; with no
+ * selected by ordered rules, declared over HTTP under {@code /_nkap/} or, before
+ * the first request, from a file ({@link ScenarioFileLoader}, issue #99); with no
  * rules, every payment gets the happy path (accepted, then {@code SUCCESSFUL} on
  * the next query).
  *

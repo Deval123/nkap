@@ -16,10 +16,12 @@ already documents the environment variables the compose files read for MTN crede
 the database; this file is about `nkap.*` and the two ports, not a restatement of every
 `${VAR:default}` in `application.yml`.
 
-Every default below is the literal value `server/src/main/resources/application.yml` ships
-with today. `ConfigurationReferenceTest` (in `server/src/test/java/dev/nkap/server/`) is
-what keeps this table from drifting from the code — see **How this table is kept honest**
-at the end of this file for exactly what it checks and what it does not.
+Every default below is the literal value the module that owns the setting ships in its own
+`application.yml` today — `server/src/main/resources/application.yml` for every setting
+except `nkap.scenario.file`, which is `nkap-simulator`'s own. `ConfigurationReferenceTest`
+(in `server/src/test/java/dev/nkap/server/`) is what keeps this table from drifting from the
+code, `server`'s and `simulator`'s alike — see **How this table is kept honest** at the end
+of this file for exactly what it checks and what it does not.
 
 ## The reconciler (`nkap.reconciler.*`)
 
@@ -106,6 +108,17 @@ country but is missing a credential is caught before the first payment, not duri
 | `nkap.provider.mtn.installations[].disbursement.api-user` | *(blank; set per deployment)* | See `disbursement.subscription-key` — all three are checked together. |
 | `nkap.provider.mtn.installations[].disbursement.api-key` | *(blank; set per deployment)* | See `disbursement.subscription-key` — all three are checked together. |
 
+## The simulator's scenario file (`nkap.scenario.file`)
+
+The one setting in this table that belongs to `nkap-simulator`, not the gateway — every
+other row above is `server`'s own. Read once at startup and applied exactly as if it had
+been `POST`ed to `/_nkap/scenarios`; not a second source of truth (ADR 0002's amendment,
+`ScenarioFileLoader`).
+
+| Setting | Default | What happens when it's wrong |
+| --- | --- | --- |
+| `nkap.scenario.file` | `/etc/nkap/scenario.json` | No file at this path is not an error — the simulator starts on the default scenario, exactly as it did before this setting existed. A path that exists but is not a regular file (most often a directory, which a Docker bind mount creates on the container side when the host path named in `-v` does not exist) or a file that does not parse as the same document `POST /_nkap/scenarios` accepts both fail the simulator at startup, naming the path and what was wrong with it — a simulator that silently ignored the scenario it was handed would produce test results nobody could explain. |
+
 ## Spring settings a deployment actually sets
 
 Everything else Spring Boot reads is Spring Boot's own documentation to consult. These
@@ -134,14 +147,18 @@ in the second installation, which sets no `request-timeout` key of its own).
 
 Two things it deliberately does not do, stated here rather than left to be discovered:
 
-- **`nkap.reconciler.enabled`, `nkap.webhooks.enabled`, `nkap.webhooks.allow-insecure-endpoint-url`
-  and `nkap.provider.default`** are not part of any `@ConfigurationProperties` record — the
-  first two are read with `@ConditionalOnProperty`, the other two with `@Value`. There is no
-  single class to reflect on for these the way there is for the three records above, so the
-  test names these four by hand as a known, hard-coded set rather than discovering them. That
-  is a real, narrower guarantee than the records get: today's four are proven documented, but
-  a *fifth* setting read the same direct way tomorrow would not be caught by this test unless
-  it is also added to that hard-coded set by hand.
+- **`nkap.reconciler.enabled`, `nkap.webhooks.enabled`, `nkap.webhooks.allow-insecure-endpoint-url`,
+  `nkap.provider.default` and `nkap.scenario.file`** are not part of any
+  `@ConfigurationProperties` record — the first two are read with `@ConditionalOnProperty`,
+  the rest with `@Value`. There is no single class to reflect on for these the way there is
+  for the three records above, so the test finds them the way it finds everything not in a
+  record: scanning `server/src/main/java` and, since issue #99, `simulator/src/main/java` as
+  plain text for the two annotations, rather than working from a hand-kept list. That scan
+  only recognises a property named as a string literal directly inside one of those two
+  annotations — it would miss one built from a runtime string, one read through
+  `Environment` or a `Binder` with no annotation at all, or one in a module neither directory
+  covers (`provider-mtn`, `core`, `provider-api` — none of which reads an `nkap.*` property
+  directly today).
 - **Only `installations[].request-timeout`'s default is cross-checked.** The other MTN
   installation fields have no single meaningful default to check against: most are blank on
   purpose (real credentials are supplied per deployment, never committed), and the two

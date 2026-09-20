@@ -6,6 +6,18 @@ All notable changes to Nkap are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `nkap-simulator` reads a scenario declaration from a file at startup: mount one at
+  `/etc/nkap/scenario.json` (`nkap.scenario.file`) and the simulator comes up already
+  misbehaving, with no `curl` first. Read once, applied exactly as if it had been `POST`ed
+  to `/_nkap/scenarios` — the same document, the same validation — and never watched
+  afterwards: it is not a second source of truth, `GET /_nkap/scenarios` keeps answering
+  what is active and a later `POST` replaces what the file established the same way it
+  replaces an earlier `POST` (ADR 0002's amendment). No file at the path is not an error;
+  a file that does not parse as that document fails the simulator at startup, naming the
+  path and what was wrong with it (issue #99).
+
 ## [1.2.0] - 2026-09-20
 
 ### Added

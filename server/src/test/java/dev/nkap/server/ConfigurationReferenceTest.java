@@ -24,12 +24,14 @@ import org.junit.jupiter.api.Test;
 import org.yaml.snakeyaml.Yaml;
 
 /**
- * Issue #90's own reason for existing, extended from issue #88's: {@code
+ * Issue #90's own reason for existing, extended from issue #88's, and again by issue #99
+ * once {@code nkap-simulator} got its first {@code nkap.*} setting of its own: {@code
  * docs/configuration-reference.md} is a file in the repository, and this is what keeps it
  * describing the running application rather than merely hoping to. Three checks, in the same
  * spirit as {@code OpenApiSpecIT} but needing no Spring context at all — everything here is
  * plain reflection over the compiled {@code @ConfigurationProperties} records, a plain text
- * scan of {@code server/src/main/java}, and plain text parsing of two files already on disk.
+ * scan of {@code server/src/main/java} and {@code simulator/src/main/java}, and plain text
+ * parsing of files already on disk.
  *
  * <h2>What this proves</h2>
  *
@@ -41,9 +43,9 @@ import org.yaml.snakeyaml.Yaml;
  *       direction is optional: a stale row is exactly as wrong as an undocumented one.</li>
  *   <li>The same, for every {@code nkap.*} property read directly with {@code @Value} or
  *       {@code @ConditionalOnProperty} rather than through a record — found by
- *       {@link #discoverDirectlyBoundProperties()} scanning the source tree, not by a
- *       hand-kept list. See that method's own javadoc for exactly what it can and cannot
- *       find.</li>
+ *       {@link #discoverDirectlyBoundProperties()} scanning {@code server}'s and
+ *       {@code simulator}'s source trees, not by a hand-kept list. See that method's own
+ *       javadoc for exactly what it can and cannot find.</li>
  *   <li>For {@link ReconcilerProperties} and {@link OutboxRelayProperties} — where
  *       {@code application.yml} always supplies a concrete literal, so "the default" is a
  *       single, unambiguous fact — the reference's own Default column is checked against
@@ -61,6 +63,12 @@ import org.yaml.snakeyaml.Yaml;
  * unambiguous default regardless of slot ({@code @DefaultValue("PT20S")}, the only source for
  * it at all in the second installation, which sets no {@code request-timeout} key in
  * {@code application.yml}), so it alone is checked, in {@link #the_one_mtn_default_that_is_unambiguous_is_correct()}.
+ * {@code nkap.scenario.file}'s own default is not cross-checked against
+ * {@code simulator/src/main/resources/application.yml} the way {@code nkap.reconciler.*} and
+ * {@code nkap.webhooks.*} are — {@link #documented_defaults_match_application_yml()} reads
+ * only {@code server}'s {@code application.yml}, and extending it to a second file for one
+ * setting was not worth the second YAML load; this is checked by hand instead, the same way
+ * the MTN installation fields above are.
  *
  * <p>The Spring settings the reference also documents ({@code server.port},
  * {@code spring.datasource.*}, {@code management.server.port}) are not this project's own
@@ -72,6 +80,7 @@ class ConfigurationReferenceTest {
     private static final Path REFERENCE = Path.of("..", "docs", "configuration-reference.md");
     private static final Path APPLICATION_YML = Path.of("src", "main", "resources", "application.yml");
     private static final Path MAIN_JAVA = Path.of("src", "main", "java");
+    private static final Path SIMULATOR_MAIN_JAVA = Path.of("..", "simulator", "src", "main", "java");
 
     @Test
     @DisplayName("every nkap.* property bound by a @ConfigurationProperties record, or read directly with @Value/@ConditionalOnProperty, has exactly one row in docs/configuration-reference.md")
@@ -206,14 +215,16 @@ class ConfigurationReferenceTest {
 
     /**
      * Every {@code nkap.*} property read directly with {@code @Value} or
-     * {@code @ConditionalOnProperty} in {@code server/src/main/java} — the properties no
-     * {@code @ConfigurationProperties} record ever sees, found by text-scanning the source
-     * tree rather than by naming them in a list that could fall out of date the day a fifth
-     * one is added the same way. {@code @Value("${nkap.foo.bar:some-default}")} yields
-     * {@code nkap.foo.bar} (the {@code :default} suffix is not part of the property name);
-     * {@code @ConditionalOnProperty(prefix = "nkap.foo", name = "bar", ...)} — the only shape
-     * this codebase actually uses — composes to the same {@code nkap.foo.bar}. Annotations
-     * are matched across the whole file, not line by line, since Java does not require one of
+     * {@code @ConditionalOnProperty} in {@code server/src/main/java} or {@code
+     * simulator/src/main/java} (issue #99: the first setting {@code nkap-simulator} ever
+     * read this way) — the properties no {@code @ConfigurationProperties} record ever sees,
+     * found by text-scanning both source trees rather than by naming them in a list that
+     * could fall out of date the day a fifth one is added the same way.
+     * {@code @Value("${nkap.foo.bar:some-default}")} yields {@code nkap.foo.bar} (the
+     * {@code :default} suffix is not part of the property name); {@code
+     * @ConditionalOnProperty(prefix = "nkap.foo", name = "bar", ...)} — the only shape this
+     * codebase actually uses — composes to the same {@code nkap.foo.bar}. Annotations are
+     * matched across the whole file, not line by line, since Java does not require one of
      * either to fit on a single source line.
      *
      * <p>Any {@code @ConditionalOnProperty} that mentions {@code nkap} but does not fit the
@@ -224,26 +235,38 @@ class ConfigurationReferenceTest {
      *
      * <h2>What this cannot cover</h2>
      *
-     * <p>This is a text scan of one module's source, not a reflection- or bytecode-level
+     * <p>This is a text scan of two modules' source, not a reflection- or bytecode-level
      * search of the compiled classpath the way {@link #collect} is for the three records
      * above. It finds a property name only when it appears as a string literal directly
      * inside one of the two annotations above; it would miss one built from a runtime
      * string (e.g. {@code environment.getProperty("nkap." + suffix)}), one read through
      * {@code Environment} or a {@code Binder} call with no annotation at all, or one in a
-     * module other than {@code server}. None of those patterns exist in this codebase today
-     * (confirmed while writing this scan by grepping for {@code Environment}/{@code getProperty}
-     * usage against {@code nkap.*} — there is none), but a scan is only ever a check against
-     * the patterns it was written to expect, not a guarantee no other pattern was introduced.
+     * module neither tree covers ({@code provider-mtn}, {@code core}, {@code provider-api}).
+     * None of those patterns exist in this codebase today (confirmed while writing this scan
+     * by grepping for {@code Environment}/{@code getProperty} usage against {@code nkap.*} —
+     * there is none, in either module), but a scan is only ever a check against the patterns
+     * it was written to expect, not a guarantee no other pattern was introduced.
      */
     private static Set<String> discoverDirectlyBoundProperties() throws IOException {
-        if (!Files.isDirectory(MAIN_JAVA)) {
+        Set<String> found = new TreeSet<>();
+        scanDirectlyBoundProperties(MAIN_JAVA, "the server module (mvn -pl server test)", found);
+        scanDirectlyBoundProperties(SIMULATOR_MAIN_JAVA, "the server module, with the simulator module checked out beside it", found);
+
+        assertThat(found)
+                .as("discoverDirectlyBoundProperties found nothing at all -- the scan itself is broken "
+                        + "(every assertion in this test would otherwise pass vacuously)")
+                .isNotEmpty();
+        return found;
+    }
+
+    private static void scanDirectlyBoundProperties(Path mainJava, String runFrom, Set<String> found) throws IOException {
+        if (!Files.isDirectory(mainJava)) {
             throw new IllegalStateException(
-                    "FAIL: " + MAIN_JAVA.toAbsolutePath() + " not found -- this test must run "
-                            + "from the server module (mvn -pl server test), not some other working directory");
+                    "FAIL: " + mainJava.toAbsolutePath() + " not found -- this test must run from "
+                            + runFrom + ", not some other working directory");
         }
 
-        Set<String> found = new TreeSet<>();
-        try (var files = Files.walk(MAIN_JAVA)) {
+        try (var files = Files.walk(mainJava)) {
             for (Path file : files.filter(p -> p.toString().endsWith(".java")).toList()) {
                 String source = Files.readString(file);
 
@@ -274,12 +297,6 @@ class ConfigurationReferenceTest {
                 }
             }
         }
-
-        assertThat(found)
-                .as("discoverDirectlyBoundProperties found nothing at all -- the scan itself is broken "
-                        + "(every assertion in this test would otherwise pass vacuously)")
-                .isNotEmpty();
-        return found;
     }
 
     // --- docs/configuration-reference.md: table rows, as text ---------------------------

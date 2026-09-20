@@ -6,8 +6,9 @@ import java.util.List;
  * A scenario is a timeline: what the simulator does at each interaction point of
  * one payment. See ADR 0002 for why this shape and not a response mapping.
  *
- * <p>Every field is optional in JSON and defaults sensibly, so the document posted to
- * {@code /_nkap/scenarios} declares only what it changes:
+ * <p>Every field is optional in JSON and defaults sensibly, so the document that declares
+ * it -- posted to {@code /_nkap/scenarios}, or loaded from a file at startup (issue #99) --
+ * only needs to name what it changes:
  *
  * <ul>
  *   <li>no {@code onSubmit} means {@link SubmitOutcome#ACCEPT} with no delay;</li>
@@ -28,7 +29,7 @@ public record Scenario(
         List<QueryBehaviour> onQuery,
         List<CallbackSpec> callbacks) {
 
-    /** The name a scenario carries when the posted document does not give it one. */
+    /** The name a scenario carries when the document declaring it does not give it one. */
     public static final String DEFAULT_NAME = "happy-path";
 
     public Scenario {

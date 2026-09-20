@@ -9,3 +9,12 @@ spring:
     # fractional seconds. See ADR 0002 and the control plane contract.
     serialization:
       write-durations-as-timestamps: false
+
+nkap:
+  scenario:
+    # Read once at startup and applied exactly as if POSTed to /_nkap/scenarios (issue
+    # #99) -- not a second source of truth, see ScenarioFileLoader. No file at this path
+    # is not an error: the simulator starts on the default scenario, exactly as it did
+    # before this existed. Matches the path the README's one-command example mounts to,
+    # so `-v ./scenario.json:/etc/nkap/scenario.json` works with no other flag.
+    file: /etc/nkap/scenario.json

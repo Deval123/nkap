@@ -35,9 +35,12 @@ interaction point:
   unknown one. They are delivered to the URL in the submit request's `X-Callback-Url`
   header, or failing that one declared with the rules; with neither, nothing is sent.
 
-**Scenarios are selected by ordered rules, declared over HTTP.** A control plane under
+**Scenarios are selected by ordered rules, declared over HTTP.**¹ A control plane under
 `/_nkap/` accepts a list of rules, each pairing a matcher (on reference, MSISDN, amount or
 currency) with a scenario. First match wins; no match means the happy path.
+
+¹ Bounded, not superseded, since issue #99: the rules can also be declared from a file at
+startup, before the first request. See *Amendment, 2026-09-20* at the foot of this ADR.
 
 **The token lifetime is declared alongside the rules, not inside a scenario.** A bearer
 token is obtained before any payment exists, so it cannot belong to a payment's timeline.
@@ -131,3 +134,30 @@ express a per-test behaviour.
 
 **One scenario per instance, set at startup.** Requires a container per test case, which is
 slow in CI and cannot test two behaviours concurrently.
+
+## Amendment, 2026-09-20 — issue #99
+
+One statement in the Decision section is no longer accurate on its own, marked inline where
+it is read; this section says what changed and why it is a bound rather than a rewrite.
+
+**"Declared over HTTP" described the only moment a scenario could be established. It no
+longer is.** Issue #99 gives the control plane a second entry point: a file, read once at
+startup, before the first request — an HTTP call, by definition, cannot reach that moment.
+What earns this second entry point is not a second mechanism but a second *time*: the file is
+read once and applied exactly as if its contents had been `POST`ed, through the same
+`Declaration` shape and the same Jackson binding (`ControlPlaneController.Declaration`,
+`ScenarioFileLoader`) — not a second parser that happens to agree with the first one today.
+
+**The rest of the Decision stands, because nothing about it needed to change.** There is
+still one source of truth — the running configuration held in `ScenarioEngine` — and still
+exactly one way to read it back, `GET /_nkap/scenarios`, which answers what is active
+regardless of whether a file, a `POST`, or nothing at all established it. A `POST` after a
+file load replaces what the file established the same way a `POST` replaces an earlier
+`POST`; the file itself has no further existence after startup and is never consulted again.
+"Controllers decide nothing" and "the scenario is resolved once, at submission" are both
+exactly as true as before — this amendment adds a second way to load configuration, not a
+second way to resolve or serve it.
+
+This does not rewrite the Rationale's "HTTP control, not a Java fixture": the file is not a
+Java fixture either — it is a JSON document in the same shape a Python or PHP test suite
+already posts, just handed to the simulator at container start instead of after it.

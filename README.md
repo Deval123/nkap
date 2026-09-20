@@ -367,6 +367,14 @@ curl -X POST http://localhost:8081/_nkap/scenarios \
       }'
 ```
 
+Or, when a scenario belongs beside the tests it is for and the control plane is a second step
+you would rather not script, mount it and skip the `curl` entirely — the same document,
+applied before the simulator's first request (issue #99):
+
+```bash
+docker run -p 8081:8081 -v ./scenario.json:/etc/nkap/scenario.json ghcr.io/deval123/nkap-simulator
+```
+
 **The simulator is not MTN.** [`docs/providers/mtn.md`](docs/providers/mtn.md) separates what
 was actually observed against MTN's sandbox from what this project chose to model where MTN's
 own behaviour is undocumented or untested; the simulator implements the second column, and a

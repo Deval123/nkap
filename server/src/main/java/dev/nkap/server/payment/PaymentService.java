@@ -10,6 +10,7 @@ import dev.nkap.provider.SubmitResult;
 import dev.nkap.server.outbox.OutboxNotifier;
 import dev.nkap.server.provider.AdapterRegistry;
 import java.util.Optional;
+import java.util.function.Consumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
@@ -96,24 +97,52 @@ public class PaymentService {
      * applies here unchanged; the split moved no behaviour.
      */
     Payment submit(ProviderAdapter adapter, PaymentIntent intent, ReferenceId reference) {
-        SubmitOutcome outcome = callOperator(adapter, intent, reference);
+        if (!adapter.operations().contains(intent.operation())) {
+            // The gateway's own routing fact, known before any call is made: the adapter is
+            // never asked (ADR 0013, change 1). After this check exists, reaching it at all
+            // means some caller of PaymentService ignored ProviderAdapter.capabilities() —
+            // a programming error, not a payment outcome, which is why it is still worth
+            // recording plainly rather than treating as impossible.
+            String note = "payment asks for " + intent.operation() + " but the adapter declares "
+                    + adapter.operations();
+            log.info("submit for {} refused without calling the adapter: {}", reference, note);
+            return applyAndSave(reference, Optional.empty(), current -> {
+                current.applyTransition(PaymentState.FAILED, PaymentTransition.Cause.GATEWAY, "", note, "");
+                RefundReservations.release(payments, current);
+            });
+        }
 
+        SubmitOutcome outcome = callOperator(adapter, intent, reference);
+        return applyAndSave(reference, outcome.providerReference(), current -> applyOutcome(outcome, current, reference));
+    }
+
+    /**
+     * The transactional envelope every submit response shares, whatever produced it: lock the
+     * payment row, bail out if a callback already advanced it past {@link PaymentState#CREATED}
+     * while the caller was deciding what to record — recording {@code providerReference} first
+     * if this response still has one to offer — otherwise let {@code apply} record the
+     * transition, then notify if it left the payment terminal. {@code providerReference} is
+     * empty for anything that was never a {@link SubmitResult.Acknowledged}, including the
+     * gateway's own pre-call refusal above: there is nothing to keep in the stale case either
+     * way.
+     */
+    private Payment applyAndSave(ReferenceId reference, Optional<String> providerReference, Consumer<Payment> apply) {
         tx.executeWithoutResult(status -> {
             Payment current = payments.findByReferenceForUpdate(reference).orElseThrow();
             if (current.state() != PaymentState.CREATED) {
                 // A callback confirmed this payment while the submit call was in flight.
                 // The response is stale — the callback path already recorded the
                 // transitions, and forcing CREATED -> SUBMITTED now would be illegal.
-                outcome.providerReference().ifPresent(current::recordProviderReference);
+                providerReference.ifPresent(current::recordProviderReference);
                 log.info("submit response for {} is stale: a callback already advanced it to {}",
                         reference, current.state());
                 payments.save(current);
                 return;
             }
-            applyOutcome(outcome, current, reference);
-            // Same transaction as the save() below: a Rejected outcome moves the payment
-            // straight to FAILED, and that is a terminal verdict a merchant is waiting
-            // for too, not only the ones SettlementService reaches later (issue #77).
+            apply.accept(current);
+            // Same transaction as the save() below: an outcome that moves the payment
+            // straight to FAILED is a terminal verdict a merchant is waiting for too, not
+            // only the ones SettlementService reaches later (issue #77).
             notifier.notifyIfTerminal(current);
             payments.save(current);
         });
@@ -139,10 +168,18 @@ public class PaymentService {
             return;
         }
         if (outcome.unexpected() != null) {
-            // A defect on our side, after the point where the operator may already have the
-            // request. In the data this is indistinguishable from an operator timeout, so
-            // only this log tells them apart: it must be loud, with the stack trace.
-            // Recording FAILED here would be the one conclusion this project forbids.
+            // A defect on our side. Most of what still reaches this catch does so after a
+            // request may already be out — a bug in how a response was parsed, say — so
+            // UNKNOWN, not FAILED, stays the only honest record: this catch cannot tell
+            // "after" from "before" apart, and recording FAILED here would be the one
+            // conclusion this project forbids. That was also true, until ADR 0013, for both
+            // MTN adapters' guards throwing IllegalArgumentException before any call was
+            // ever made — a true-looking sentence beside code that made it false. The
+            // currency guard no longer throws at all (SubmitResult.NotAttempted, handled
+            // below); the operation guard still does, but submit()'s capability check above
+            // means reaching it here is now only a caller ignoring
+            // ProviderAdapter.capabilities(), which this catch cannot distinguish from a
+            // genuine in-flight defect either — UNKNOWN is still the honest answer for both.
             log.error("submit for {} failed unexpectedly; recording UNKNOWN, not FAILED", reference,
                     outcome.unexpected());
             payment.applyTransition(payment.state().onProviderTimeout(), PaymentTransition.Cause.SUBMIT_RESPONSE,
@@ -161,6 +198,14 @@ public class PaymentService {
                 // A no-op unless this payment is a refund (issue #84): an outright rejection
                 // of the transfer releases the amount it had reserved on the collection it
                 // refunds, since it now never will move that money.
+                RefundReservations.release(payments, payment);
+            }
+            case SubmitResult.NotAttempted notAttempted -> {
+                // The adapter refused before calling the operator (ADR 0013, change 2) —
+                // GATEWAY, the same cause submit()'s own pre-call refusal above uses:
+                // whichever of the two decided, no operator spoke.
+                payment.applyTransition(PaymentState.FAILED, PaymentTransition.Cause.GATEWAY,
+                        "", notAttempted.reason(), "");
                 RefundReservations.release(payments, payment);
             }
         }

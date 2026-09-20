@@ -61,14 +61,25 @@ class SubmitResultTest {
     }
 
     @Test
-    @DisplayName("every SubmitResult is Acknowledged or Rejected — the compiler enforces it in a switch")
-    void the_hierarchy_is_sealed_to_two_cases() {
+    @DisplayName("a not-attempted result carries the adapter's reason, and normalises a null reason to empty")
+    void a_not_attempted_normalises_a_null_reason() {
+        SubmitResult.NotAttempted notAttempted = new SubmitResult.NotAttempted("payment is in XOF but this profile settles in EUR");
+        assertEquals("payment is in XOF but this profile settles in EUR", notAttempted.reason());
+
+        SubmitResult.NotAttempted blank = new SubmitResult.NotAttempted(null);
+        assertEquals("", blank.reason());
+    }
+
+    @Test
+    @DisplayName("every SubmitResult is Acknowledged, Rejected or NotAttempted — the compiler enforces it in a switch")
+    void the_hierarchy_is_sealed_to_three_cases() {
         // This method does not assert a type exists; it is the exhaustive switch the plan
         // relies on — remove a branch and this file stops compiling.
         SubmitResult result = SubmitResult.acknowledged("ref", "{}");
         String describe = switch (result) {
             case SubmitResult.Acknowledged a -> "acknowledged in " + a.state();
             case SubmitResult.Rejected r -> "rejected: " + r.providerCode();
+            case SubmitResult.NotAttempted n -> "not attempted: " + n.reason();
         };
         assertEquals("acknowledged in SUBMITTED", describe);
     }

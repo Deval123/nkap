@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import dev.nkap.core.ledger.Ledger;
 import dev.nkap.server.support.PostgresSpringBootIT;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterAll;
@@ -55,6 +56,9 @@ class PaymentApiIT extends PostgresSpringBootIT {
     @Autowired
     dev.nkap.server.auth.ApiKeyStore apiKeys;
 
+    @Autowired
+    Ledger ledger;
+
     private String apiKey;
 
     @BeforeEach
@@ -67,6 +71,19 @@ class PaymentApiIT extends PostgresSpringBootIT {
         return """
             {"operation":"COLLECT","amount":%d,"currency":"EUR","country":"sandbox",
              "counterpartyMsisdn":"46733123453","payerMessage":"rent","payeeNote":"march"}"""
+                .formatted(amountMinorUnits);
+    }
+
+    /**
+     * Same installation, {@code DISBURSE} instead — used only by
+     * {@link #a_disburse_intent_is_failed_by_the_gateway_when_the_installation_only_collects}.
+     * {@link #mtnPointsAtTheSimulator} sets no {@code disbursement.*} property, so this
+     * class's {@code mtn-sandbox} installation is Collections-only, on purpose.
+     */
+    private static String disburseBody(long amountMinorUnits) {
+        return """
+            {"operation":"DISBURSE","amount":%d,"currency":"EUR","country":"sandbox",
+             "counterpartyMsisdn":"46733123453","payerMessage":"payout","payeeNote":"payout"}"""
                 .formatted(amountMinorUnits);
     }
 
@@ -197,6 +214,37 @@ class PaymentApiIT extends PostgresSpringBootIT {
         assertThat(payment.get("history").get(0).get("to").asText()).isEqualTo("FAILED");
         assertThat(payment.get("history").get(0).get("cause").asText()).isEqualTo("SUBMIT_RESPONSE");
         // The operator's code would be recorded here; the simulator does not send one yet (issue #26).
+    }
+
+    /**
+     * ADR 0013, change 1, end to end: this class's {@code mtn-sandbox} installation
+     * configures only Collections ({@link #mtnPointsAtTheSimulator} sets no
+     * {@code disbursement.*} property), so its adapter's {@code capabilities()} never
+     * advertises {@code DISBURSE} ({@code MtnAdapter}, {@code disbursements == null}). The
+     * gateway's own routing fact refuses the request before {@code PaymentService} ever
+     * calls that adapter — nothing here is scripted through the simulator, because nothing
+     * should reach it. The real, shared {@link Ledger} carrying no entry for this reference
+     * is the strongest form of "the operator was never asked" a test in this module can
+     * show: not merely that {@code submit} was not invoked, but that nothing this gateway
+     * did produced money movement for a payment.
+     */
+    @Test
+    @DisplayName("a DISBURSE intent against a Collections-only installation is FAILED by the gateway, cause GATEWAY, no ledger entry")
+    void a_disburse_intent_is_failed_by_the_gateway_when_the_installation_only_collects() {
+        String key = UUID.randomUUID().toString();
+
+        ResponseEntity<String> created = post(key, disburseBody(5000));
+
+        assertThat(created.getStatusCode().value()).isEqualTo(201);
+        JsonNode payment = parse(created.getBody());
+        assertThat(payment.get("state").asText()).isEqualTo("FAILED");
+        assertThat(payment.get("history")).hasSize(1);
+        JsonNode transition = payment.get("history").get(0);
+        assertThat(transition.get("from").asText()).isEqualTo("CREATED");
+        assertThat(transition.get("to").asText()).isEqualTo("FAILED");
+        assertThat(transition.get("cause").asText()).isEqualTo("GATEWAY");
+        assertThat(transition.get("operatorCode").asText()).isEmpty();
+        assertThat(ledger.entriesForReference(payment.get("reference").asText())).isEmpty();
     }
 
     @Test

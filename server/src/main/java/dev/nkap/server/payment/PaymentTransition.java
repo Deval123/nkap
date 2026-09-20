@@ -31,12 +31,20 @@ public record PaymentTransition(
      * What moved a payment. {@link #SUBMIT_RESPONSE} and {@link #CALLBACK} occur so far —
      * the latter for a transition a confirmed callback produced. {@link #QUERY} and
      * {@link #RECONCILER} arrive with the reconciler.
+     *
+     * <p>{@link #GATEWAY} names the one source the other four do not: this gateway itself,
+     * deciding without asking anyone. The other four each name an operator's answer, even
+     * indirectly — {@code RECONCILER} still means a query the operator answered. {@code
+     * GATEWAY} means no operator was asked at all, whether because the gateway refused the
+     * intent on a fact it already held or because the adapter refused before calling out
+     * (ADR 0013) — either way, the cause exists only to say that no operator spoke.
      */
     public enum Cause {
         SUBMIT_RESPONSE,
         QUERY,
         CALLBACK,
-        RECONCILER
+        RECONCILER,
+        GATEWAY
     }
 
     public PaymentTransition {

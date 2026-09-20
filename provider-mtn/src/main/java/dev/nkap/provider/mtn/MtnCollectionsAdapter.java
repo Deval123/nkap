@@ -93,11 +93,19 @@ public final class MtnCollectionsAdapter implements ProviderAdapter {
         Objects.requireNonNull(intent, "intent");
         Objects.requireNonNull(reference, "reference");
         if (intent.operation() != Capability.Operation.COLLECT) {
+            // The gateway's own routing fact (PaymentService.submit) now refuses this before
+            // ever calling an adapter, so reaching it means a caller ignored
+            // ProviderAdapter.capabilities() -- a programming error, not a payment outcome,
+            // which is why this still throws rather than returning a SubmitResult (ADR 0013).
             throw new IllegalArgumentException(
                     "the MTN collections adapter only performs COLLECT, not " + intent.operation());
         }
         if (intent.amount().currency() != profile.currency()) {
-            throw new IllegalArgumentException("payment is in " + intent.amount().currency()
+            // Only the adapter holds a second opinion on this one: it fires precisely when
+            // configuration and profile disagree, which the gateway cannot pre-compute
+            // without trusting the configuration that is wrong (ADR 0013). No request was
+            // sent, so this is data, not an exception -- ADR 0005's reasoning applied here.
+            return new SubmitResult.NotAttempted("payment is in " + intent.amount().currency()
                     + " but this MTN profile settles in " + profile.currency());
         }
 

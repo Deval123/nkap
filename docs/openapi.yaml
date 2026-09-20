@@ -729,8 +729,13 @@ components:
         at: { type: string, format: date-time }
         cause:
           type: string
-          enum: [SUBMIT_RESPONSE, QUERY, CALLBACK, RECONCILER]
-          description: What attributed this transition — the initial submit response, a live query, the operator's own callback, or the reconciler's backoff loop.
+          enum: [SUBMIT_RESPONSE, QUERY, CALLBACK, RECONCILER, GATEWAY]
+          description: >
+            What attributed this transition — the initial submit response, a live query, the
+            operator's own callback, the reconciler's backoff loop, or `GATEWAY`: this
+            gateway itself, deciding without asking the operator anything, because the
+            request asked for an operation the adapter does not support or an adapter
+            refused a currency mismatch before making any call. Membership only grows.
         operatorCode: { type: string, description: "The operator's own code for this transition, when it sent one. Often \"\"." }
         note: { type: string }
 

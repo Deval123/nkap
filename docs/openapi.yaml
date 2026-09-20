@@ -91,8 +91,15 @@ paths:
         have a use for.
 
         **The response status is the whole point of this endpoint.** `201 Created` means the
-        operator answered — `SUBMITTED`, `PENDING`, or already a terminal state.
-        `202 Accepted` means it did not: `state` is `UNKNOWN`, and that is not an error to
+        request reached a definite answer without needing you to wait for one: most often
+        because the operator answered — `SUBMITTED`, `PENDING`, or already a terminal state —
+        but `state: FAILED` with `history[].cause: GATEWAY` on the last transition is `201`
+        too, and means the opposite of "the operator answered": this gateway refused the
+        request itself, from what it already knew, and never asked the operator anything (ADR
+        0013) — an intent for an operation the addressed installation does not support, most
+        commonly. Check `cause`, not the status code, to tell the two apart; `history` is
+        always present so you always can. `202 Accepted` means neither of those: the operator
+        was asked and did not answer in time, `state` is `UNKNOWN`, and that is not an error to
         retry, log as a failure, or tell a payer about. It means exactly what it says — the
         outcome is not yet known — and it resolves itself: Nkap's own reconciler keeps asking
         the operator on a backoff, and a webhook (`docs/webhooks.md`) fires the moment it
@@ -120,8 +127,11 @@ paths:
       responses:
         "201":
           description: >
-            The operator answered. `state` is `SUBMITTED`, `PENDING`, or already terminal
-            (`SUCCEEDED`, `FAILED`, `EXPIRED`) for an operator that settles synchronously.
+            A definite answer without waiting: `state` is `SUBMITTED` or `PENDING` (the
+            operator answered), already terminal for an operator that settles synchronously
+            (the operator answered), or `FAILED` with the last `history[].cause` `GATEWAY` —
+            this gateway refused the request itself and never asked the operator at all (ADR
+            0013). See this operation's own description for how to tell the two apart.
           headers:
             Location:
               $ref: "#/components/headers/Location"

@@ -275,16 +275,19 @@ public abstract class ProviderAdapterConformanceTest {
      * the adapter can know, so it must be refused as data ({@link SubmitResult.NotAttempted}),
      * not by calling the operator and letting it refuse instead.
      *
-     * <p>Both halves matter, and only one is a return value: a rule that checked just the
-     * result would pass an adapter that called the operator first and only then decided to
-     * report {@code NotAttempted} — exactly the defect ADR 0013 closes. {@link
-     * ConformanceHarness} has no hook built for observing "no HTTP call happened," so this
-     * kit proves it the way every adapter it drives already commits to: an operator that was
-     * genuinely never told about a reference answers a query on it with
-     * {@link PaymentState#UNKNOWN} — never the happy path this harness starts every test
-     * from, which is what a real submission would have produced. If a future adapter needs a
-     * stronger check than that, it is a harness capability worth adding then, not invented
-     * here on no adapter's real need.
+     * <p>Two assertions, and they establish different things. The return value is
+     * {@code NotAttempted} — that much any adapter honouring the contract must produce. The
+     * follow-up {@code query} answering {@link PaymentState#UNKNOWN} establishes only that no
+     * submission under this reference was ever <em>accepted</em> by the operator — the same
+     * thing an unrelated, never-submitted reference would answer. It does <strong>not</strong>
+     * establish that no call was made: an adapter that called the operator with this currency
+     * and was refused would see the same {@code UNKNOWN}, because the operator records nothing
+     * under a reference it refused either. So this rule catches an adapter whose submission
+     * would have <em>succeeded</em> had it gone out; it cannot yet distinguish "never called"
+     * from "called, and refused" — the gap is a call-observation hook
+     * {@link ConformanceHarness} does not have today, and is not worth inventing on no
+     * adapter's real need until one exists to prove it matters. See
+     * <a href="https://github.com/Deval123/nkap/issues/175">issue #175</a>.
      */
     @Test
     @DisplayName("an intent in a currency the adapter does not settle in is not attempted, and the operator is never asked")

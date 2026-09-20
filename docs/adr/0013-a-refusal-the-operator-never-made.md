@@ -174,6 +174,12 @@ exactly right. What was wrong was never the state — it was the claim about who
   needs **no migration**. It does become a value the payment-history response can carry;
   `docs/openapi.yaml` says so, and says membership only grows.
 - `CHANGELOG.md` carries a breaking-change entry for the 2.0.0 line.
+- The HTTP status code for a gateway refusal is left as `201` — the same status a payment the
+  operator answered gets — and `docs/openapi.yaml`'s prose now says so plainly rather than
+  implying the operator was asked. Whether that status is the right one, or whether a refusal
+  this gateway can determine from its own routing table belongs at the API edge as a `4xx`
+  instead of a created-then-failed payment, is not decided here: this ADR's scope is the
+  ledger row, not the HTTP contract. See issue #176.
 
 ## Alternatives rejected
 

@@ -32,6 +32,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 
@@ -44,11 +45,20 @@ import org.springframework.test.context.DynamicPropertySource;
  *
  * <p>Not a {@code PostgresSpringBootIT}: two of these tests are about the reconciler
  * resolving a refund, the same reason {@code DisbursementApiIT} is not one either. The
- * reconciler is on but its scheduled interval is an hour, so the only pass that runs is the
- * one a test calls by hand.
+ * whole {@code ReconcilerConfiguration}, not just its scheduled pass, is conditional on
+ * {@code nkap.reconciler.enabled} (see {@code ReconcilerWiringTest}), so {@code enabled=true}
+ * is what lets {@code runOnce()} be autowired and called by hand below. A long interval does
+ * not by itself stop the scheduled pass from firing -- its first tick fires as soon as the
+ * context comes up, no matter the interval -- and this class shares its context with
+ * {@code DisbursementApiIT} (identical {@code @DynamicPropertySource} values), so a live
+ * scheduler would otherwise outlive both classes and keep sweeping the PostgreSQL instance
+ * every {@code *IT} shares ({@code PostgresDatabase.shared()}) for the rest of the JVM's
+ * life (issue #162). {@code @DirtiesContext(classMode = AFTER_CLASS)} below closes that
+ * context once this class is done, which is what actually stops it.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ExtendWith(DockerAvailable.class)
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class RefundApiIT {
 
     private static final EmbeddedSimulator SIMULATOR = EmbeddedSimulator.start();

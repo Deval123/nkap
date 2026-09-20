@@ -14,6 +14,7 @@ import org.springframework.boot.autoconfigure.context.ConfigurationPropertiesAut
 import org.springframework.boot.test.context.assertj.AssertableApplicationContext;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.scheduling.config.ScheduledTaskHolder;
 import org.springframework.transaction.PlatformTransactionManager;
 
 /**
@@ -56,5 +57,34 @@ class ReconcilerWiringTest {
                         .hasNotFailed()
                         .doesNotHaveBean(Reconciler.class)
                         .doesNotHaveBean(ReconciliationStore.class));
+    }
+
+    /**
+     * Not "the interval is long enough" -- {@code fixedDelay}'s first execution fires as
+     * soon as the context comes up, no matter how long the interval is -- but that once the
+     * context is closed, no scheduled pass can fire again. That is what
+     * {@code @DirtiesContext(classMode = AFTER_CLASS)} on {@code RefundApiIT} and
+     * {@code DisbursementApiIT} relies on to stop their shared, otherwise-long-lived
+     * scheduler at the end of the class (issue #162): closing the context destroys the
+     * {@code ScheduledAnnotationBeanPostProcessor}, which cancels and discards every
+     * scheduled task it was holding.
+     */
+    @Test
+    @DisplayName("closing the context cancels the scheduled pass -- nothing can fire again after")
+    void closing_the_context_cancels_the_scheduled_pass() {
+        context.run((AssertableApplicationContext ctx) -> {
+            ScheduledTaskHolder scheduling = ctx.getBean(ScheduledTaskHolder.class);
+            assertThat(scheduling.getScheduledTasks())
+                    .as("the reconciler's pass is registered while the context is open")
+                    .isNotEmpty();
+
+            ctx.close();
+
+            assertThat(scheduling.getScheduledTasks())
+                    .as("closing the context -- what @DirtiesContext(classMode = AFTER_CLASS) "
+                            + "does for RefundApiIT and DisbursementApiIT -- cancels every "
+                            + "scheduled task, so no pass can fire again")
+                    .isEmpty();
+        });
     }
 }

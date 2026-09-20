@@ -4,6 +4,8 @@ All notable changes to Nkap are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/); versioning follows
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
 ## [1.2.0] - 2026-09-20
 
 ### Added
@@ -231,6 +233,7 @@ worse than one that promises nothing.
   constraint an operator relies on, not as something this project is promising to enforce
   for every migration to come.
 
+[Unreleased]: https://github.com/deval123/nkap/compare/v1.2.0...HEAD
 [1.2.0]: https://github.com/deval123/nkap/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/deval123/nkap/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/deval123/nkap/releases/tag/v1.0.0

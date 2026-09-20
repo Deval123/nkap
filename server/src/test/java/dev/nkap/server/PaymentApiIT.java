@@ -149,6 +149,38 @@ class PaymentApiIT extends PostgresSpringBootIT {
         assertThat(stored.get("history").get(0).get("cause").asText()).isEqualTo("SUBMIT_RESPONSE");
     }
 
+    /**
+     * Issue #28: the adapter's own {@code MtnCollectionsAdapterTest} pins that this throws
+     * {@code ProviderUnavailableException}; this pins what the payment actually becomes
+     * when that is reached through the server -- the behaviour the narrowing is for, not
+     * an implementation detail of how the adapter gets there.
+     */
+    @Test
+    @DisplayName("a 409 carrying a code other than RESOURCE_ALREADY_EXIST is 202 and UNKNOWN, never silently submitted")
+    void a_409_with_a_different_code_is_202_unknown_and_persisted() {
+        SIMULATOR.declareScenario("""
+            {"rules":[{"scenario":{"onSubmit":{"outcome":"CONFLICT","code":"SOME_OTHER_CODE"}}}]}""");
+        String key = UUID.randomUUID().toString();
+
+        ResponseEntity<String> created = post(key, body(5000));
+
+        assertThat(created.getStatusCode().value()).isEqualTo(202);
+        JsonNode payment = parse(created.getBody());
+        assertThat(payment.get("state").asText()).isEqualTo("UNKNOWN");
+        String reference = payment.get("reference").asText();
+
+        ResponseEntity<String> read = getPayment(reference);
+        assertThat(read.getStatusCode().value()).isEqualTo(200);
+        JsonNode stored = parse(read.getBody());
+        assertThat(stored.get("state").asText())
+                .as("not SUBMITTED -- an unrecognised 409 is not treated as already-submitted")
+                .isEqualTo("UNKNOWN");
+        assertThat(stored.get("history")).hasSize(1);
+        assertThat(stored.get("history").get(0).get("from").asText()).isEqualTo("CREATED");
+        assertThat(stored.get("history").get(0).get("to").asText()).isEqualTo("UNKNOWN");
+        assertThat(stored.get("history").get(0).get("cause").asText()).isEqualTo("SUBMIT_RESPONSE");
+    }
+
     @Test
     @DisplayName("an outright refusal is 201 describing a FAILED payment, its transition attributed to the submit response")
     void an_operator_refusal_is_201_failed() {

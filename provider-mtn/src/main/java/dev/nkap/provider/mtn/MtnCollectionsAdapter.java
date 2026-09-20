@@ -123,17 +123,21 @@ public final class MtnCollectionsAdapter implements ProviderAdapter {
             // 202, and the body is empty by contract — do not try to read it.
             return SubmitResult.acknowledged("", "");
         }
-        if (code == 409) {
+        if (code == 409 && "RESOURCE_ALREADY_EXIST".equals(codeIn(response.body()))) {
             // The reference was already used, which — since Nkap persists it before
             // calling — means a previous attempt reached MTN. Idempotency worked and
             // nothing was duplicated. Not an error: acknowledge and let query() settle it.
-            //
-            // Kept deliberately lenient: any 409 on requesttopay is "already submitted".
-            // Narrowing it to the RESOURCE_ALREADY_EXIST code alone is only safe once the
-            // simulator returns MTN-shaped error bodies — issue #26. Doing it now would
-            // make these tests pass against a fiction.
             return SubmitResult.acknowledged("", response.body());
         }
+        // Every other 409 falls through to ProviderUnavailableException below, exactly
+        // like any other unexpected status -- including one whose body cannot be read as
+        // MTN's error shape at all: unreadable is not the same as RESOURCE_ALREADY_EXIST,
+        // and assuming it is would restore the looseness this narrowing removes, in a
+        // harder-to-see place. An unexpected 409 means the gateway does not know what
+        // happened: rejected(...) would conclude FAILED, a guess about a payment that may
+        // well have reached MTN -- the same guess this project refuses to make about a
+        // timeout. ProviderUnavailableException leads to UNKNOWN and the reconciler,
+        // which is the answer for "we do not know yet" (issue #28).
         if (code == 400) {
             return rejected(response);
         }

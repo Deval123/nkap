@@ -132,7 +132,9 @@ public final class MtnDisbursementsAdapter implements ProviderAdapter {
         }
         if (code == 409) {
             // The reference was already used: a previous attempt reached MTN. Idempotency
-            // worked. Acknowledge and let query() settle it. Same leniency as collections.
+            // worked. Acknowledge and let query() settle it. Collections narrowed this to
+            // RESOURCE_ALREADY_EXIST specifically (issue #28); this leniency is now this
+            // adapter's alone, tracked by issue #171.
             return SubmitResult.acknowledged("", response.body());
         }
         if (code == 400) {

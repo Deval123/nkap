@@ -5,7 +5,7 @@ import dev.nkap.core.payment.PaymentState;
 import java.util.Objects;
 
 /**
- * What the provider said when the request was handed over. There are three outcomes, not
+ * What the provider said when the request was handed over. There are four outcomes, not
  * two, and a caller must handle all of them — which is why this is a sealed hierarchy
  * rather than a record with a nullable field. It is the same shape, and for the same
  * reason, as {@code IdempotentOutcome} in {@code core}.
@@ -13,13 +13,16 @@ import java.util.Objects;
  * <ul>
  *   <li>{@link Acknowledged} — the provider took the request; nothing has settled.</li>
  *   <li>{@link Rejected} — the provider refused it outright; no payment exists.</li>
+ *   <li>{@link NotAttempted} — the adapter refused before asking the provider anything;
+ *       no payment exists and no request was ever sent.</li>
  *   <li>a call that did not answer is not a {@code SubmitResult} at all: the adapter
  *       throws {@link ProviderUnavailableException}, which means "I do not know".</li>
  * </ul>
  *
- * <p>See ADR 0005. The contract first said a submission could only report {@code SUBMITTED}
- * or {@code PENDING}; implementing MTN showed a {@code 400} is a definitive outcome
- * available at submission, and it is neither of those nor an unknown.
+ * <p>See ADR 0005 for {@link Acknowledged} and {@link Rejected}, and ADR 0013 for
+ * {@link NotAttempted}. The contract first said a submission could only report
+ * {@code SUBMITTED} or {@code PENDING}; implementing MTN showed a {@code 400} is a
+ * definitive outcome available at submission, and it is neither of those nor an unknown.
  */
 public sealed interface SubmitResult {
 
@@ -66,6 +69,26 @@ public sealed interface SubmitResult {
             providerCode = providerCode == null ? "" : providerCode;
             reason = reason == null ? "" : reason;
             rawResponse = rawResponse == null ? "" : rawResponse;
+        }
+    }
+
+    /**
+     * The adapter refused before calling the operator. No request was sent, nothing can
+     * have reached the provider, and there is no response to carry — which is why this
+     * record has neither a {@code providerCode} nor a {@code rawResponse}: adding either
+     * "for symmetry" with {@link Rejected} would mean fabricating a value for an answer that
+     * was never given. The gateway records {@code CREATED → FAILED} with
+     * {@code PaymentTransition.Cause.GATEWAY} — the same cause it uses when it refuses an
+     * intent itself, without asking the adapter at all (ADR 0013): whichever of the two
+     * decided, no operator spoke, and that is the only thing the cause exists to say.
+     *
+     * @param reason why the adapter refused, for the record — e.g. a currency the adapter's
+     *               profile does not settle in
+     */
+    record NotAttempted(String reason) implements SubmitResult {
+
+        public NotAttempted {
+            reason = reason == null ? "" : reason;
         }
     }
 

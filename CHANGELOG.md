@@ -6,6 +6,29 @@ All notable changes to Nkap are documented here. The format follows
 
 ## [Unreleased]
 
+### Breaking
+
+- **`SubmitResult` gains a fourth member, `NotAttempted` — an exhaustive `switch` over it
+  stops compiling.** `provider-api` is published at `1.0.0`, so widening a sealed interface
+  now takes a major release: this is Nkap **2.0.0**. Nothing about implementing an adapter
+  changes — an adapter that returns `Acknowledged` or `Rejected` keeps compiling and running
+  exactly as before, untouched. The only exhaustive `switch` today is
+  `PaymentService.applyOutcome`, in this repository; a downstream project with its own
+  exhaustive `switch` over `SubmitResult` needs a new case for `NotAttempted`, the same way
+  this repository's own did.
+- **A `payment_transition` row can no longer claim an operator spoke when none did**
+  (ADR 0013). Two adapter-independent guards used to be indistinguishable, once persisted,
+  from a genuine operator answer: an intent for an operation the adapter does not declare,
+  and a currency the adapter's configured profile does not settle in. Both are now
+  `CREATED → FAILED`, cause `GATEWAY` — a new value `PaymentTransition.Cause` and the
+  payment-history `cause` field in `docs/openapi.yaml` can carry — recorded without ever
+  calling the operator, instead of the `UNKNOWN`/`SUBMIT_RESPONSE` row either produced
+  before, which then sent the reconciler chasing a reference the operator was never told
+  about. Both MTN adapters keep working with no change from an integrator's side; the
+  currency guard now returns `SubmitResult.NotAttempted` instead of throwing
+  `IllegalArgumentException`, which only matters to a caller of `ProviderAdapter.submit`
+  directly, not to `PaymentService`.
+
 ### Added
 
 - `nkap-simulator` reads a scenario declaration from a file at startup: mount one at

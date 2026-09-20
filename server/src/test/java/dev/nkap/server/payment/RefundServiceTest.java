@@ -22,6 +22,7 @@ import dev.nkap.server.provider.AdapterRegistry;
 import dev.nkap.server.provider.PublicBaseUrl;
 import dev.nkap.server.webhook.InMemoryWebhookEndpointStore;
 import java.util.Map;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.DisplayName;
 
@@ -46,6 +47,10 @@ class RefundServiceTest {
 
     RefundServiceTest() {
         when(adapters.require(MTN)).thenReturn(adapter);
+        // A refund is always DISBURSE (Payment.createRefund) -- without this, the mock's
+        // default empty Set makes PaymentService.submit's new capability check (ADR 0013)
+        // refuse every refund here before adapter.submit is ever called.
+        when(adapter.operations()).thenReturn(Set.of(Capability.Operation.DISBURSE));
     }
 
     private Payment succeededCollection(long amountMinor) {

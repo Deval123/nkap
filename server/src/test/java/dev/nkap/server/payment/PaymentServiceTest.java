@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import dev.nkap.core.money.Currency;
@@ -24,6 +26,8 @@ import dev.nkap.server.support.LogCapture;
 import dev.nkap.server.webhook.InMemoryWebhookEndpointStore;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.Map;
+import java.util.Set;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -48,6 +52,15 @@ class PaymentServiceTest {
     private static PaymentIntent intent() {
         return new PaymentIntent(Capability.Operation.COLLECT, Money.of(5000, Currency.EUR),
                 "46733123453", "rent", "march", Map.of());
+    }
+
+    /**
+     * Every test below submits a {@code COLLECT} intent, so the adapter declaring
+     * {@code COLLECT} is the shared happy path; the capability-mismatch test overrides it.
+     */
+    @BeforeEach
+    void adapterDeclaresCollect() {
+        when(adapter.operations()).thenReturn(Set.of(Capability.Operation.COLLECT));
     }
 
     @Test
@@ -157,6 +170,59 @@ class PaymentServiceTest {
         service.createAndSubmit(MTN, "merchant-1", intent());
 
         assertThat(outbox.events()).isEmpty();
+    }
+
+    /**
+     * ADR 0013, change 1: the gateway's own routing fact — {@code intent.operation()}
+     * against {@code adapter.operations()} — is checked before the adapter is ever asked,
+     * so {@code adapter.submit} must not even be called. {@code cause GATEWAY} is what
+     * distinguishes this row from every other {@code FAILED} transition: nobody but this
+     * gateway decided it.
+     */
+    @Test
+    @DisplayName("an intent for an operation the adapter does not declare is FAILED by the gateway, without calling the adapter")
+    void a_capability_mismatch_is_failed_without_calling_the_adapter() throws Exception {
+        when(adapters.require(MTN)).thenReturn(adapter);
+        when(adapter.operations()).thenReturn(Set.of(Capability.Operation.DISBURSE));
+
+        Payment payment = service.createAndSubmit(MTN, "merchant-1", intent());
+
+        assertThat(payment.state()).isEqualTo(PaymentState.FAILED);
+        assertThat(payment.history()).singleElement().satisfies(t -> {
+            assertThat(t.from()).isEqualTo(PaymentState.CREATED);
+            assertThat(t.to()).isEqualTo(PaymentState.FAILED);
+            assertThat(t.cause()).isEqualTo(PaymentTransition.Cause.GATEWAY);
+            assertThat(t.operatorCode()).isEmpty();
+            assertThat(t.rawResponse()).isEmpty();
+        });
+        verify(adapter, never()).submit(any(), any());
+    }
+
+    /**
+     * ADR 0013, change 2: only the adapter can know its own profile disagrees with what
+     * {@code AdapterRegistry.settlementCurrency} led the gateway to believe, so this is data
+     * ({@code SubmitResult.NotAttempted}) the adapter itself returns — and it is recorded
+     * with the very same {@code cause GATEWAY} the gateway's own pre-call refusal above
+     * uses: whichever of the two decided, no operator spoke.
+     */
+    @Test
+    @DisplayName("the adapter's own NotAttempted refusal is recorded FAILED, cause GATEWAY, same as the gateway's own")
+    void a_not_attempted_result_is_failed_with_gateway_cause() throws Exception {
+        when(adapters.require(MTN)).thenReturn(adapter);
+        when(adapter.submit(any(), any()))
+                .thenReturn(new SubmitResult.NotAttempted("payment is in XOF but this profile settles in EUR"));
+
+        Payment payment = service.createAndSubmit(MTN, "merchant-1", intent());
+
+        assertThat(payment.state()).isEqualTo(PaymentState.FAILED);
+        assertThat(payment.history()).singleElement().satisfies(t -> {
+            assertThat(t.from()).isEqualTo(PaymentState.CREATED);
+            assertThat(t.to()).isEqualTo(PaymentState.FAILED);
+            assertThat(t.cause()).isEqualTo(PaymentTransition.Cause.GATEWAY);
+            assertThat(t.note()).contains("XOF");
+            assertThat(t.operatorCode()).isEmpty();
+            assertThat(t.rawResponse()).isEmpty();
+        });
     }
 
     @Test

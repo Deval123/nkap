@@ -8,9 +8,11 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.nkap.core.money.Currency;
+import dev.nkap.core.money.Money;
 import dev.nkap.core.payment.PaymentState;
 import dev.nkap.core.payment.ReferenceId;
 import dev.nkap.provider.Capability;
+import dev.nkap.provider.PaymentIntent;
 import dev.nkap.provider.ProviderAdapter;
 import dev.nkap.provider.ProviderStatus;
 import dev.nkap.provider.ProviderUnavailableException;
@@ -266,6 +268,42 @@ public abstract class ProviderAdapterConformanceTest {
             assertSame(PaymentState.SUCCEEDED, adapter.query(subject, operationUnderTest()).state(),
                     "query " + query + " after the credential expired");
         }
+    }
+
+    /**
+     * ADR 0013: a currency the adapter's own profile does not settle in is something only
+     * the adapter can know, so it must be refused as data ({@link SubmitResult.NotAttempted}),
+     * not by calling the operator and letting it refuse instead.
+     *
+     * <p>Two assertions, and they establish different things. The return value is
+     * {@code NotAttempted} — that much any adapter honouring the contract must produce. The
+     * follow-up {@code query} answering {@link PaymentState#UNKNOWN} establishes only that no
+     * submission under this reference was ever <em>accepted</em> by the operator — the same
+     * thing an unrelated, never-submitted reference would answer. It does <strong>not</strong>
+     * establish that no call was made: an adapter that called the operator with this currency
+     * and was refused would see the same {@code UNKNOWN}, because the operator records nothing
+     * under a reference it refused either. So this rule catches an adapter whose submission
+     * would have <em>succeeded</em> had it gone out; it cannot yet distinguish "never called"
+     * from "called, and refused" — the gap is a call-observation hook
+     * {@link ConformanceHarness} does not have today, and is not worth inventing on no
+     * adapter's real need until one exists to prove it matters. See
+     * <a href="https://github.com/Deval123/nkap/issues/175">issue #175</a>.
+     */
+    @Test
+    @DisplayName("an intent in a currency the adapter does not settle in is not attempted, and no submission reaches the operator")
+    void a_currency_mismatch_is_not_attempted_and_never_reaches_the_operator() throws Exception {
+        ProviderAdapter adapter = harness.adapter();
+        PaymentIntent template = harness.anIntent();
+        Currency unsettled = template.amount().currency() == Currency.XOF ? Currency.EUR : Currency.XOF;
+        PaymentIntent mismatched = new PaymentIntent(template.operation(), Money.of(1000, unsettled),
+                template.counterpartyMsisdn(), template.payerMessage(), template.payeeNote(), template.providerOptions());
+        ReferenceId reference = ReferenceId.newReference();
+
+        SubmitResult result = adapter.submit(mismatched, reference);
+
+        assertInstanceOf(SubmitResult.NotAttempted.class, result);
+        assertSame(PaymentState.UNKNOWN, adapter.query(QuerySubject.of(reference), operationUnderTest()).state(),
+                "the operator must never have heard of this reference at all");
     }
 
     @Test

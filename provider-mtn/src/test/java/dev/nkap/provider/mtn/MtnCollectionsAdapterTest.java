@@ -174,15 +174,26 @@ class MtnCollectionsAdapterTest {
                 Capability.Operation.COLLECT, Capability.Feature.BALANCE, Capability.Feature.HOLDER_VALIDATION);
     }
 
+    /**
+     * ADR 0013: a currency mismatch is only the adapter's own profile disagreeing with
+     * configuration, something only the adapter can know -- so it is data
+     * ({@link SubmitResult.NotAttempted}), not an exception, and the reference this test
+     * still queries proves the operator was genuinely never asked (never {@code 202} accepted
+     * against the happy-path default this test's own simulator starts from).
+     */
     @Test
-    @DisplayName("a payment whose currency is not the profile's is refused before any call")
-    void a_currency_mismatch_is_refused() {
+    @DisplayName("a payment whose currency is not the profile's is not attempted, and nothing is submitted under its reference")
+    void a_currency_mismatch_is_not_attempted() throws Exception {
         PaymentIntent wrongCurrency = new PaymentIntent(Capability.Operation.COLLECT, Money.of(1000, Currency.XOF),
                 "46733123453", "", "", Map.of());
+        ReferenceId reference = ReferenceId.newReference();
 
-        assertThatThrownBy(() -> adapter().submit(wrongCurrency, ReferenceId.newReference()))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("XOF");
+        SubmitResult result = adapter().submit(wrongCurrency, reference);
+
+        assertThat(result).isInstanceOfSatisfying(SubmitResult.NotAttempted.class,
+                notAttempted -> assertThat(notAttempted.reason()).contains("XOF"));
+        assertThat(adapter().query(QuerySubject.of(reference), Capability.Operation.COLLECT).state())
+                .isEqualTo(PaymentState.UNKNOWN);
     }
 
     @Test

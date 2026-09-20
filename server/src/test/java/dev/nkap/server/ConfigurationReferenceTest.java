@@ -43,13 +43,23 @@ import org.yaml.snakeyaml.Yaml;
  *       direction is optional: a stale row is exactly as wrong as an undocumented one.</li>
  *   <li>The same, for every {@code nkap.*} property read directly with {@code @Value} or
  *       {@code @ConditionalOnProperty} rather than through a record — found by
- *       {@link #discoverDirectlyBoundProperties()} scanning {@code server}'s and
+ *       {@link #scanDirectlyBoundProperties(Path, String)} scanning {@code server}'s and
  *       {@code simulator}'s source trees, not by a hand-kept list. See that method's own
  *       javadoc for exactly what it can and cannot find.</li>
  *   <li>For {@link ReconcilerProperties} and {@link OutboxRelayProperties} — where
  *       {@code application.yml} always supplies a concrete literal, so "the default" is a
  *       single, unambiguous fact — the reference's own Default column is checked against
- *       that literal, read straight out of {@code application.yml} rather than retyped here.</li>
+ *       that literal, read straight out of {@code application.yml} rather than retyped here.
+ *       {@link #inline_value_defaults_agree_with_their_module_application_yml_and_the_reference()}
+ *       does the same for every directly-bound {@code @Value} property that carries an
+ *       inline default — {@code nkap.webhooks.allow-insecure-endpoint-url} and
+ *       {@code nkap.scenario.file} today — against the {@code application.yml} of whichever
+ *       module {@link #scanDirectlyBoundProperties(Path, String)} found it in. A property
+ *       with no inline default ({@code nkap.provider.default}) or whose reference row is
+ *       deliberately prose rather than a literal ({@code nkap.public-base-url}: {@code
+ *       *(blank; set per deployment)*}) is skipped on whichever side has nothing to compare —
+ *       silently passing there is correct, not a gap, since there is no fact to disagree
+ *       with.</li>
  * </ol>
  *
  * <h2>What this does <strong>not</strong> cover, and why</h2>
@@ -63,12 +73,6 @@ import org.yaml.snakeyaml.Yaml;
  * unambiguous default regardless of slot ({@code @DefaultValue("PT20S")}, the only source for
  * it at all in the second installation, which sets no {@code request-timeout} key in
  * {@code application.yml}), so it alone is checked, in {@link #the_one_mtn_default_that_is_unambiguous_is_correct()}.
- * {@code nkap.scenario.file}'s own default is not cross-checked against
- * {@code simulator/src/main/resources/application.yml} the way {@code nkap.reconciler.*} and
- * {@code nkap.webhooks.*} are — {@link #documented_defaults_match_application_yml()} reads
- * only {@code server}'s {@code application.yml}, and extending it to a second file for one
- * setting was not worth the second YAML load; this is checked by hand instead, the same way
- * the MTN installation fields above are.
  *
  * <p>The Spring settings the reference also documents ({@code server.port},
  * {@code spring.datasource.*}, {@code management.server.port}) are not this project's own
@@ -79,13 +83,20 @@ class ConfigurationReferenceTest {
 
     private static final Path REFERENCE = Path.of("..", "docs", "configuration-reference.md");
     private static final Path APPLICATION_YML = Path.of("src", "main", "resources", "application.yml");
+    private static final Path SIMULATOR_APPLICATION_YML =
+            Path.of("..", "simulator", "src", "main", "resources", "application.yml");
     private static final Path MAIN_JAVA = Path.of("src", "main", "java");
     private static final Path SIMULATOR_MAIN_JAVA = Path.of("..", "simulator", "src", "main", "java");
+    private static final String RUN_FROM_SERVER = "the server module (mvn -pl server test)";
+    private static final String RUN_FROM_SIMULATOR =
+            "the server module, with the simulator module checked out beside it";
 
     @Test
     @DisplayName("every nkap.* property bound by a @ConfigurationProperties record, or read directly with @Value/@ConditionalOnProperty, has exactly one row in docs/configuration-reference.md")
     void every_property_is_documented_and_every_documented_property_is_real() throws IOException {
-        Set<String> fromCode = new TreeSet<>(discoverDirectlyBoundProperties());
+        Set<String> fromCode = new TreeSet<>();
+        fromCode.addAll(scanDirectlyBoundProperties(MAIN_JAVA, RUN_FROM_SERVER).keySet());
+        fromCode.addAll(scanDirectlyBoundProperties(SIMULATOR_MAIN_JAVA, RUN_FROM_SIMULATOR).keySet());
         collect(ReconcilerProperties.class, "nkap.reconciler", fromCode);
         collect(OutboxRelayProperties.class, "nkap.webhooks", fromCode);
         collect(MtnProperties.class, "nkap.provider.mtn", fromCode);
@@ -108,7 +119,7 @@ class ConfigurationReferenceTest {
     @Test
     @DisplayName("the reference's Default column for nkap.reconciler.* and nkap.webhooks.* matches application.yml's own value, property by property")
     void documented_defaults_match_application_yml() throws IOException {
-        Map<String, Object> yaml = loadApplicationYml();
+        Map<String, Object> yaml = loadApplicationYml(APPLICATION_YML);
         Map<String, String> documented = documentedDefaults();
 
         List<String> mismatches = new ArrayList<>();
@@ -127,6 +138,72 @@ class ConfigurationReferenceTest {
             }
         }
         assertThat(mismatches).as("documented default does not match application.yml").isEmpty();
+    }
+
+    @Test
+    @DisplayName("every directly-bound @Value property's inline default agrees with its own module's application.yml and the reference's Default column")
+    void inline_value_defaults_agree_with_their_module_application_yml_and_the_reference() throws IOException {
+        List<String> mismatches = new ArrayList<>();
+        checkInlineDefaults(scanDirectlyBoundProperties(MAIN_JAVA, RUN_FROM_SERVER), APPLICATION_YML, mismatches);
+        checkInlineDefaults(scanDirectlyBoundProperties(SIMULATOR_MAIN_JAVA, RUN_FROM_SIMULATOR), SIMULATOR_APPLICATION_YML, mismatches);
+        assertThat(mismatches).as("inline @Value default, application.yml and the reference do not all agree").isEmpty();
+    }
+
+    /**
+     * For every {@code property -> inlineDefault} pair {@code direct} holds where
+     * {@code inlineDefault} is not {@code null} (a {@code @Value} that actually carries a
+     * {@code :default}, as opposed to one with none, or a {@code @ConditionalOnProperty}
+     * match, neither of which has an inline default to check at all): compares that default
+     * against {@code applicationYml}'s own literal and against
+     * {@link #documentedDefaults()}'s entry for it, adding a message to {@code mismatches}
+     * for either side that disagrees. A side with nothing recorded — no key in
+     * {@code application.yml}, or a reference row written as prose rather than a literal —
+     * is skipped rather than flagged: there is no fact there to disagree with, and forcing
+     * every property to carry a literal default in both places would fight the deliberate
+     * exceptions {@code nkap.public-base-url} and {@code nkap.provider.default} already are.
+     */
+    private static final Pattern ENV_PASSTHROUGH = Pattern.compile("^\\$\\{[A-Za-z0-9_]+:([^}]*)}$");
+
+    /**
+     * {@code application.yml}'s own literal for a property, unwrapped one level when that
+     * literal is itself an env-var passthrough with a nested default —
+     * {@code nkap.public-base-url}'s {@code ${NKAP_PUBLIC_BASE_URL:}} is exactly this shape,
+     * and its effective default (what a deployment gets with the env var unset) is the empty
+     * string inside the braces, not the four-character literal {@code ${NKAP...}} text. Any
+     * other value passes through unchanged.
+     */
+    private static String effectiveDefault(String applicationYmlValue) {
+        if (applicationYmlValue == null) {
+            return null;
+        }
+        Matcher passthrough = ENV_PASSTHROUGH.matcher(applicationYmlValue);
+        return passthrough.matches() ? passthrough.group(1) : applicationYmlValue;
+    }
+
+    private static void checkInlineDefaults(Map<String, String> direct, Path applicationYml, List<String> mismatches)
+            throws IOException {
+        Map<String, Object> yaml = loadApplicationYml(applicationYml);
+        Map<String, String> documented = documentedDefaults();
+
+        for (Map.Entry<String, String> entry : direct.entrySet()) {
+            String property = entry.getKey();
+            String inlineDefault = entry.getValue();
+            if (inlineDefault == null) {
+                continue;
+            }
+
+            String ymlValue = effectiveDefault(valueAt(yaml, property));
+            if (ymlValue != null && !ymlValue.equals(inlineDefault)) {
+                mismatches.add(property + ": " + applicationYml + " says '" + ymlValue
+                        + "', the inline @Value default says '" + inlineDefault + "'");
+            }
+
+            String documentedValue = documented.get(property);
+            if (documentedValue != null && !documentedValue.equals(inlineDefault)) {
+                mismatches.add(property + ": the reference says '" + documentedValue
+                        + "', the inline @Value default says '" + inlineDefault + "'");
+            }
+        }
     }
 
     @Test
@@ -208,24 +285,30 @@ class ConfigurationReferenceTest {
     // --- server/src/main/java: nkap.* properties read directly, not through a record ----
 
     private static final Pattern VALUE_ANNOTATION = Pattern.compile("@Value\\s*\\(\\s*\"([^\"]*)\"\\s*\\)");
-    private static final Pattern VALUE_PLACEHOLDER = Pattern.compile("\\$\\{(nkap\\.[A-Za-z0-9_.-]+)(?::[^}]*)?}");
+    private static final Pattern VALUE_PLACEHOLDER = Pattern.compile("\\$\\{(nkap\\.[A-Za-z0-9_.-]+)(?::([^}]*))?}");
     private static final Pattern CONDITIONAL_ON_PROPERTY = Pattern.compile("@ConditionalOnProperty\\s*\\(([^)]*)\\)");
     private static final Pattern CONDITIONAL_PREFIX = Pattern.compile("\\bprefix\\s*=\\s*\"([^\"]*)\"");
     private static final Pattern CONDITIONAL_NAME = Pattern.compile("\\bname\\s*=\\s*\"([^\"]*)\"");
 
     /**
      * Every {@code nkap.*} property read directly with {@code @Value} or
-     * {@code @ConditionalOnProperty} in {@code server/src/main/java} or {@code
-     * simulator/src/main/java} (issue #99: the first setting {@code nkap-simulator} ever
-     * read this way) — the properties no {@code @ConfigurationProperties} record ever sees,
-     * found by text-scanning both source trees rather than by naming them in a list that
-     * could fall out of date the day a fifth one is added the same way.
-     * {@code @Value("${nkap.foo.bar:some-default}")} yields {@code nkap.foo.bar} (the
-     * {@code :default} suffix is not part of the property name); {@code
-     * @ConditionalOnProperty(prefix = "nkap.foo", name = "bar", ...)} — the only shape this
-     * codebase actually uses — composes to the same {@code nkap.foo.bar}. Annotations are
-     * matched across the whole file, not line by line, since Java does not require one of
-     * either to fit on a single source line.
+     * {@code @ConditionalOnProperty} in {@code mainJava} — the properties no
+     * {@code @ConfigurationProperties} record ever sees, found by text-scanning the source
+     * tree rather than by naming them in a list that could fall out of date the day a fifth
+     * one is added the same way. Called once for {@code server/src/main/java} and once for
+     * {@code simulator/src/main/java} (issue #99: the first setting {@code nkap-simulator}
+     * ever read this way), each call's result kept separate rather than merged, because a
+     * property's inline default can only be checked against the {@code application.yml} of
+     * the module it actually came from.
+     *
+     * <p>The map is keyed by property name; the value is the {@code :default} an
+     * {@code @Value("${nkap.foo.bar:some-default}")} carries, or {@code null} for one with
+     * none ({@code @Value("${nkap.foo.bar}")}) and for every {@code @ConditionalOnProperty}
+     * match, which has no inline-default concept at all in this scan.
+     * {@code @ConditionalOnProperty(prefix = "nkap.foo", name = "bar", ...)} — the only shape
+     * this codebase actually uses — composes to the property name {@code nkap.foo.bar}.
+     * Annotations are matched across the whole file, not line by line, since Java does not
+     * require one of either to fit on a single source line.
      *
      * <p>Any {@code @ConditionalOnProperty} that mentions {@code nkap} but does not fit the
      * {@code prefix}/{@code name} shape above — a bare {@code @ConditionalOnProperty("nkap.foo")},
@@ -235,37 +318,27 @@ class ConfigurationReferenceTest {
      *
      * <h2>What this cannot cover</h2>
      *
-     * <p>This is a text scan of two modules' source, not a reflection- or bytecode-level
-     * search of the compiled classpath the way {@link #collect} is for the three records
-     * above. It finds a property name only when it appears as a string literal directly
-     * inside one of the two annotations above; it would miss one built from a runtime
-     * string (e.g. {@code environment.getProperty("nkap." + suffix)}), one read through
-     * {@code Environment} or a {@code Binder} call with no annotation at all, or one in a
-     * module neither tree covers ({@code provider-mtn}, {@code core}, {@code provider-api}).
-     * None of those patterns exist in this codebase today (confirmed while writing this scan
-     * by grepping for {@code Environment}/{@code getProperty} usage against {@code nkap.*} —
-     * there is none, in either module), but a scan is only ever a check against the patterns
-     * it was written to expect, not a guarantee no other pattern was introduced.
+     * <p>This is a text scan of one module's source at a time, not a reflection- or
+     * bytecode-level search of the compiled classpath the way {@link #collect} is for the
+     * three records above. It finds a property name only when it appears as a string literal
+     * directly inside one of the two annotations above; it would miss one built from a
+     * runtime string (e.g. {@code environment.getProperty("nkap." + suffix)}), one read
+     * through {@code Environment} or a {@code Binder} call with no annotation at all, or one
+     * in a module neither call here covers ({@code provider-mtn}, {@code core},
+     * {@code provider-api}). None of those patterns exist in this codebase today (confirmed
+     * while writing this scan by grepping for {@code Environment}/{@code getProperty} usage
+     * against {@code nkap.*} — there is none, in either module), but a scan is only ever a
+     * check against the patterns it was written to expect, not a guarantee no other pattern
+     * was introduced.
      */
-    private static Set<String> discoverDirectlyBoundProperties() throws IOException {
-        Set<String> found = new TreeSet<>();
-        scanDirectlyBoundProperties(MAIN_JAVA, "the server module (mvn -pl server test)", found);
-        scanDirectlyBoundProperties(SIMULATOR_MAIN_JAVA, "the server module, with the simulator module checked out beside it", found);
-
-        assertThat(found)
-                .as("discoverDirectlyBoundProperties found nothing at all -- the scan itself is broken "
-                        + "(every assertion in this test would otherwise pass vacuously)")
-                .isNotEmpty();
-        return found;
-    }
-
-    private static void scanDirectlyBoundProperties(Path mainJava, String runFrom, Set<String> found) throws IOException {
+    private static Map<String, String> scanDirectlyBoundProperties(Path mainJava, String runFrom) throws IOException {
         if (!Files.isDirectory(mainJava)) {
             throw new IllegalStateException(
                     "FAIL: " + mainJava.toAbsolutePath() + " not found -- this test must run from "
                             + runFrom + ", not some other working directory");
         }
 
+        Map<String, String> found = new java.util.TreeMap<>();
         try (var files = Files.walk(mainJava)) {
             for (Path file : files.filter(p -> p.toString().endsWith(".java")).toList()) {
                 String source = Files.readString(file);
@@ -274,7 +347,7 @@ class ConfigurationReferenceTest {
                 while (value.find()) {
                     Matcher placeholder = VALUE_PLACEHOLDER.matcher(value.group(1));
                     while (placeholder.find()) {
-                        found.add(placeholder.group(1));
+                        found.put(placeholder.group(1), placeholder.group(2));
                     }
                 }
 
@@ -287,16 +360,22 @@ class ConfigurationReferenceTest {
                     Matcher prefix = CONDITIONAL_PREFIX.matcher(body);
                     Matcher name = CONDITIONAL_NAME.matcher(body);
                     if (prefix.find() && name.find() && prefix.group(1).startsWith("nkap")) {
-                        found.add(prefix.group(1) + "." + name.group(1));
+                        found.put(prefix.group(1) + "." + name.group(1), null);
                     } else {
                         throw new IllegalStateException(
                                 "unhandled @ConditionalOnProperty shape referencing nkap in " + file + ": "
-                                        + body.strip() + " -- extend discoverDirectlyBoundProperties instead of "
+                                        + body.strip() + " -- extend scanDirectlyBoundProperties instead of "
                                         + "letting this be silently missed");
                     }
                 }
             }
         }
+
+        assertThat(found)
+                .as("scanDirectlyBoundProperties(%s) found nothing at all -- the scan itself is broken "
+                        + "(every assertion that depends on it would otherwise pass vacuously)", mainJava)
+                .isNotEmpty();
+        return found;
     }
 
     // --- docs/configuration-reference.md: table rows, as text ---------------------------
@@ -334,8 +413,8 @@ class ConfigurationReferenceTest {
     // --- application.yml: the actual value at a dotted, possibly-list-shaped path -------
 
     @SuppressWarnings("unchecked")
-    private static Map<String, Object> loadApplicationYml() throws IOException {
-        try (InputStream in = Files.newInputStream(APPLICATION_YML)) {
+    private static Map<String, Object> loadApplicationYml(Path applicationYml) throws IOException {
+        try (InputStream in = Files.newInputStream(applicationYml)) {
             return new Yaml().load(in);
         }
     }

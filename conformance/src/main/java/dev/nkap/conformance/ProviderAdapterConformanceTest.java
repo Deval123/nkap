@@ -290,7 +290,7 @@ public abstract class ProviderAdapterConformanceTest {
      * <a href="https://github.com/Deval123/nkap/issues/175">issue #175</a>.
      */
     @Test
-    @DisplayName("an intent in a currency the adapter does not settle in is not attempted, and the operator is never asked")
+    @DisplayName("an intent in a currency the adapter does not settle in is not attempted, and no submission reaches the operator")
     void a_currency_mismatch_is_not_attempted_and_never_reaches_the_operator() throws Exception {
         ProviderAdapter adapter = harness.adapter();
         PaymentIntent template = harness.anIntent();

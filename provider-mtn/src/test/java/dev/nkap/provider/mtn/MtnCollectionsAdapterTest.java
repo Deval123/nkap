@@ -182,7 +182,7 @@ class MtnCollectionsAdapterTest {
      * against the happy-path default this test's own simulator starts from).
      */
     @Test
-    @DisplayName("a payment whose currency is not the profile's is not attempted, and the operator is never asked")
+    @DisplayName("a payment whose currency is not the profile's is not attempted, and nothing is submitted under its reference")
     void a_currency_mismatch_is_not_attempted() throws Exception {
         PaymentIntent wrongCurrency = new PaymentIntent(Capability.Operation.COLLECT, Money.of(1000, Currency.XOF),
                 "46733123453", "", "", Map.of());

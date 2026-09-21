@@ -12,14 +12,16 @@ info:
   # automating the day this project releases often enough that a human is no longer reading
   # this file closely each time; not yet.
   #
-  # Moves to "1.1.0" here, independent of whatever the POMs currently carry: this file
-  # describes the API as published, and it changed for the first time since v1.0.0 --
-  # PaymentResponse gained escalatedAt and unresolvedSince, both additive (issue #113), which
-  # is why this is a minor bump rather than a major one. Bump it only when a path, method,
-  # field or status code in this file actually changes, whatever the gateway's own version
-  # happens to be at the time (the same reasoning charts/nkap/Chart.yaml gives for its own
-  # version field moving independently of appVersion).
-  version: "1.1.0"
+  # Moves to "1.2.0" here, independent of whatever the POMs currently carry: this file
+  # describes the API as published, and it changed again -- the payment-history cause enum
+  # gained GATEWAY (ADR 0013), a value naming a refusal this gateway made itself, without
+  # ever asking the operator, and the 201/202 response descriptions were rewritten so a
+  # reader can tell that apart from an operator's own answer. Additive, so a minor bump, the
+  # same as the last one. Bump it only when a path, method, field or status code in this file
+  # actually changes, whatever the gateway's own version happens to be at the time (the same
+  # reasoning charts/nkap/Chart.yaml gives for its own version field moving independently of
+  # appVersion).
+  version: "1.2.0"
   description: |
     A self-hosted mobile money gateway with a real double-entry ledger — MTN MoMo first,
     others through the same `ProviderAdapter` contract. See `README.md` for what Nkap is and

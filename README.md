@@ -249,7 +249,7 @@ come back here.
 
 ```bash
 curl -fsSL -o nkap-standalone.compose.yaml \
-  https://raw.githubusercontent.com/deval123/nkap/v1.2.0/nkap-standalone.compose.yaml
+  https://raw.githubusercontent.com/deval123/nkap/v2.0.0/nkap-standalone.compose.yaml
 ```
 
 Pinned to a tag, not to `main`, so the file you get and the images it names are the same
@@ -267,7 +267,7 @@ real must never have one reachable from the same process that moves real money; 
 own comment for the rest of that reasoning.
 
 ```bash
-export NKAP_VERSION=1.2.0                 # the release you downloaded the file for
+export NKAP_VERSION=2.0.0                 # the release you downloaded the file for
 export NKAP_DB_PASSWORD=$(openssl rand -hex 32)
 export NKAP_MERCHANT_ID=your-merchant-id
 docker compose -f nkap-standalone.compose.yaml up -d

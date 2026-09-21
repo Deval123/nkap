@@ -1,8 +1,8 @@
 # Nkap, from published images -- no checkout, no build (issue #86).
 #
 #     curl -fsSL -o nkap-standalone.compose.yaml \
-#       https://raw.githubusercontent.com/deval123/nkap/v1.2.0/nkap-standalone.compose.yaml
-#     export NKAP_VERSION=1.2.0 NKAP_DB_PASSWORD=... NKAP_MERCHANT_ID=...
+#       https://raw.githubusercontent.com/deval123/nkap/v2.0.0/nkap-standalone.compose.yaml
+#     export NKAP_VERSION=2.0.0 NKAP_DB_PASSWORD=... NKAP_MERCHANT_ID=...
 #     docker compose -f nkap-standalone.compose.yaml up -d
 #     docker compose -f nkap-standalone.compose.yaml logs key-init   # your API key -- once
 #

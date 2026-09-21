@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 
 import dev.nkap.core.money.Currency;
 import dev.nkap.core.money.Money;
@@ -17,6 +18,7 @@ import dev.nkap.provider.ProviderAdapter;
 import dev.nkap.provider.ProviderStatus;
 import dev.nkap.provider.ProviderUnavailableException;
 import dev.nkap.provider.QuerySubject;
+import dev.nkap.provider.Resolution;
 import dev.nkap.provider.SubmitResult;
 import dev.nkap.provider.UntrustedCallbackException;
 import java.util.Map;
@@ -143,31 +145,42 @@ public abstract class ProviderAdapterConformanceTest {
     }
 
     /**
-     * Issue #186: the query used to be built from {@code providerReferenceFrom(again)} — the
-     * <em>second</em> submission's own reference — so an operator that created a second
-     * payment for the reused reference was asked about that second payment and answered
-     * about it happily. The rule passed for MTN not because it checked anything, but because
-     * MTN is idempotent (a repeated {@code requesttopay} answers {@code 409
-     * RESOURCE_ALREADY_EXIST}) and its {@code providerReference} is always blank regardless.
+     * Issue #186's trace, unchanged: the query used to be built from
+     * {@code providerReferenceFrom(again)} — the <em>second</em> submission's own reference —
+     * so an operator that created a second payment for the reused reference was asked about
+     * that second payment and answered about it happily. The fix compares what the two
+     * submissions' own return values already say for free: two <strong>different,
+     * non-blank</strong> provider references for one gateway reference is proof the operator
+     * created two payments.
      *
-     * <p>The fix keeps the query — it is still the only way to observe the state a real
-     * caller would end up querying — and adds what the two submissions' own return values
-     * already say for free: two <strong>different, non-blank</strong> provider references for
-     * one gateway reference is proof the operator created two payments. This can never fire
-     * for MTN, and that silence is a documented property of MTN (a blank
-     * {@code providerReference}), not a check looking at the wrong object — a future adapter
-     * must not "fix" the blank case by requiring a reference to be present.
+     * <p><strong>ADR 0014, decision 4: this was never really a check that the operator
+     * deduplicates, and it must not be named as if it were.</strong> Reading the call graph
+     * shows {@code adapter.submit} has exactly one caller per payment
+     * ({@code PaymentService.callOperator}; {@code RefundService} goes through the same
+     * method), no adapter here retries anything but a {@code 401} (which precedes
+     * processing, so it can never produce a second payment), and a merchant's retried
+     * {@code POST /payments} under the same {@code Idempotency-Key} never reaches an adapter
+     * a second time. One reference produces at most one {@code submit} call, for any
+     * operator, idempotent or not — Nkap does not depend on operator-side idempotency, so a
+     * rule requiring it was asserting a property of MTN, not a property this gateway needs.
      *
-     * <p><strong>What this still does not establish.</strong> It cannot count payments at the
-     * operator. An operator that creates a second payment and returns no reference for it, or
-     * returns the <em>same</em> reference for both, still passes — the kit drives an adapter,
-     * not the operator, and has no hook to observe the operator directly (that hook is #175's
-     * subject, for a different assertion, and is not built here). This rule catches exactly
-     * one thing: a duplicate the operator's own two answers already disagree about.
+     * <p>What actually matters is that <strong>the adapter itself</strong> never resends a
+     * submission that may already have been processed. Submitting twice from the kit,
+     * deliberately, to see whether the operator's own two answers agree is not that, and the
+     * kit has no way to observe whether an adapter resent anything at all — proving the
+     * operator received exactly one request needs a call-observation hook
+     * {@link ConformanceHarness} does not have (issue #175). Until it exists, the comparison
+     * above stays a <strong>partial</strong> catch — real, but not the no-resend rule ADR 0014
+     * says is what matters.
+     *
+     * <p>Stays silent for MTN by a documented property of MTN — {@code providerReference} is
+     * always blank — not by looking at the wrong object; a future adapter must not "fix" the
+     * blank case by requiring a reference to be present.
      */
     @Test
-    @DisplayName("the same reference submitted twice resolves to one outcome, and disagreeing provider references expose a duplicate")
-    void a_reference_submitted_twice_is_idempotent() throws Exception {
+    @DisplayName("reusing a reference is acknowledged safely, and a disagreeing provider reference is caught "
+            + "— this is not a check that the operator deduplicates")
+    void a_reused_reference_is_safe_and_a_disagreeing_provider_reference_is_caught() throws Exception {
         ProviderAdapter adapter = harness.adapter();
         ReferenceId reference = ReferenceId.newReference();
 
@@ -215,10 +228,29 @@ public abstract class ProviderAdapterConformanceTest {
                 "a query built from exactly what submit returned must still resolve normally");
     }
 
+    /**
+     * ADR 0014: a lost submission must be resolvable without a human, by <strong>at least
+     * one</strong> mechanism the adapter declares in {@link ProviderAdapter#resolves()} —
+     * querying is one such mechanism, not the definition. {@link Resolution#QUERY} keeps
+     * exactly the assertion this rule always made: a query built from only the reference
+     * Nkap chose must resolve. MTN declares both members, so it always takes that branch.
+     *
+     * <p>An adapter that declares {@link Resolution#CALLBACK} without {@code QUERY} cannot be
+     * exercised by that assertion at all — polling cannot work for it by definition — and the
+     * kit has no harness capability yet to drive the operator's own callback and check it
+     * resolves the payment (issue #175; not built in this slice, per ADR 0014 decision 2).
+     * The kit's job is to certify, not to note that it did not look, so the {@code
+     * CALLBACK}-only branch <strong>fails</strong>, naming the issue: a skipped test is
+     * green, and green here would say this adapter's lost-submission handling was checked
+     * when it was not — the exact defect class issue #186 was about. No adapter here takes
+     * this branch today; the day one does, failing is the correct answer until issue #175
+     * exists to make this rule assert something real.
+     */
     @Test
-    @DisplayName("a call that does not answer yields UNKNOWN, never a failure — and a later query may resolve it")
+    @DisplayName("a call that does not answer yields UNKNOWN, never a failure — resolved by whichever mechanism the adapter declares")
     void a_call_that_does_not_answer_is_never_a_failure() throws Exception {
         ProviderAdapter adapter = harness.adapter();
+        Set<Resolution> resolves = adapter.resolves();
         harness.makeSubmitNeverAnswer();
         ReferenceId reference = ReferenceId.newReference();
 
@@ -226,10 +258,35 @@ public abstract class ProviderAdapterConformanceTest {
         assertThrows(ProviderUnavailableException.class,
                 () -> adapter.submit(harness.anIntent(), reference));
 
-        // The payment may still exist at the operator: a later query can resolve it.
-        // QuerySubject.of(reference) is correct here, not a shortcut: submit() threw, so
-        // there is no SubmitResult and nothing a real caller could have kept.
-        assertSame(PaymentState.SUCCEEDED, adapter.query(QuerySubject.of(reference), operationUnderTest()).state());
+        if (resolves.contains(Resolution.QUERY)) {
+            // The payment may still exist at the operator: a later query can resolve it.
+            // QuerySubject.of(reference) is correct here, not a shortcut: submit() threw, so
+            // there is no SubmitResult and nothing a real caller could have kept.
+            assertSame(PaymentState.SUCCEEDED,
+                    adapter.query(QuerySubject.of(reference), operationUnderTest()).state());
+        } else if (resolves.contains(Resolution.CALLBACK)) {
+            fail("adapter declares CALLBACK without QUERY; the kit cannot yet drive the operator's own "
+                    + "callback and cannot certify this adapter's lost-submission handling until issue "
+                    + "#175 lands");
+        } else {
+            fail("adapter.resolves() returned " + resolves + ", which declares neither QUERY nor CALLBACK "
+                    + "-- Resolution.of(...) should have refused to construct this");
+        }
+    }
+
+    /**
+     * {@code CapabilityCoverageTest}'s sibling idea, copied here: a new {@link Resolution}
+     * member with no branch added to {@link #a_call_that_does_not_answer_is_never_a_failure}
+     * would otherwise fall into that method's {@code else} and fail there anyway — but only
+     * for an adapter that actually declares it. This fails for the addition itself, on this
+     * one line, whether or not any adapter has declared the new member yet.
+     */
+    @Test
+    @DisplayName("every Resolution member has a branch in a_call_that_does_not_answer_is_never_a_failure")
+    void every_resolution_member_is_branched_on() {
+        assertEquals(Set.of(Resolution.QUERY, Resolution.CALLBACK), Set.of(Resolution.values()),
+                "a new Resolution member needs a branch added to a_call_that_does_not_answer_is_never_a_failure "
+                        + "-- this failing is that branch's reminder");
     }
 
     @Test

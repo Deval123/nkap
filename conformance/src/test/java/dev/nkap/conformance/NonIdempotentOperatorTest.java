@@ -16,6 +16,7 @@ import dev.nkap.provider.ProviderId;
 import dev.nkap.provider.ProviderStatus;
 import dev.nkap.provider.QuerySubject;
 import dev.nkap.provider.RawCallback;
+import dev.nkap.provider.Resolution;
 import dev.nkap.provider.SubmitResult;
 import dev.nkap.provider.UntrustedCallbackException;
 import java.time.Duration;
@@ -28,8 +29,8 @@ import org.opentest4j.AssertionFailedError;
 /**
  * Issue #186: no adapter in this repository behaves this way — MTN is idempotent, so
  * {@code MtnConformanceTest} passing proves only that MTN does not trip the new assertion in
- * {@link ProviderAdapterConformanceTest#a_reference_submitted_twice_is_idempotent()}. This
- * drives that rule directly against a stub adapter shaped the way Safaricom's STK Push is
+ * {@link ProviderAdapterConformanceTest#a_reused_reference_is_safe_and_a_disagreeing_provider_reference_is_caught()}.
+ * This drives that rule directly against a stub adapter shaped the way Safaricom's STK Push is
  * documented to behave (two submissions of one gateway reference, two different, non-blank
  * provider references — proof the operator created a second payment) and checks the rule now
  * fails instead of reporting a single, safe outcome.
@@ -48,7 +49,7 @@ class NonIdempotentOperatorTest {
         rule.openHarness();
         try {
             AssertionFailedError failure = assertThrows(AssertionFailedError.class,
-                    rule::a_reference_submitted_twice_is_idempotent);
+                    rule::a_reused_reference_is_safe_and_a_disagreeing_provider_reference_is_caught);
             String message = failure.getMessage();
             assertTrue(message.contains("proof of two payments"),
                     () -> "expected the new assertion's message, got: " + message);
@@ -134,6 +135,11 @@ class NonIdempotentOperatorTest {
         @Override
         public Set<Capability> capabilities() {
             return Set.of(Capability.Operation.COLLECT);
+        }
+
+        @Override
+        public Set<Resolution> resolves() {
+            return Resolution.of(Resolution.QUERY);
         }
 
         @Override

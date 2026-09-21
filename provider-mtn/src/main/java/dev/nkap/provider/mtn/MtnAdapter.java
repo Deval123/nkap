@@ -13,6 +13,7 @@ import dev.nkap.provider.ProviderStatus;
 import dev.nkap.provider.ProviderUnavailableException;
 import dev.nkap.provider.QuerySubject;
 import dev.nkap.provider.RawCallback;
+import dev.nkap.provider.Resolution;
 import dev.nkap.provider.SubmitResult;
 import dev.nkap.provider.UntrustedCallbackException;
 import java.util.LinkedHashSet;
@@ -90,6 +91,22 @@ public final class MtnAdapter implements ProviderAdapter {
         }
         Set<Capability> union = new LinkedHashSet<>(collections.capabilities());
         union.addAll(disbursements.capabilities());
+        return Set.copyOf(union);
+    }
+
+    /**
+     * The union of what each configured product declares, the same reasoning as
+     * {@link #capabilities()}. Both products declare the same {@link Resolution} set today,
+     * so this reduces to either one's — union rather than a hardcoded pick because a facade
+     * over two products should not assume they will always agree.
+     */
+    @Override
+    public Set<Resolution> resolves() {
+        if (disbursements == null) {
+            return collections.resolves();
+        }
+        Set<Resolution> union = new LinkedHashSet<>(collections.resolves());
+        union.addAll(disbursements.resolves());
         return Set.copyOf(union);
     }
 

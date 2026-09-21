@@ -3,6 +3,7 @@ package dev.nkap.server.reconcile;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -18,6 +19,7 @@ import dev.nkap.provider.ProviderAdapter;
 import dev.nkap.provider.ProviderId;
 import dev.nkap.provider.ProviderStatus;
 import dev.nkap.provider.ProviderUnavailableException;
+import dev.nkap.provider.Resolution;
 import dev.nkap.server.outbox.InMemoryOutbox;
 import dev.nkap.server.outbox.OutboxNotifier;
 import dev.nkap.server.payment.Payment;
@@ -41,6 +43,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CyclicBarrier;
@@ -117,6 +120,7 @@ class ReconcilerIT {
     @DisplayName("a payment the reconciler moves from UNKNOWN to PENDING is claimed again on the next pass")
     void a_payment_moved_to_pending_is_still_chased() throws Exception {
         ProviderAdapter operator = mock(ProviderAdapter.class);
+        when(operator.resolves()).thenReturn(Set.of(Resolution.QUERY, Resolution.CALLBACK));
         when(operator.query(any(), any())).thenReturn(new ProviderStatus(
                 PaymentState.PENDING, "PENDING", "", null, "", "{\"status\":\"PENDING\"}"));
         Reconciler reconciler = reconcilerWith(defaults(), registryFor(operator));
@@ -143,6 +147,7 @@ class ReconcilerIT {
     @DisplayName("a SUBMITTED payment whose operator has gone silent is claimed and re-queried")
     void a_silent_submitted_payment_is_chased() throws Exception {
         ProviderAdapter operator = mock(ProviderAdapter.class);
+        when(operator.resolves()).thenReturn(Set.of(Resolution.QUERY, Resolution.CALLBACK));
         when(operator.query(any(), any())).thenThrow(new ProviderUnavailableException("still nothing"));
         Reconciler reconciler = reconcilerWith(defaults(), registryFor(operator));
 
@@ -354,6 +359,7 @@ class ReconcilerIT {
         ReconcilerProperties properties = new ReconcilerProperties(
                 Duration.ofSeconds(30), 50, Duration.ofMinutes(10), Duration.ofMinutes(10), Duration.ofSeconds(1), Duration.ofMinutes(2));
         ProviderAdapter silentOperator = mock(ProviderAdapter.class);
+        when(silentOperator.resolves()).thenReturn(Set.of(Resolution.QUERY, Resolution.CALLBACK));
         when(silentOperator.query(any(), any())).thenThrow(new ProviderUnavailableException("silent"));
         Reconciler reconciler = reconcilerWith(properties, registryFor(silentOperator));
 
@@ -557,6 +563,7 @@ class ReconcilerIT {
         ReconcilerProperties properties = new ReconcilerProperties(
                 Duration.ofSeconds(30), 50, Duration.ofMinutes(10), Duration.ofMinutes(10), Duration.ofSeconds(1), Duration.ofMinutes(2));
         ProviderAdapter silentOperator = mock(ProviderAdapter.class);
+        when(silentOperator.resolves()).thenReturn(Set.of(Resolution.QUERY, Resolution.CALLBACK));
         when(silentOperator.query(any(), any())).thenThrow(new ProviderUnavailableException("silent"));
         Reconciler reconciler = reconcilerWith(properties, registryFor(silentOperator));
 
@@ -585,6 +592,55 @@ class ReconcilerIT {
 
         assertThat(payments.findByReference(reference).orElseThrow().state()).isEqualTo(PaymentState.SUCCEEDED);
         assertThat(ledger.entriesForReference(reference.toString())).hasSize(1);
+    }
+
+    // === an adapter that cannot be queried is escalated immediately, without calling the
+    // operator at all (ADR 0014 decision 3, issue #188) ==============================
+
+    @Test
+    @DisplayName("an adapter that does not declare QUERY escalates a payment with no provider "
+            + "reference on the first pass, without ever calling the operator")
+    void an_unqueryable_adapter_with_no_provider_reference_is_escalated_immediately() throws Exception {
+        ProviderAdapter operator = mock(ProviderAdapter.class);
+        when(operator.resolves()).thenReturn(Set.of(Resolution.CALLBACK));
+        Reconciler reconciler = reconcilerWith(defaults(), registryFor(operator));
+
+        ReferenceId reference = anUnknownPaymentDueForReconciliation();
+
+        assertThat(reconciler.runOnce()).as("the claim is still counted").isEqualTo(1);
+
+        Map<String, Object> row = paymentRow(reference);
+        assertThat(row.get("escalated_at")).as("escalated on the very first pass").isNotNull();
+        assertThat(row.get("state")).isEqualTo(PaymentState.UNKNOWN.name());
+        assertThat(((Number) row.get("reconcile_attempts")).intValue())
+                .as("claiming the payment still counts as usual -- it is the operator, not the claim, that this trigger skips")
+                .isEqualTo(1);
+        verify(operator, never()).query(any(), any());
+        assertThat(statesEverReached(reference))
+                .as("escalation is never a verdict -- never FAILED")
+                .doesNotContain(PaymentState.FAILED.name());
+    }
+
+    @Test
+    @DisplayName("the same adapter still queries normally once a provider reference is recorded -- "
+            + "the regression the wrong trigger (adapter declaration alone) would cause")
+    void an_unqueryable_adapter_with_a_provider_reference_is_still_queried_normally() throws Exception {
+        ProviderAdapter operator = mock(ProviderAdapter.class);
+        when(operator.resolves()).thenReturn(Set.of(Resolution.CALLBACK));
+        when(operator.query(any(), any())).thenReturn(new ProviderStatus(
+                PaymentState.PENDING, "PENDING", "", null, "", "{\"status\":\"PENDING\"}"));
+        Reconciler reconciler = reconcilerWith(defaults(), registryFor(operator));
+
+        ReferenceId reference = anUnknownPaymentWithProviderReferenceDueForReconciliation("operator-ref-1");
+
+        assertThat(reconciler.runOnce()).isEqualTo(1);
+
+        verify(operator, times(1)).query(any(), any());
+        Map<String, Object> row = paymentRow(reference);
+        assertThat(row.get("escalated_at"))
+                .as("a submission that did get a provider reference back can still be queried")
+                .isNull();
+        assertThat(row.get("state")).isEqualTo(PaymentState.PENDING.name());
     }
 
     // === 6. two reconcilers, real SKIP LOCKED, never the same payment ================
@@ -670,11 +726,12 @@ class ReconcilerIT {
         ReconciliationStore store = new PostgresReconciliationStore(jdbc, txManager, policy);
         SettlementService settlement = new SettlementService(payments, adapters, ledger,
                 new OutboxNotifier(new InMemoryOutbox(), new InMemoryWebhookEndpointStore(), new ObjectMapper()), txManager);
-        return new Reconciler(payments, store, settlement, policy, properties, clock, new SimpleMeterRegistry(), txManager);
+        return new Reconciler(payments, store, settlement, adapters, policy, properties, clock, new SimpleMeterRegistry(), txManager);
     }
 
     private static AdapterRegistry operatorThatIsSilent() {
         ProviderAdapter operator = mock(ProviderAdapter.class);
+        when(operator.resolves()).thenReturn(Set.of(Resolution.QUERY, Resolution.CALLBACK));
         try {
             when(operator.query(any(), any())).thenThrow(new ProviderUnavailableException("the operator is silent"));
         } catch (ProviderUnavailableException impossible) {
@@ -685,6 +742,7 @@ class ReconcilerIT {
 
     private static AdapterRegistry operatorAnswering(ProviderStatus status) {
         ProviderAdapter operator = mock(ProviderAdapter.class);
+        when(operator.resolves()).thenReturn(Set.of(Resolution.QUERY, Resolution.CALLBACK));
         try {
             when(operator.query(any(), any())).thenReturn(status);
         } catch (ProviderUnavailableException impossible) {
@@ -696,6 +754,12 @@ class ReconcilerIT {
     private static AdapterRegistry registryFor(ProviderAdapter operator) {
         AdapterRegistry adapters = mock(AdapterRegistry.class);
         when(adapters.require(any())).thenReturn(operator);
+        // A real AdapterRegistry answers find() the same way as require() for a provider it
+        // has an adapter for -- Reconciler.cannotBeQueried reads find() so it never forces
+        // adapter construction just to check the declaration, unlike SettlementService's
+        // require() (an unconfigured provider is that method's problem to throw on, not this
+        // one's to guess about).
+        when(adapters.find(any())).thenReturn(Optional.of(operator));
         return adapters;
     }
 
@@ -713,6 +777,25 @@ class ReconcilerIT {
                 "", "the submit call did not answer", "");
         payments.save(payment);
         // Make it unambiguously due, whatever the clocks are doing.
+        jdbc.update("UPDATE payment SET reconcile_due_at = now() - interval '1 hour' WHERE reference = ?",
+                reference.value());
+        pendingReferences.add(reference);
+        return reference;
+    }
+
+    /**
+     * The same as {@link #anUnknownPaymentDueForReconciliation()}, but with a provider
+     * reference recorded -- a submission whose own response was <strong>not</strong> lost,
+     * unlike every other fixture in this file.
+     */
+    private ReferenceId anUnknownPaymentWithProviderReferenceDueForReconciliation(String providerReference) {
+        ReferenceId reference = ReferenceId.newReference();
+        Payment payment = Payment.create(reference, MTN, "merchant-1", intent());
+        payment.recordProviderReference(providerReference);
+        payment.applyTransition(PaymentState.SUBMITTED, PaymentTransition.Cause.SUBMIT_RESPONSE, "", "", "");
+        payment.applyTransition(PaymentState.UNKNOWN, PaymentTransition.Cause.SUBMIT_RESPONSE,
+                "", "the submit call did not answer", "");
+        payments.save(payment);
         jdbc.update("UPDATE payment SET reconcile_due_at = now() - interval '1 hour' WHERE reference = ?",
                 reference.value());
         pendingReferences.add(reference);

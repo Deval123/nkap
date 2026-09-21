@@ -225,6 +225,9 @@ class ActuatorSurfaceIT extends PostgresSpringBootIT {
         assertThat(olderItem.get("escalatedAt").asText()).isNotEmpty();
         assertThat(olderItem.get("unresolvedSince").asText()).isNotEmpty();
         assertThat(olderItem.get("reconcileAttempts").asInt()).isEqualTo(5);
+        assertThat(olderItem.get("reason").asText())
+                .as("mtn-sandbox declares QUERY, so this fixture can only have been escalated for exhausting its window (ADR 0014 decision 3, issue #188)")
+                .isEqualTo("window_exhausted");
 
         for (String excluded : List.of("counterpartyMsisdn", "amountMinorUnits", "currency", "payerMessage", "payeeNote")) {
             assertThat(olderItem.has(excluded)).as("%s is customer PII or business volume, not operational triage data", excluded).isFalse();

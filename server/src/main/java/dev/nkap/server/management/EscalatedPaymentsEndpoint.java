@@ -2,6 +2,7 @@ package dev.nkap.server.management;
 
 import dev.nkap.server.payment.Payment;
 import dev.nkap.server.payment.PaymentRepository;
+import dev.nkap.server.provider.AdapterRegistry;
 import java.time.Instant;
 import java.util.List;
 import org.springframework.boot.actuate.endpoint.annotation.Endpoint;
@@ -32,6 +33,24 @@ import org.springframework.stereotype.Component;
  * {@code application.yml} already gives for keeping that port off the public network. What is
  * returned answers only which payments need a human, for which merchant, and since when.
  *
+ * <p><strong>{@code reason} (ADR 0014 decision 3, issue #188).</strong> A bounded reason
+ * code — {@code cannot_query} or {@code window_exhausted} — never a message, for the same
+ * reason the other fields here stay narrow: this port is unauthenticated and a message could
+ * carry an operator's own text. Not a stored column: {@link Payment#providerReference()} is
+ * already on hand and never changes after a payment leaves {@code CREATED}
+ * ({@code recordProviderReference} is only ever called at submission), so
+ * {@link Payment#cannotBeQueriedBy} can recompute half of the trigger the reconciler decided
+ * escalation on instead of persisting it. The other half cannot be trusted the same way:
+ * whether the configured adapter for {@link Payment#provider()} declares
+ * {@link dev.nkap.provider.Resolution#QUERY} is a fact about <em>today's</em> deployment, not
+ * about the payment, and a reconfigured or upgraded adapter can answer that question
+ * differently tomorrow than it did at escalation time — recomputing it live could relabel a
+ * payment's own history. {@code reason} is {@code cannot_query} only when
+ * {@link Payment#cannotBeQueriedBy} holds <strong>and</strong>
+ * {@link Payment#reconcileAttempts()} is {@code 0}, which is what that escalation path always
+ * and only produces (the reconciler never calls the operator on it); a payment queried even
+ * once carries {@code window_exhausted}, whatever the adapter declares now.
+ *
  * <p><strong>Bounded</strong>, not because the list is expected to be large but because the
  * moment an operator reads this is the moment escalations are rising — precisely when it
  * would be longest. {@link PaymentRepository#findEscalated} enforces the cap in the query
@@ -54,9 +73,11 @@ public class EscalatedPaymentsEndpoint {
     public static final int LIMIT = 100;
 
     private final PaymentRepository payments;
+    private final AdapterRegistry adapters;
 
-    EscalatedPaymentsEndpoint(PaymentRepository payments) {
+    EscalatedPaymentsEndpoint(PaymentRepository payments, AdapterRegistry adapters) {
         this.payments = payments;
+        this.adapters = adapters;
     }
 
     @ReadOperation
@@ -64,10 +85,10 @@ public class EscalatedPaymentsEndpoint {
         List<Payment> found = payments.findEscalated(LIMIT + 1);
         boolean truncated = found.size() > LIMIT;
         List<Payment> page = truncated ? found.subList(0, LIMIT) : found;
-        return new EscalatedPaymentsResponse(page.stream().map(EscalatedPaymentsEndpoint::toItem).toList(), truncated);
+        return new EscalatedPaymentsResponse(page.stream().map(this::toItem).toList(), truncated);
     }
 
-    private static EscalatedPaymentsResponse.Item toItem(Payment payment) {
+    private EscalatedPaymentsResponse.Item toItem(Payment payment) {
         return new EscalatedPaymentsResponse.Item(
                 payment.reference().toString(),
                 payment.provider().toString(),
@@ -75,7 +96,16 @@ public class EscalatedPaymentsEndpoint {
                 payment.state().name(),
                 orEmpty(payment.escalatedAt()),
                 orEmpty(payment.unresolvedSince()),
-                payment.reconcileAttempts());
+                payment.reconcileAttempts(),
+                reasonFor(payment));
+    }
+
+    private String reasonFor(Payment payment) {
+        boolean cannotQuery = payment.reconcileAttempts() == 0
+                && adapters.find(payment.provider())
+                        .map(payment::cannotBeQueriedBy)
+                        .orElse(false);
+        return cannotQuery ? "cannot_query" : "window_exhausted";
     }
 
     private static String orEmpty(Instant instant) {

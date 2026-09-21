@@ -12,6 +12,7 @@ import dev.nkap.provider.ProviderId;
 import dev.nkap.server.payment.ConfirmationOutcome;
 import dev.nkap.server.payment.PaymentRepository;
 import dev.nkap.server.payment.SettlementService;
+import dev.nkap.server.provider.AdapterRegistry;
 import dev.nkap.server.reconcile.ReconciliationStore.Claim;
 import dev.nkap.server.support.LogCapture;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
@@ -37,12 +38,13 @@ class ReconcilerTest {
     private final PaymentRepository payments = mock(PaymentRepository.class);
     private final ReconciliationStore store = mock(ReconciliationStore.class);
     private final SettlementService settlement = mock(SettlementService.class);
+    private final AdapterRegistry adapters = mock(AdapterRegistry.class);
     private final ReconciliationPolicy policy = new ReconciliationPolicy(
             Duration.ofMinutes(1), Duration.ofHours(1), Duration.ofHours(24));
     private final ReconcilerProperties properties = new ReconcilerProperties(
             Duration.ofSeconds(30), 100, Duration.ofMinutes(1), Duration.ofHours(1), Duration.ofHours(24), Duration.ofMinutes(2));
     private final Instant now = Instant.parse("2026-01-01T00:00:00Z");
-    private final Reconciler reconciler = new Reconciler(payments, store, settlement, policy, properties,
+    private final Reconciler reconciler = new Reconciler(payments, store, settlement, adapters, policy, properties,
             Clock.fixed(now, ZoneOffset.UTC), new SimpleMeterRegistry(), mock(PlatformTransactionManager.class));
 
     @Test

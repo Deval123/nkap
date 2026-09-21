@@ -1,11 +1,13 @@
 package dev.nkap.server.reconcile;
 
 import dev.nkap.core.payment.PaymentState;
+import dev.nkap.provider.Resolution;
 import dev.nkap.server.payment.ConfirmationOutcome;
 import dev.nkap.server.payment.Payment;
 import dev.nkap.server.payment.PaymentRepository;
 import dev.nkap.server.payment.PaymentTransition;
 import dev.nkap.server.payment.SettlementService;
+import dev.nkap.server.provider.AdapterRegistry;
 import dev.nkap.server.reconcile.ReconciliationStore.Claim;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -39,9 +41,21 @@ import org.springframework.transaction.support.TransactionTemplate;
  * waiting is not the operator saying the payment failed, and this system never makes that
  * inference. An escalated payment is still non-terminal and a later callback or a later
  * manual query can still resolve it. Every escalation also increments
- * {@code nkap.payment.escalated}, a counter tagged only {@code provider} — the second of
- * the two alerting rules the plan asked to ship (issue #75; see
+ * {@code nkap.payment.escalated}, a counter tagged {@code provider} and {@code reason} — the
+ * second of the two alerting rules the plan asked to ship (issue #75; see
  * {@code docs/prometheus-alerts.yml}).
+ *
+ * <p><strong>One claim never reaches the operator at all (ADR 0014 decision 3, issue
+ * #188).</strong> Before {@code confirm} is called, a claim whose adapter does not declare
+ * {@link dev.nkap.provider.Resolution#QUERY} <em>and</em> whose payment holds no provider
+ * reference — {@link Payment#cannotBeQueriedBy} — is escalated immediately, with zero
+ * attempts and no operator call. Backing off and re-asking on a schedule assumes the next
+ * ask might answer; here it provably cannot, because there is nothing to ask with and no way
+ * to be told the answer for that request specifically. Escalating instead of polling for the
+ * whole window is the only runtime behaviour change that ADR makes, and it is a separate
+ * reason to escalate, not a shorter {@link ReconciliationPolicy#windowExhausted} window: every
+ * other unresolved payment is still chased exactly as before. No adapter declares only
+ * {@code CALLBACK} today, so this path is dormant until one does.
  *
  * <p>The operator call sits outside the claim transaction, for the reason written twice
  * elsewhere in this codebase: an operator that does not answer must not hold a database
@@ -84,6 +98,7 @@ public class Reconciler {
     private final PaymentRepository payments;
     private final ReconciliationStore store;
     private final SettlementService settlement;
+    private final AdapterRegistry adapters;
     private final ReconciliationPolicy policy;
     private final ReconcilerProperties properties;
     private final Clock clock;
@@ -91,11 +106,12 @@ public class Reconciler {
     private final TransactionTemplate tx;
 
     public Reconciler(PaymentRepository payments, ReconciliationStore store, SettlementService settlement,
-                      ReconciliationPolicy policy, ReconcilerProperties properties, Clock clock,
-                      MeterRegistry meterRegistry, PlatformTransactionManager txManager) {
+                      AdapterRegistry adapters, ReconciliationPolicy policy, ReconcilerProperties properties,
+                      Clock clock, MeterRegistry meterRegistry, PlatformTransactionManager txManager) {
         this.payments = payments;
         this.store = store;
         this.settlement = settlement;
+        this.adapters = adapters;
         this.policy = policy;
         this.properties = properties;
         this.clock = clock;
@@ -127,6 +143,16 @@ public class Reconciler {
             List<Claim> claims = store.claimDue(properties.batchSize(), now);
             log.debug("reconciler pass {} claimed {} payment(s)", passId, claims.size());
             for (Claim claim : claims) {
+                if (cannotBeQueried(claim)) {
+                    if (store.markEscalated(claim.reference(), now)) {
+                        log.warn("payment {} escalated to a human immediately: provider {} does not declare "
+                                        + "Resolution.QUERY and this payment holds no provider reference, so no "
+                                        + "reconciler attempt could ever resolve it -- no attempt was made",
+                                claim.reference(), claim.provider());
+                        escalated(claim.provider().toString(), "cannot_query");
+                    }
+                    continue;
+                }
                 ConfirmationOutcome outcome =
                         settlement.confirm(claim.provider(), claim.reference(), PaymentTransition.Cause.RECONCILER);
                 if (outcome.resolved()) {
@@ -135,7 +161,7 @@ public class Reconciler {
                 if (policy.windowExhausted(claim.unresolvedSince(), now) && store.markEscalated(claim.reference(), now)) {
                     log.warn("payment {} escalated to a human after {} reconciler attempt(s); operator's last answer: {}",
                             claim.reference(), claim.attempts(), outcome.lastOperatorAnswer());
-                    escalated(claim.provider().toString());
+                    escalated(claim.provider().toString(), "window_exhausted");
                 }
             }
             return claims.size();
@@ -167,10 +193,29 @@ public class Reconciler {
         }
     }
 
-    private void escalated(String provider) {
+    /**
+     * ADR 0014 decision 3's trigger, checked cheaply: the adapter lookup is in memory, so a
+     * claim whose adapter declares {@code QUERY} — every adapter today — never pays for the
+     * payment row read {@link Payment#cannotBeQueriedBy} also needs. Only once an adapter
+     * lacks {@code QUERY} does this go back to the database to check the one thing that can
+     * still save it: a provider reference from a submission that did get answered.
+     */
+    private boolean cannotBeQueried(Claim claim) {
+        return adapters.find(claim.provider())
+                .filter(adapter -> !adapter.resolves().contains(Resolution.QUERY))
+                .flatMap(adapter -> payments.findByReference(claim.reference()).map(payment -> payment.cannotBeQueriedBy(adapter)))
+                .orElse(false);
+    }
+
+    private void escalated(String provider, String reason) {
         Counter.builder("nkap.payment.escalated")
-                .description("Payments the reconciler gave up retrying automatically. Still open, not FAILED -- needs a human.")
+                .description("Payments the reconciler gave up retrying automatically. Still open, not FAILED "
+                        + "-- needs a human. reason=window_exhausted is the ordinary case; "
+                        + "reason=cannot_query (ADR 0014 decision 3) is a payment escalated with zero reconciler "
+                        + "attempts because its adapter cannot resolve a lost submission by polling and it has no "
+                        + "provider reference to query with.")
                 .tag("provider", provider)
+                .tag("reason", reason)
                 .register(meterRegistry)
                 .increment();
     }

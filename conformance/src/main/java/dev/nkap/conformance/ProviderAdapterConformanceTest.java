@@ -142,8 +142,31 @@ public abstract class ProviderAdapterConformanceTest {
         }
     }
 
+    /**
+     * Issue #186: the query used to be built from {@code providerReferenceFrom(again)} — the
+     * <em>second</em> submission's own reference — so an operator that created a second
+     * payment for the reused reference was asked about that second payment and answered
+     * about it happily. The rule passed for MTN not because it checked anything, but because
+     * MTN is idempotent (a repeated {@code requesttopay} answers {@code 409
+     * RESOURCE_ALREADY_EXIST}) and its {@code providerReference} is always blank regardless.
+     *
+     * <p>The fix keeps the query — it is still the only way to observe the state a real
+     * caller would end up querying — and adds what the two submissions' own return values
+     * already say for free: two <strong>different, non-blank</strong> provider references for
+     * one gateway reference is proof the operator created two payments. This can never fire
+     * for MTN, and that silence is a documented property of MTN (a blank
+     * {@code providerReference}), not a check looking at the wrong object — a future adapter
+     * must not "fix" the blank case by requiring a reference to be present.
+     *
+     * <p><strong>What this still does not establish.</strong> It cannot count payments at the
+     * operator. An operator that creates a second payment and returns no reference for it, or
+     * returns the <em>same</em> reference for both, still passes — the kit drives an adapter,
+     * not the operator, and has no hook to observe the operator directly (that hook is #175's
+     * subject, for a different assertion, and is not built here). This rule catches exactly
+     * one thing: a duplicate the operator's own two answers already disagree about.
+     */
     @Test
-    @DisplayName("the same reference submitted twice produces one payment, not two")
+    @DisplayName("the same reference submitted twice resolves to one outcome, and disagreeing provider references expose a duplicate")
     void a_reference_submitted_twice_is_idempotent() throws Exception {
         ProviderAdapter adapter = harness.adapter();
         ReferenceId reference = ReferenceId.newReference();
@@ -154,8 +177,16 @@ public abstract class ProviderAdapterConformanceTest {
         assertInstanceOf(SubmitResult.Acknowledged.class, first, "first submission");
         assertInstanceOf(SubmitResult.Acknowledged.class, again,
                 "the same reference again is acknowledged, not rejected and not an error");
+
+        String firstProviderReference = providerReferenceFrom(first);
+        String againProviderReference = providerReferenceFrom(again);
+        if (!firstProviderReference.isBlank() && !againProviderReference.isBlank()) {
+            assertEquals(firstProviderReference, againProviderReference,
+                    "two different, non-blank provider references for one gateway reference is proof of two payments");
+        }
+
         assertSame(PaymentState.SUCCEEDED,
-                adapter.query(new QuerySubject(reference, providerReferenceFrom(again)), operationUnderTest()).state(),
+                adapter.query(new QuerySubject(reference, againProviderReference), operationUnderTest()).state(),
                 "the reused reference resolves to a single outcome");
     }
 

@@ -28,6 +28,12 @@ All notable changes to Nkap are documented here. The format follows
   currency guard now returns `SubmitResult.NotAttempted` instead of throwing
   `IllegalArgumentException`, which only matters to a caller of `ProviderAdapter.submit`
   directly, not to `PaymentService`.
+- **`ProviderAdapter` gains a new abstract method, `resolves()`** (ADR 0014): every adapter
+  must now declare, as a `Set<Resolution>`, how a payment whose submission never answered can
+  be resolved without a human — `QUERY`, `CALLBACK`, or both. There is no default
+  implementation, on purpose — a default of `QUERY` would let an adapter that cannot query
+  claim it can by declaring nothing — so an existing adapter does not compile until it adds
+  one. Both MTN adapters now declare `QUERY` and `CALLBACK`.
 
 ### Added
 

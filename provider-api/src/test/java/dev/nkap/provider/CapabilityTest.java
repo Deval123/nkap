@@ -46,6 +46,11 @@ class CapabilityTest {
             }
 
             @Override
+            public Set<Resolution> resolves() {
+                return Resolution.of(Resolution.QUERY);
+            }
+
+            @Override
             public SubmitResult submit(PaymentIntent intent, ReferenceId reference) {
                 throw new UnsupportedOperationException("not needed for this test");
             }

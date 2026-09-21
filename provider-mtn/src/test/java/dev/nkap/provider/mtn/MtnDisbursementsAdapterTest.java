@@ -15,6 +15,7 @@ import dev.nkap.provider.ProviderStatus;
 import dev.nkap.provider.ProviderUnavailableException;
 import dev.nkap.provider.QuerySubject;
 import dev.nkap.provider.RawCallback;
+import dev.nkap.provider.Resolution;
 import dev.nkap.provider.SubmitResult;
 import dev.nkap.provider.mtn.StubMtn.StubResponse;
 import java.net.URI;
@@ -168,6 +169,7 @@ class MtnDisbursementsAdapterTest {
         assertThat(mtn.id()).isEqualTo(ProviderId.of("mtn"));
         assertThat(mtn.capabilities()).containsExactlyInAnyOrder(
                 Capability.Operation.DISBURSE, Capability.Feature.BALANCE, Capability.Feature.HOLDER_VALIDATION);
+        assertThat(mtn.resolves()).containsExactlyInAnyOrder(Resolution.QUERY, Resolution.CALLBACK);
     }
 
     @Test

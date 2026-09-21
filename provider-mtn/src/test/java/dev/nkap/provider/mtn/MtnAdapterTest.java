@@ -11,6 +11,7 @@ import dev.nkap.provider.Capability;
 import dev.nkap.provider.PaymentIntent;
 import dev.nkap.provider.ProviderId;
 import dev.nkap.provider.QuerySubject;
+import dev.nkap.provider.Resolution;
 import dev.nkap.provider.mtn.StubMtn.StubResponse;
 import java.lang.reflect.Constructor;
 import java.time.Duration;
@@ -65,6 +66,10 @@ class MtnAdapterTest {
             assertThat(facadeAt(mtn, false).capabilities()).containsExactlyInAnyOrder(
                     Capability.Operation.COLLECT, Capability.Feature.BALANCE, Capability.Feature.HOLDER_VALIDATION);
             assertThat(facadeAt(mtn, false).id()).isEqualTo(ProviderId.of("mtn"));
+            assertThat(facadeAt(mtn, true).resolves()).containsExactlyInAnyOrder(
+                    Resolution.QUERY, Resolution.CALLBACK);
+            assertThat(facadeAt(mtn, false).resolves()).containsExactlyInAnyOrder(
+                    Resolution.QUERY, Resolution.CALLBACK);
         }
     }
 

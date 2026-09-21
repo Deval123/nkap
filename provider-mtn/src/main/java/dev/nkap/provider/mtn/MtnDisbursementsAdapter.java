@@ -18,6 +18,7 @@ import dev.nkap.provider.ProviderStatus;
 import dev.nkap.provider.ProviderUnavailableException;
 import dev.nkap.provider.QuerySubject;
 import dev.nkap.provider.RawCallback;
+import dev.nkap.provider.Resolution;
 import dev.nkap.provider.SubmitResult;
 import dev.nkap.provider.UntrustedCallbackException;
 import java.io.IOException;
@@ -94,6 +95,13 @@ public final class MtnDisbursementsAdapter implements ProviderAdapter {
     @Override
     public Set<Capability> capabilities() {
         return Set.of(Capability.Operation.DISBURSE, Capability.Feature.BALANCE, Capability.Feature.HOLDER_VALIDATION);
+    }
+
+    // CALLBACK is observed, not assumed: docs/providers/mtn.md records a real callback
+    // reaching the gateway, carrying what Nkap sent.
+    @Override
+    public Set<Resolution> resolves() {
+        return Resolution.of(Resolution.QUERY, Resolution.CALLBACK);
     }
 
     @Override

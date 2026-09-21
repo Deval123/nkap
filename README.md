@@ -430,7 +430,10 @@ definition of done — a historical record now, not a plan.
 **After 1.0.0 — the other operators.** Orange Money, Wave, M-Pesa, Airtel. This is the
 contribution the architecture was built to accept: a new adapter is a self-contained module
 that has to pass the conformance kit, which is what lets a maintainer merge an operator they
-have no account with. The goal is every mobile money operator worth integrating.
+have no account with. The goal is every mobile money operator worth integrating. Under
+[ADR 0014](docs/adr/0014-resolvable-not-queryable.md), M-Pesa's lost-submission case is
+resolvable by callback rather than by query, and attributing that callback to a payment
+needs issue #185 first.
 
 Nkap runs on one container and one database. Kafka is an optional connector, not a
 requirement — see [ADR 0003](docs/adr/0003-kafka-is-optional.md).

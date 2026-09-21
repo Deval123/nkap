@@ -60,6 +60,22 @@ public interface ProviderAdapter {
             throws ProviderUnavailableException;
 
     /**
+     * How this adapter can resolve a payment whose submission never answered, without a human
+     * (ADR 0014). Not a declaration of which methods this adapter implements — every adapter
+     * implements {@link #query} and {@link #parseCallback} regardless. It is a fact about
+     * whether either one can actually bring back an answer for a submission whose own response
+     * was lost, which is a narrower and operator-specific question — see {@link Resolution}'s
+     * own javadoc for the distinction, and {@link Resolution#of} for the only way to build the
+     * returned set: it refuses to be empty.
+     *
+     * <p>No default implementation, on purpose. A default of {@code Set.of(QUERY)} would let an
+     * adapter that cannot query a lost submission claim it can by declaring nothing, and this
+     * project has already recorded why a shape the compiler does not force anyone to fill in is
+     * how the "unknown mapped to a guess" class of bug gets in (ADR 0005).
+     */
+    Set<Resolution> resolves();
+
+    /**
      * Asks the provider what became of a payment. The authority on the outcome.
      *
      * <p>{@code capability} is the operation the reference was submitted under. An operator

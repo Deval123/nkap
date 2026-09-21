@@ -5,6 +5,7 @@ import static org.mockito.Mockito.mock;
 
 import dev.nkap.server.payment.PaymentRepository;
 import dev.nkap.server.payment.SettlementService;
+import dev.nkap.server.provider.AdapterRegistry;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.DisplayName;
@@ -31,6 +32,7 @@ class ReconcilerWiringTest {
             .withBean(PlatformTransactionManager.class, () -> mock(PlatformTransactionManager.class))
             .withBean(SettlementService.class, () -> mock(SettlementService.class))
             .withBean(PaymentRepository.class, () -> mock(PaymentRepository.class))
+            .withBean(AdapterRegistry.class, () -> mock(AdapterRegistry.class))
             .withBean(MeterRegistry.class, SimpleMeterRegistry::new)
             .withPropertyValues(
                     "nkap.reconciler.interval=30s",

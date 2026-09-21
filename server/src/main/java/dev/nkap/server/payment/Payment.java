@@ -4,7 +4,9 @@ import dev.nkap.core.money.Money;
 import dev.nkap.core.payment.PaymentState;
 import dev.nkap.core.payment.ReferenceId;
 import dev.nkap.provider.PaymentIntent;
+import dev.nkap.provider.ProviderAdapter;
 import dev.nkap.provider.ProviderId;
+import dev.nkap.provider.Resolution;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -236,6 +238,21 @@ public final class Payment {
 
     public String providerReference() {
         return providerReference;
+    }
+
+    /**
+     * ADR 0014 decision 3's trigger: {@code adapter} does not declare {@link Resolution#QUERY}
+     * and this payment holds no provider reference to query with — the only case in which no
+     * amount of polling could ever bring back an answer. Not "the adapter cannot declare
+     * QUERY", which alone proves nothing: an adapter without it can still resolve a payment
+     * whose submission <em>did</em> get a provider reference back (M-Pesa's {@code
+     * stkpushquery} works once a {@code CheckoutRequestID} is held). Both halves are checked
+     * here rather than at the call site so the two places that need this fact — the
+     * reconciler, deciding whether to call the operator at all, and the escalated-payments
+     * endpoint, explaining why one already was — cannot drift apart on what it means.
+     */
+    public boolean cannotBeQueriedBy(ProviderAdapter adapter) {
+        return !adapter.resolves().contains(Resolution.QUERY) && providerReference.isBlank();
     }
 
     public String providerTransactionId() {

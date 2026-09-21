@@ -13,9 +13,10 @@ that never guesses, and a way to test the cases that actually break in productio
 > `linux/amd64` and `linux/arm64`, no login needed to pull — see
 > [Run it without cloning](#run-it-without-cloning). **It has never handled real money** —
 > not in any country, by anyone, including its author: every observation this project has
-> made against MTN and M-Pesa was against a sandbox. Key revocation is a database delete
-> today (issue #112); [`docs/security-notes.md`](docs/security-notes.md) holds the rest of
-> what to know before you point this at anything real.
+> made against MTN and M-Pesa was against a sandbox. Key revocation is a host-side command
+> that marks a key rather than deleting it, and takes effect on the key's very next request;
+> [`docs/security-notes.md`](docs/security-notes.md) holds the rest of what to know before
+> you point this at anything real.
 
 ---
 

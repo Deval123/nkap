@@ -64,6 +64,9 @@ there is nothing left for one to do.
      "SELECT id, merchant_id, label, created_at, last_used_at FROM api_key WHERE merchant_id = '<id>' AND revoked_at IS NULL ORDER BY created_at DESC;"
    ```
 
+   This assumes the bundled `db` service, with that user and that database; a deployment
+   running its own PostgreSQL runs the same query with its own connection details.
+
    Identify the old row from its merchant, label, creation time and `last_used_at`. If
    those facts do not identify it unambiguously, do not guess: keep the verified new key
    active and resolve which caller owns each candidate before revoking one.

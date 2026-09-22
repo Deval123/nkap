@@ -35,6 +35,39 @@ command too. **Rotation needs nothing beyond this and `create`**: provision a ne
 the merchant to it, then revoke the old one. There is no separate rotation command because
 there is nothing left for one to do.
 
+### Rotate an API key without downtime
+
+1. Mint the replacement:
+
+   ```bash
+   docker compose run --rm gateway --nkap.apikey.create \
+     --nkap.apikey.merchant=<id> --nkap.apikey.label=<label>
+   ```
+
+   The command prints both `key id` and `key`; record the id and give the token the same
+   protection as a password, because the token is shown only once.
+2. Put the new token in the caller's hands and confirm an authenticated request succeeds.
+   Do not revoke anything yet: both keys are deliberately active during this handover.
+3. Revoke the old key:
+
+   ```bash
+   docker compose run --rm gateway --nkap.apikey.revoke \
+     --nkap.apikey.id=<old key id>
+   ```
+
+   Its next authenticated request is refused; the replacement remains active.
+4. If the old id was not recorded, inspect the database rather than trying the token (the
+   token is not stored). For a Compose deployment, list the active candidates with:
+
+   ```bash
+   docker compose exec db psql -U nkap -d nkap -c \
+     "SELECT id, merchant_id, label, created_at, last_used_at FROM api_key WHERE merchant_id = '<id>' AND revoked_at IS NULL ORDER BY created_at DESC;"
+   ```
+
+   Identify the old row from its merchant, label, creation time and `last_used_at`. If
+   those facts do not identify it unambiguously, do not guess: keep the verified new key
+   active and resolve which caller owns each candidate before revoking one.
+
 **The webhook signing secret is stored differently, and that is a real trade-off, not an
 oversight.** An API key only ever needs to be *compared*; a signing secret has to be
 *used* — HMAC-SHA256 needs the actual bytes on every delivery — so `webhook_endpoint` keeps

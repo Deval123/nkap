@@ -186,7 +186,9 @@ class MtnDisbursementsAdapterTest {
      * ADR 0013, the mirror of {@link MtnCollectionsAdapterTest#a_currency_mismatch_is_not_attempted}:
      * both adapters changed identically for the currency guard, so both are pinned identically.
      * Issue #171 existed because these two drifted once before — this is the same asserted twice,
-     * not two different rules.
+     * not two different rules. The simulator starts from its happy-path default, where a submitted
+     * transfer is accepted with {@code 202}; querying the same reference as {@code UNKNOWN} therefore
+     * proves the transfer endpoint was never called, because an accepted reference remains queryable.
      */
     @Test
     @DisplayName("a payment whose currency is not the profile's is not attempted, and nothing is submitted under its reference")

@@ -212,20 +212,29 @@ between the two is exactly this row, a real payment failing on a configuration e
 than an operator refusal. Confirmed end to end against the shorter, provider-only shape: see
 *A callback reaches the gateway* under *Callbacks* below.
 
-**What that run did not confirm, and issue #185 chose to build on anyway: whether MTN's
-allow-list constrains only the host, or the host and something about the path too.** Every
-run against the real sandbox varied whether `X-Callback-Url` was sent at all, never how long
-a path it carried once sent (*`providerCallbackHost` is an allow-list, not a destination*,
-below, is exactly that run, and it is silent on path length). Reading `providerCallbackHost`
-by name argues for host-only — MTN's own vocabulary calls it a *host*, not a *URL* or a
-*path* — and this project has chosen to act on that reading for every installation, not only
-new ones, rather than keep MTN on the old, shorter shape while the reading goes unconfirmed.
-**That is this line moving from observed to assumed, on purpose and on the record**, not
-silently: nothing in this repository has sent the longer, reference-carrying shape to the
-real sandbox — `CallbackApiIT` and `OpenApiSpecIT` exercise the new route against
-`EmbeddedSimulator`, which enforces no allow-list at all — and this paragraph is where a
-future run against the real sandbox, with a longer `X-Callback-Url` path, belongs once
-someone makes one.
+**Whether MTN's allow-list constrains only the host, or the host and something about the path
+too, was run against the real sandbox on 2026-09-22, ~06:48 UTC, and confirmed: host only.**
+Two `requesttopay` Collections submissions, straight in `curl`, bypassing the gateway,
+identical except for the `X-Callback-Url` path — MSISDN `46733123453`, 100 EUR, the recorder
+behind a Cloudflare quick tunnel, the API user pinned to that tunnel's host:
+
+| | `X-Callback-Url` path | `requesttopay` | callback received | on path |
+| --- | --- | --- | --- | --- |
+| control | `/callbacks/mtn-cm` | `202` | `06:50:52Z` | `/callbacks/mtn-cm` |
+| probe | `/callbacks/mtn-cm/0ce67dde-4ce1-4faa-8b0f-e096f8068599` | `202` | `06:50:21Z` | `/callbacks/mtn-cm/0ce67dde-4ce1-4faa-8b0f-e096f8068599` |
+
+Both submissions were accepted, both callbacks were delivered, and each arrived on the exact
+path submitted — the extra segment was neither rejected at submission nor trimmed on
+delivery. Both callback bodies carried `externalId` and no `referenceId`, as the September
+run above already found; both payments ended `FAILED`/`EXPIRED`, which has no bearing on
+either question and is noted only so a reader does not wonder whether it did.
+
+**The limits of this run, stated in the same breath rather than left for a reader to
+assume past them:** one sample per shape, Collections only, sandbox only, and exactly one
+extra path segment — a `ReferenceId`, nothing longer. Nothing here says anything about
+`/disbursement/v1_0/transfer`, about a path carrying more than one extra segment, about a
+query string, or about production MTN. Read this as "one extra segment survived once against
+Collections sandbox," not as "MTN preserves any path."
 
 ### Three namespaces, one flat map
 
@@ -697,14 +706,6 @@ Left open deliberately rather than guessed. Each is worth a pull request adding 
   ever been exercised against a real operator.** *A callback reaches the gateway* confirms the
   round-trip resolves, but not by which branch: the callback's body was never logged
   (issue #129), so nothing recorded which one MTN actually sent.
-- **Whether `providerCallbackHost` constrains only the host, or the host and something about
-  the path too.** Issue #185 made `nkap.public-base-url` compose
-  `<base>/callbacks/<providerId>/<reference>` for every installation, MTN included, on the
-  strength of `providerCallbackHost` naming itself a *host* — see *Status and error mapping*
-  above, right after where the shorter, provider-only shape is confirmed end to end. No run
-  has sent the longer shape to the real sandbox; the risk this project is carrying until one
-  does is every real submission failing `INVALID_CALLBACK_URL_HOST` at once, not a slow
-  degradation.
 - **Whether a callback is ever the *only* notification**, or whether the status endpoint
   always catches up. `46733123453` announced its outcome by callback while the status
   endpoint still said `PENDING`; whether that endpoint would have reported `EXPIRED` later

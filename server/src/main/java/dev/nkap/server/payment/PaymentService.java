@@ -9,6 +9,7 @@ import dev.nkap.provider.ProviderUnavailableException;
 import dev.nkap.provider.SubmitResult;
 import dev.nkap.server.outbox.OutboxNotifier;
 import dev.nkap.server.provider.AdapterRegistry;
+import dev.nkap.server.provider.PublicBaseUrl;
 import java.util.Optional;
 import java.util.function.Consumer;
 import org.slf4j.Logger;
@@ -53,13 +54,15 @@ public class PaymentService {
     private final PaymentRepository payments;
     private final AdapterRegistry adapters;
     private final OutboxNotifier notifier;
+    private final PublicBaseUrl publicBaseUrl;
     private final TransactionTemplate tx;
 
     public PaymentService(PaymentRepository payments, AdapterRegistry adapters, OutboxNotifier notifier,
-                          PlatformTransactionManager txManager) {
+                          PublicBaseUrl publicBaseUrl, PlatformTransactionManager txManager) {
         this.payments = payments;
         this.adapters = adapters;
         this.notifier = notifier;
+        this.publicBaseUrl = publicBaseUrl;
         this.tx = new TransactionTemplate(txManager);
     }
 
@@ -78,13 +81,24 @@ public class PaymentService {
         // below: everything this call logs, and everything SettlementService or the
         // reconciler log later about the same payment, can be filtered on it (issue #75).
         try (var ignored = MDC.putCloseable("reference", reference.toString())) {
-            Payment created = Payment.create(reference, providerId, merchantId, intent);
+            // The callback URL is composed here, not by PaymentController, because it
+            // carries this payment's own reference (issue #185) -- which does not exist
+            // until the line above. PaymentIntent.providerOptions() as it reaches this
+            // point carries nothing PaymentController put there.
+            PaymentIntent withCallback = withCallbackUrl(intent, providerId, reference);
+            Payment created = Payment.create(reference, providerId, merchantId, withCallback);
             // Which endpoint this payment is actually being submitted to, from
             // configuration, before the operator is ever called (issue #122).
             adapters.settlementEndpoint(providerId).ifPresent(created::recordProviderBaseUrl);
             payments.save(created);
-            return submit(adapter, intent, reference);
+            return submit(adapter, withCallback, reference);
         }
+    }
+
+    /** {@code intent}, with {@code providerOptions} replaced by this submission's own callback URL (issue #185). */
+    private PaymentIntent withCallbackUrl(PaymentIntent intent, ProviderId providerId, ReferenceId reference) {
+        return new PaymentIntent(intent.operation(), intent.amount(), intent.counterpartyMsisdn(),
+                intent.payerMessage(), intent.payeeNote(), publicBaseUrl.providerOptionsFor(providerId, reference));
     }
 
     /**

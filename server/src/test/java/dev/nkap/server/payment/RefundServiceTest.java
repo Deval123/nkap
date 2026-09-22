@@ -41,7 +41,7 @@ class RefundServiceTest {
     private final AdapterRegistry adapters = mock(AdapterRegistry.class);
     private final PaymentService paymentService = new PaymentService(payments, adapters,
             new OutboxNotifier(new InMemoryOutbox(), new InMemoryWebhookEndpointStore(), new ObjectMapper()),
-            new DirectTransactionManager());
+            new PublicBaseUrl(""), new DirectTransactionManager());
     private final RefundService refunds = new RefundService(payments, adapters, paymentService,
             new PublicBaseUrl(""), new DirectTransactionManager());
 

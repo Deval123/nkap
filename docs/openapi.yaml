@@ -12,16 +12,16 @@ info:
   # automating the day this project releases often enough that a human is no longer reading
   # this file closely each time; not yet.
   #
-  # Moves to "1.2.0" here, independent of whatever the POMs currently carry: this file
-  # describes the API as published, and it changed again -- the payment-history cause enum
-  # gained GATEWAY (ADR 0013), a value naming a refusal this gateway made itself, without
-  # ever asking the operator, and the 201/202 response descriptions were rewritten so a
-  # reader can tell that apart from an operator's own answer. Additive, so a minor bump, the
-  # same as the last one. Bump it only when a path, method, field or status code in this file
+  # Moved to "1.3.0" here, independent of whatever the POMs currently carry: this file
+  # describes the API as published, and it changed again -- a second callback route,
+  # POST /callbacks/{providerId}/{reference}, was added beside the existing one (issue #185)
+  # so a callback can be attributed by the address the gateway chose rather than only by its
+  # body. A new path is additive, so a minor bump, the same rule the previous "1.2.0" move
+  # gives for itself: bump it only when a path, method, field or status code in this file
   # actually changes, whatever the gateway's own version happens to be at the time (the same
   # reasoning charts/nkap/Chart.yaml gives for its own version field moving independently of
   # appVersion).
-  version: "1.2.0"
+  version: "1.3.0"
   description: |
     A self-hosted mobile money gateway with a real double-entry ledger — MTN MoMo first,
     others through the same `ProviderAdapter` contract. See `README.md` for what Nkap is and
@@ -502,6 +502,60 @@ paths:
           description: >
             The gateway took responsibility for the message — including one naming a
             reference it never issued. No body.
+        "400":
+          description: "`unparseable-callback` — the body is not a well-formed callback for this provider. Says nothing about Nkap's own data."
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+        "404":
+          description: "`unknown-callback-provider` — `providerId` names no configured adapter."
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+
+  /callbacks/{providerId}/{reference}:
+    post:
+      operationId: receiveCallbackForReference
+      tags: [operator callbacks]
+      summary: The operator's own webhook, addressed to one payment (issue #185)
+      description: |
+        The same webhook as `POST /callbacks/{providerId}`, at an address that also names the
+        payment: `nkap.public-base-url`, when configured, composes this shape for every real
+        submission, to every provider. It exists so a callback can be attributed by the
+        address the gateway chose to hand the operator, not only by whatever the callback's
+        own body carries — the gateway already knows which payment a callback concerns before
+        anything has parsed it. `reference` is used only when the parsed callback itself
+        carries none of Nkap's own; a callback whose body does name one is attributed by the
+        body, exactly as on the other route.
+
+        The other route is not replaced and is not going away: MTN's `providerCallbackHost`
+        is fixed at API-user creation, and a deployment already receiving callbacks on the
+        old shape is pointed at it.
+
+        **`reference` known, unknown or not even well-formed all answer identically**, the
+        same `202` — a public, unauthenticated path with a payment reference in it makes
+        404-on-a-bad-reference the obvious mistake to make, and this endpoint does not make
+        it.
+      security: []
+      parameters:
+        - name: providerId
+          in: path
+          required: true
+          description: "Which configured installation this callback is for, e.g. `mtn-cm`."
+          schema: { type: string }
+        - $ref: "#/components/parameters/ReferencePath"
+      requestBody:
+        required: false
+        description: The operator's own callback body — shape is provider-specific and not part of this contract.
+        content:
+          "*/*":
+            schema: { type: string }
+      responses:
+        "202":
+          description: >
+            The gateway took responsibility for the message — including one whose path names
+            a reference this gateway never issued, or no well-formed reference at all.
+            No body.
         "400":
           description: "`unparseable-callback` — the body is not a well-formed callback for this provider. Says nothing about Nkap's own data."
           content:

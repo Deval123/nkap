@@ -204,12 +204,37 @@ be for a literal `PENDING`. `MtnStatusMapTest` pins both cases deliberately.
 the other half of an operational commitment, not just MTN's vocabulary.**
 `PaymentIntent.providerOptions().get("callbackUrl")` is filled from `nkap.public-base-url`
 (`docs/configuration-reference.md`), a deployment-level setting composing
-`<public-base-url>/callbacks/<providerId>` for every real submission (issue #116). Setting it
-means `providerCallbackHost` must already name that same host at API-user creation
-(*`providerCallbackHost` is an allow-list, not a destination*, below) — a mismatch between
-the two is exactly this row, a real payment failing on a configuration error rather than an
-operator refusal. Confirmed end to end: see *A callback reaches the gateway* under
-*Callbacks* below.
+`<public-base-url>/callbacks/<providerId>/<reference>` for every real submission, to every
+provider alike (issue #185; `<public-base-url>/callbacks/<providerId>` before it, issue
+#116). Setting it means `providerCallbackHost` must already name that same host at API-user
+creation (*`providerCallbackHost` is an allow-list, not a destination*, below) — a mismatch
+between the two is exactly this row, a real payment failing on a configuration error rather
+than an operator refusal. Confirmed end to end against the shorter, provider-only shape: see
+*A callback reaches the gateway* under *Callbacks* below.
+
+**Whether MTN's allow-list constrains only the host, or the host and something about the path
+too, was run against the real sandbox on 2026-09-22, ~06:48 UTC, and confirmed: host only.**
+Two `requesttopay` Collections submissions, straight in `curl`, bypassing the gateway,
+identical except for the `X-Callback-Url` path — MSISDN `46733123453`, 100 EUR, the recorder
+behind a Cloudflare quick tunnel, the API user pinned to that tunnel's host:
+
+| | `X-Callback-Url` path | `requesttopay` | callback received | on path |
+| --- | --- | --- | --- | --- |
+| control | `/callbacks/mtn-cm` | `202` | `06:50:52Z` | `/callbacks/mtn-cm` |
+| probe | `/callbacks/mtn-cm/0ce67dde-4ce1-4faa-8b0f-e096f8068599` | `202` | `06:50:21Z` | `/callbacks/mtn-cm/0ce67dde-4ce1-4faa-8b0f-e096f8068599` |
+
+Both submissions were accepted, both callbacks were delivered, and each arrived on the exact
+path submitted — the extra segment was neither rejected at submission nor trimmed on
+delivery. Both callback bodies carried `externalId` and no `referenceId`, as the September
+run above already found; both payments ended `FAILED`/`EXPIRED`, which has no bearing on
+either question and is noted only so a reader does not wonder whether it did.
+
+**The limits of this run, stated in the same breath rather than left for a reader to
+assume past them:** one sample per shape, Collections only, sandbox only, and exactly one
+extra path segment — a `ReferenceId`, nothing longer. Nothing here says anything about
+`/disbursement/v1_0/transfer`, about a path carrying more than one extra segment, about a
+query string, or about production MTN. Read this as "one extra segment survived once against
+Collections sandbox," not as "MTN preserves any path."
 
 ### Three namespaces, one flat map
 

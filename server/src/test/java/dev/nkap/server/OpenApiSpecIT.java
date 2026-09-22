@@ -634,4 +634,61 @@ class OpenApiSpecIT extends PostgresSpringBootIT {
         check("/callbacks/{providerId}", "post", 404,
                 http.postForEntity("/callbacks/no-such-provider", new HttpEntity<>("{}"), String.class), "Problem");
     }
+
+    // --- POST /callbacks/{providerId}/{reference} ------------------------------------
+
+    // MTN's own parseCallback always finds a reference in referenceId/externalId or rejects
+    // the body outright (400) -- it never returns CallbackEvent.unattributed, so a real MTN
+    // callback here is always attributed by its body, never by falling back to the path
+    // (see CallbackControllerTest for that branch, exercised against a mocked adapter). What
+    // these two prove instead is that the path segment plays no part when the body already
+    // names a reference, and does not break routing either way.
+
+    @Test
+    @DisplayName("POST /callbacks/{providerId}/{reference}: 202, even for a reference this gateway never issued")
+    void post_callback_with_reference_202() {
+        ResponseEntity<Void> response = http.postForEntity("/callbacks/mtn-sandbox/" + UUID.randomUUID(),
+                new HttpEntity<>("{\"referenceId\":\"" + UUID.randomUUID() + "\",\"status\":\"SUCCESSFUL\"}"), Void.class);
+        assertThat(response.getStatusCode().value()).isEqualTo(202);
+        assertStatusDocumented("/callbacks/{providerId}/{reference}", "post", 202);
+    }
+
+    @Test
+    @DisplayName("POST /callbacks/{providerId}/{reference}: 202, even when the path segment is not a well-formed reference")
+    void post_callback_with_malformed_path_reference_202() {
+        ResponseEntity<Void> response = http.postForEntity("/callbacks/mtn-sandbox/not-a-well-formed-reference",
+                new HttpEntity<>("{\"referenceId\":\"" + UUID.randomUUID() + "\",\"status\":\"SUCCESSFUL\"}"), Void.class);
+        assertThat(response.getStatusCode().value()).isEqualTo(202);
+        assertStatusDocumented("/callbacks/{providerId}/{reference}", "post", 202);
+    }
+
+    @Test
+    @DisplayName("POST /callbacks/{providerId}/{reference}: 400, not a well-formed callback for this provider")
+    void post_callback_with_reference_400() {
+        check("/callbacks/{providerId}/{reference}", "post", 400,
+                http.postForEntity("/callbacks/mtn-sandbox/" + UUID.randomUUID(),
+                        new HttpEntity<>("not json"), String.class), "Problem");
+    }
+
+    @Test
+    @DisplayName("POST /callbacks/{providerId}/{reference}: 404, no such provider")
+    void post_callback_with_reference_404() {
+        check("/callbacks/{providerId}/{reference}", "post", 404,
+                http.postForEntity("/callbacks/no-such-provider/" + UUID.randomUUID(),
+                        new HttpEntity<>("{}"), String.class), "Problem");
+    }
+
+    @Test
+    @DisplayName("POST /callbacks/{providerId}/{reference}: settles the payment, end to end through a real MTN adapter")
+    void post_callback_with_reference_settles() {
+        String reference = body(postPayment(UUID.randomUUID().toString(), paymentBody(5000))).get("reference").asText();
+        SIMULATOR.declareScenario("""
+            {"rules":[{"scenario":{"onQuery":[{"status":"SUCCESSFUL"}]}}]}""");
+
+        ResponseEntity<Void> response = http.postForEntity("/callbacks/mtn-sandbox/" + reference,
+                new HttpEntity<>("{\"referenceId\":\"" + reference + "\",\"status\":\"SUCCESSFUL\"}"), Void.class);
+
+        assertThat(response.getStatusCode().value()).isEqualTo(202);
+        assertThat(getPayment(reference, merchantKey).getBody()).contains("\"state\":\"SUCCEEDED\"");
+    }
 }

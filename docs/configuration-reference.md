@@ -68,17 +68,21 @@ consumers of a country-agnostic default.
 ## The public callback base URL (`nkap.public-base-url`)
 
 `PublicBaseUrl` binds this one, directly with `@Value`, and fills
-`PaymentIntent.providerOptions()` for every real submission (`PaymentController`,
-`RefundService`) with the URL both MTN adapters send as `X-Callback-Url` — the one thing that
-map carries today (issue #116). Not part of `nkap.provider.mtn.*`: it names this deployment's
-own reachable host, not an installation's endpoint at MTN, and it is the same value for every
-installation and every future provider — `<public-base-url>/callbacks/<providerId>`, the path
-`docs/openapi.yaml` defines, composed by Nkap rather than spelled out per deployment.
+`PaymentIntent.providerOptions()` for every real submission (`PaymentService`,
+`RefundService` — moved from `PaymentController` by issue #185, since the composed URL now
+carries the payment's own reference, which does not exist until `PaymentService` mints one)
+with the URL both MTN adapters send as `X-Callback-Url` — the one thing that map carries
+today (issue #116). Not part of `nkap.provider.mtn.*`: it names this deployment's own
+reachable host, not an installation's endpoint at MTN, and it is the same value for every
+installation and every future provider —
+`<public-base-url>/callbacks/<providerId>/<reference>`, the path `docs/openapi.yaml` defines,
+composed by Nkap rather than spelled out per deployment.
 
-Setting this property is what exposes `POST /callbacks/{providerId}` — unauthenticated by
-design — to the public internet at a real, guessable hostname. `docs/security-notes.md` §5
-already records what that costs in practice (a hostname stood up for testing was scanned
-within the hour); the design withstands it, since a callback settles nothing by itself.
+Setting this property is what exposes both `POST /callbacks/{providerId}` and
+`POST /callbacks/{providerId}/{reference}` — unauthenticated by design — to the public
+internet at a real, guessable hostname. `docs/security-notes.md` §5 already records what
+that costs in practice (a hostname stood up for testing was scanned within the hour); the
+design withstands it, since a callback settles nothing by itself.
 
 | Property | Default | What happens when it's wrong |
 | --- | --- | --- |

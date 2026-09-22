@@ -29,7 +29,17 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * {@code POST /callbacks/{providerId}} — the operator's webhook.
+ * {@code POST /callbacks/{providerId}} and {@code POST /callbacks/{providerId}/{reference}}
+ * — the operator's webhook, one handler, two routes (issue #185).
+ *
+ * <p>The second route exists so a callback can be attributed by the address the gateway
+ * chose to hand the operator, not only by whatever the callback's own body carries: the
+ * gateway knows which payment a callback concerns before anything has parsed it, because
+ * {@code PublicBaseUrl} composed that address itself. The first route is not going away —
+ * MTN's {@code providerCallbackHost} is fixed at API-user creation, and any deployment
+ * already receiving callbacks on the old shape is pointed at it — so both are served by this
+ * one method, and the path's reference is used only when {@link CallbackEvent#reference()}
+ * itself carries none.
  *
  * <p>The endpoint is <strong>unauthenticated</strong> (MTN sends no signature we have
  * observed), and safe anyway because it settles nothing by itself: a callback is a hint
@@ -41,7 +51,10 @@ import org.springframework.web.bind.annotation.RestController;
  * <ul>
  *   <li><strong>202</strong> whenever the gateway took responsibility for the message —
  *       including a callback naming a reference it never issued. A 404 there would let a
- *       caller probe which references exist.</li>
+ *       caller probe which references exist. On the second route the reference sits in the
+ *       path itself, which makes 404-on-a-bad-reference the obvious thing to reach for —
+ *       resist it: known, unknown or not even a well-formed reference at all, the path
+ *       segment gets exactly the same {@code 202}, for exactly the same reason.</li>
  *   <li><strong>400</strong> only when the body cannot be parsed as this provider's
  *       callback. That says nothing about our data.</li>
  *   <li><strong>404</strong> when {@code providerId} names no configured adapter.</li>
@@ -114,6 +127,24 @@ class CallbackController {
     ResponseEntity<Void> receive(@PathVariable String providerId,
                                  @RequestHeader Map<String, String> headers,
                                  @RequestBody(required = false) String body) {
+        return handle(providerId, null, headers, body);
+    }
+
+    /**
+     * The reference is a raw, unvalidated path segment on purpose — never {@code ReferenceId}
+     * typed here, so a malformed one reaches {@link #handle} rather than failing Spring's own
+     * argument binding with some other status. It is used only when
+     * {@link CallbackEvent#reference()} carries none; see the class javadoc.
+     */
+    @PostMapping("/{providerId}/{reference}")
+    ResponseEntity<Void> receive(@PathVariable String providerId, @PathVariable String reference,
+                                 @RequestHeader Map<String, String> headers,
+                                 @RequestBody(required = false) String body) {
+        return handle(providerId, reference, headers, body);
+    }
+
+    private ResponseEntity<Void> handle(String providerId, String pathReference,
+                                        Map<String, String> headers, String body) {
 
         // Every request, before anything else can reject it — "is this happening at all"
         // must survive whatever the other branches below do. The tag is the *resolved*
@@ -148,7 +179,15 @@ class CallbackController {
         }
 
         ReferenceId reference = event.reference();
-        if (reference == null) {
+        if (reference == null && pathReference != null) {
+            // Attribution by the address the gateway chose, not by anything the body
+            // carries (issue #185) -- the whole point of the second route. A path segment
+            // that is not even a well-formed reference is not distinguished from a
+            // well-formed one this gateway never issued: both fall through to the same
+            // "unknown reference" branch below, which answers both identically, on purpose
+            // (see the class javadoc).
+            reference = tryParseReference(pathReference);
+        } else if (reference == null) {
             // This operator's callback never carries a value Nkap chose (issue #149, ADR
             // 0011 §2) -- only the operator's own reference, which the adapter has already
             // handed back as event.providerReference() (never blank here: CallbackEvent's
@@ -183,17 +222,24 @@ class CallbackController {
             }
             reference = resolved.get().reference();
         }
-        if (payments.findByReference(reference).isEmpty()) {
+        if (reference == null || payments.findByReference(reference).isEmpty()) {
             countRejected(providerTag, "unknown_reference");
             if (loggedUnknownReferenceOnce.compareAndSet(false, true)) {
                 // 202, not 404: this endpoint is public, and a 404-vs-202 difference here is
-                // an oracle for enumerating references. The reference itself is safe to log
-                // (it only reaches this line already shaped like this deployment's own
-                // reference), but a real reference this deployment never issued is exactly
-                // as cheap for an attacker to produce as an unparseable body, so it gets the
-                // same bounded treatment, not an unconditional line.
-                log.warn("callback on /callbacks/{} names reference {}, which this gateway never issued "
-                        + "(further occurrences are counted in nkap_callback_rejected, not logged)", providerId, reference);
+                // an oracle for enumerating references. A well-formed reference is safe to
+                // log (it only reaches this line already shaped like this deployment's own
+                // reference); a null one means the path segment on the second route was not
+                // even well-formed, which is exactly as cheap for an attacker to produce, so
+                // it gets the same bounded treatment and never appears in the message either
+                // -- logging the raw path segment would be logging attacker-controlled text
+                // (issue #129).
+                if (reference != null) {
+                    log.warn("callback on /callbacks/{} names reference {}, which this gateway never issued "
+                            + "(further occurrences are counted in nkap_callback_rejected, not logged)", providerId, reference);
+                } else {
+                    log.warn("callback on /callbacks/{} names a path reference that is not well-formed "
+                            + "(further occurrences are counted in nkap_callback_rejected, not logged)", providerId);
+                }
             }
             return ResponseEntity.accepted().build();
         }
@@ -229,6 +275,20 @@ class CallbackController {
         } catch (RuntimeException notAProviderId) {
             throw new ApiException(HttpStatus.NOT_FOUND, ProblemTypes.UNKNOWN_CALLBACK_PROVIDER, "No such provider",
                     "'" + raw + "' is not a provider this server knows.");
+        }
+    }
+
+    /**
+     * {@code null} for a path segment that is not a well-formed {@link ReferenceId} — never
+     * thrown, so a malformed second-route reference reaches the same {@code 202} the rest of
+     * this method already gives an unknown one (see the class javadoc's note on why a 404
+     * here would be a mistake).
+     */
+    private static ReferenceId tryParseReference(String raw) {
+        try {
+            return ReferenceId.of(raw);
+        } catch (RuntimeException notAReference) {
+            return null;
         }
     }
 

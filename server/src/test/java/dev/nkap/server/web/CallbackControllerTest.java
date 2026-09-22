@@ -189,6 +189,48 @@ class CallbackControllerTest {
     }
 
     @Test
+    @DisplayName("the second route settles a callback carrying nothing of ours in its body, by the reference in the path")
+    void the_path_reference_settles_a_callback_attributed_by_nothing_else() throws Exception {
+        ReferenceId reference = ReferenceId.newReference();
+        stubParsedUnattributed("provider-owns-this-one-alone");
+        Payment payment = mock(Payment.class);
+        when(payments.findByReference(reference)).thenReturn(Optional.of(payment));
+
+        ResponseEntity<Void> response = controller.receive("mtn", reference.toString(), Map.of(), "{}");
+
+        assertThat(response.getStatusCode().value()).isEqualTo(202);
+        verify(settlement).confirm(MTN, reference, PaymentTransition.Cause.CALLBACK);
+        // The old route's provider-reference resolution is bypassed entirely on the new
+        // route: the path already told this handler which payment the callback concerns.
+        verify(payments, org.mockito.Mockito.never()).findByProviderReference(any(), any());
+        assertThat(counter("nkap.callback.confirmed")).isEqualTo(1.0);
+        assertThat(counter("nkap.callback.rejected")).isZero();
+    }
+
+    @Test
+    @DisplayName("the second route answers identically to a known, an unknown and a malformed path reference")
+    void the_second_route_answers_identically_known_unknown_or_malformed() throws Exception {
+        ReferenceId known = ReferenceId.newReference();
+        ReferenceId unknown = ReferenceId.newReference();
+        when(payments.findByReference(known)).thenReturn(Optional.of(mock(Payment.class)));
+        when(payments.findByReference(unknown)).thenReturn(Optional.empty());
+
+        stubParsedUnattributed("op-ref-1");
+        ResponseEntity<Void> knownResponse = controller.receive("mtn", known.toString(), Map.of(), "{}");
+        stubParsedUnattributed("op-ref-2");
+        ResponseEntity<Void> unknownResponse = controller.receive("mtn", unknown.toString(), Map.of(), "{}");
+        stubParsedUnattributed("op-ref-3");
+        ResponseEntity<Void> malformedResponse = controller.receive("mtn", "not-a-uuid-at-all", Map.of(), "{}");
+
+        assertThat(knownResponse.getStatusCode().value()).isEqualTo(202);
+        assertThat(unknownResponse.getStatusCode().value()).isEqualTo(202);
+        assertThat(malformedResponse.getStatusCode().value()).isEqualTo(202);
+        verify(settlement).confirm(MTN, known, PaymentTransition.Cause.CALLBACK);
+        assertThat(counterTagged("nkap.callback.rejected", "reason", "unknown_reference")).isEqualTo(2.0);
+        assertThat(counter("nkap.callback.confirmed")).isEqualTo(1.0);
+    }
+
+    @Test
     @DisplayName("a request naming no configured provider is still counted, tagged \"unknown\", never the raw attacker-supplied value")
     void unconfigured_provider_is_counted_as_unknown() {
         assertThatThrownBy(() -> controller.receive("not-configured", Map.of(), "{}"))

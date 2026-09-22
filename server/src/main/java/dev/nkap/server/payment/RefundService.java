@@ -89,7 +89,7 @@ public class RefundService {
 
             PaymentIntent refundIntent = new PaymentIntent(Capability.Operation.DISBURSE, amount,
                     original.intent().counterpartyMsisdn(), note, note,
-                    publicBaseUrl.providerOptionsFor(original.provider()));
+                    publicBaseUrl.providerOptionsFor(original.provider(), refundReference));
             Payment refund = Payment.createRefund(refundReference, original.provider(), original.merchantId(),
                     refundIntent, originalReference);
             // Which endpoint this refund is actually being submitted to, from configuration,

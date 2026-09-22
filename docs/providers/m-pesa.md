@@ -198,9 +198,18 @@ nothing we chose, but the address does. **This is a design idea, not an observat
 one observation it rests on — *the path we supplied arrived unchanged* — is the finding to
 credit, not the idea itself.
 
-Its immediate consequence, recorded without acting on it: `nkap.public-base-url`, shipped in
-1.1.0 by issue #116, composes `<base>/callbacks/<providerId>` — one URL per **provider**. An
-operator that needs one per **payment** is not served by it as it stands.
+Its immediate consequence, recorded here when it was still true: `nkap.public-base-url`,
+shipped in 1.1.0 by issue #116, composed `<base>/callbacks/<providerId>` — one URL per
+**provider**, which an operator needing one per **payment** was not served by. Issue #185
+built the idea above: `nkap.public-base-url` now composes
+`<base>/callbacks/<providerId>/<reference>`, one URL per **payment**, for every provider —
+still with no M-Pesa adapter in this repository to hand it to, and still without the
+question this page opens (*The finding this page exists for*, above) actually closed. What
+issue #185 did not decide is answered by `CallbackEvent.unattributed(...)`'s own continued
+existence: an operator that calls one registered endpoint with no path of the gateway's
+choosing — `providerCallbackHost` with no per-submission `X-Callback-Url`, the way MTN's own
+callback would work without issue #116 — still needs it, so both mechanisms exist for now,
+per issue #185's own pull request.
 
 ## Still unknown
 

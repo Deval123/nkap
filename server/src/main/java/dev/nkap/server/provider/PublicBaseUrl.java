@@ -1,5 +1,6 @@
 package dev.nkap.server.provider;
 
+import dev.nkap.core.payment.ReferenceId;
 import dev.nkap.provider.ProviderId;
 import java.net.URI;
 import java.util.Map;
@@ -15,10 +16,18 @@ import org.springframework.stereotype.Component;
  * <p>One deployment-level property, {@code nkap.public-base-url} — not a field on
  * {@code CreatePaymentRequest} (a merchant has no business naming where an operator calls
  * <em>this gateway</em>) and not a URL per MTN installation (the path is Nkap's own
- * contract, {@code docs/openapi.yaml}'s {@code /callbacks/{providerId}}, not a deployer's
- * spelling — and one property composes for every installation and every future provider,
- * where a per-installation URL is the same value copied with a chance to diverge each time).
- * Nkap composes {@code <base>/callbacks/<providerId>} itself.
+ * contract, {@code docs/openapi.yaml}'s {@code /callbacks/{providerId}/{reference}}, not a
+ * deployer's spelling — and one property composes for every installation and every future
+ * provider, where a per-installation URL is the same value copied with a chance to diverge
+ * each time). Nkap composes {@code <base>/callbacks/<providerId>/<reference>} itself, with
+ * the payment's own reference in the path (issue #185): the gateway already knows, from the
+ * address it chose, which payment a callback concerns, before anything has parsed the
+ * callback's body. That is sent to every provider alike, MTN included — see the pull request
+ * for issue #185 for why this was picked over keeping MTN on the old, provider-only shape,
+ * and what {@code docs/providers/mtn.md} says about the risk. The old
+ * {@code /callbacks/{providerId}} route is not removed: {@code CallbackController} keeps
+ * answering it, since a deployment already registered against it cannot be moved by this
+ * change alone.
  *
  * <p>Unset (the default) means {@link #providerOptionsFor} returns an empty map and no
  * header is ever sent — the same convention an unconfigured disbursement product uses
@@ -51,10 +60,11 @@ public class PublicBaseUrl {
     }
 
     /**
-     * {@code {"callbackUrl": "<base>/callbacks/<providerId>"}} for a real submission to
-     * {@code providerId}, or an empty map when no public base URL is configured.
+     * {@code {"callbackUrl": "<base>/callbacks/<providerId>/<reference>"}} for a real
+     * submission to {@code providerId} under {@code reference}, or an empty map when no
+     * public base URL is configured.
      */
-    public Map<String, String> providerOptionsFor(ProviderId providerId) {
+    public Map<String, String> providerOptionsFor(ProviderId providerId, ReferenceId reference) {
         if (base == null) {
             return Map.of();
         }
@@ -62,6 +72,6 @@ public class PublicBaseUrl {
         if (stripped.endsWith("/")) {
             stripped = stripped.substring(0, stripped.length() - 1);
         }
-        return Map.of("callbackUrl", stripped + "/callbacks/" + providerId);
+        return Map.of("callbackUrl", stripped + "/callbacks/" + providerId + "/" + reference);
     }
 }

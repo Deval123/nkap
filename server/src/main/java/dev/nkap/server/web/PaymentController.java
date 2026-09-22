@@ -17,8 +17,8 @@ import dev.nkap.server.payment.Payment;
 import dev.nkap.server.payment.PaymentRepository;
 import dev.nkap.server.payment.PaymentService;
 import dev.nkap.server.provider.AdapterRegistry;
-import dev.nkap.server.provider.PublicBaseUrl;
 import java.util.Locale;
+import java.util.Map;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -59,16 +59,14 @@ class PaymentController {
     private final PaymentRepository repository;
     private final IdempotencyStore idempotency;
     private final AdapterRegistry adapters;
-    private final PublicBaseUrl publicBaseUrl;
     private final ObjectMapper json;
 
     PaymentController(PaymentService payments, PaymentRepository repository, IdempotencyStore idempotency,
-                      AdapterRegistry adapters, PublicBaseUrl publicBaseUrl, ObjectMapper json) {
+                      AdapterRegistry adapters, ObjectMapper json) {
         this.payments = payments;
         this.repository = repository;
         this.idempotency = idempotency;
         this.adapters = adapters;
-        this.publicBaseUrl = publicBaseUrl;
         this.json = json;
     }
 
@@ -86,10 +84,12 @@ class PaymentController {
 
         // Validate before touching the idempotency store: a request that cannot be served
         // must not leave a claim behind that a retry would then collide with. Provider is
-        // resolved first, not for validation order, but because toIntent needs it to fill
-        // providerOptions with this installation's own callback URL (issue #116).
+        // resolved first because rejectUnservedCurrency needs it. The callback URL is not
+        // filled in here any more: it needs the payment's own reference, which does not
+        // exist yet, so that composition happens in PaymentService.createAndSubmit, after
+        // ReferenceId.newReference() (issue #185).
         ProviderId provider = resolveProvider(request);
-        PaymentIntent intent = toIntent(request, provider);
+        PaymentIntent intent = toIntent(request);
         rejectUnservedCurrency(provider, intent);
         // The merchant is the one the API key identifies, never a body field. This is what
         // makes the (merchant, key) scope of the idempotency store an identity the gateway
@@ -200,7 +200,7 @@ class PaymentController {
 
     // --- request -> intent -----------------------------------------------------
 
-    private PaymentIntent toIntent(CreatePaymentRequest request, ProviderId provider) {
+    private PaymentIntent toIntent(CreatePaymentRequest request) {
         requireText(request.operation(), "operation");
         requireText(request.currency(), "currency");
         requireText(request.counterpartyMsisdn(), "counterpartyMsisdn");
@@ -238,7 +238,7 @@ class PaymentController {
         try {
             return new PaymentIntent(operation, Money.of(minorUnits, currency),
                     request.counterpartyMsisdn().strip(), request.payerMessage(), request.payeeNote(),
-                    publicBaseUrl.providerOptionsFor(provider));
+                    Map.of());
         } catch (IllegalArgumentException e) {
             throw invalid(e.getMessage());
         }

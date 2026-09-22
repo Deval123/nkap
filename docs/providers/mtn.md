@@ -204,12 +204,28 @@ be for a literal `PENDING`. `MtnStatusMapTest` pins both cases deliberately.
 the other half of an operational commitment, not just MTN's vocabulary.**
 `PaymentIntent.providerOptions().get("callbackUrl")` is filled from `nkap.public-base-url`
 (`docs/configuration-reference.md`), a deployment-level setting composing
-`<public-base-url>/callbacks/<providerId>` for every real submission (issue #116). Setting it
-means `providerCallbackHost` must already name that same host at API-user creation
-(*`providerCallbackHost` is an allow-list, not a destination*, below) — a mismatch between
-the two is exactly this row, a real payment failing on a configuration error rather than an
-operator refusal. Confirmed end to end: see *A callback reaches the gateway* under
-*Callbacks* below.
+`<public-base-url>/callbacks/<providerId>/<reference>` for every real submission, to every
+provider alike (issue #185; `<public-base-url>/callbacks/<providerId>` before it, issue
+#116). Setting it means `providerCallbackHost` must already name that same host at API-user
+creation (*`providerCallbackHost` is an allow-list, not a destination*, below) — a mismatch
+between the two is exactly this row, a real payment failing on a configuration error rather
+than an operator refusal. Confirmed end to end against the shorter, provider-only shape: see
+*A callback reaches the gateway* under *Callbacks* below.
+
+**What that run did not confirm, and issue #185 chose to build on anyway: whether MTN's
+allow-list constrains only the host, or the host and something about the path too.** Every
+run against the real sandbox varied whether `X-Callback-Url` was sent at all, never how long
+a path it carried once sent (*`providerCallbackHost` is an allow-list, not a destination*,
+below, is exactly that run, and it is silent on path length). Reading `providerCallbackHost`
+by name argues for host-only — MTN's own vocabulary calls it a *host*, not a *URL* or a
+*path* — and this project has chosen to act on that reading for every installation, not only
+new ones, rather than keep MTN on the old, shorter shape while the reading goes unconfirmed.
+**That is this line moving from observed to assumed, on purpose and on the record**, not
+silently: nothing in this repository has sent the longer, reference-carrying shape to the
+real sandbox — `CallbackApiIT` and `OpenApiSpecIT` exercise the new route against
+`EmbeddedSimulator`, which enforces no allow-list at all — and this paragraph is where a
+future run against the real sandbox, with a longer `X-Callback-Url` path, belongs once
+someone makes one.
 
 ### Three namespaces, one flat map
 
@@ -681,6 +697,14 @@ Left open deliberately rather than guessed. Each is worth a pull request adding 
   ever been exercised against a real operator.** *A callback reaches the gateway* confirms the
   round-trip resolves, but not by which branch: the callback's body was never logged
   (issue #129), so nothing recorded which one MTN actually sent.
+- **Whether `providerCallbackHost` constrains only the host, or the host and something about
+  the path too.** Issue #185 made `nkap.public-base-url` compose
+  `<base>/callbacks/<providerId>/<reference>` for every installation, MTN included, on the
+  strength of `providerCallbackHost` naming itself a *host* — see *Status and error mapping*
+  above, right after where the shorter, provider-only shape is confirmed end to end. No run
+  has sent the longer shape to the real sandbox; the risk this project is carrying until one
+  does is every real submission failing `INVALID_CALLBACK_URL_HOST` at once, not a slow
+  degradation.
 - **Whether a callback is ever the *only* notification**, or whether the status endpoint
   always catches up. `46733123453` announced its outcome by callback while the status
   endpoint still said `PENDING`; whether that endpoint would have reported `EXPIRED` later

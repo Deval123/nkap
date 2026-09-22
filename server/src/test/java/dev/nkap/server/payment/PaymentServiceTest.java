@@ -22,6 +22,7 @@ import dev.nkap.server.outbox.InMemoryOutbox;
 import dev.nkap.server.outbox.OutboxEvent;
 import dev.nkap.server.outbox.OutboxNotifier;
 import dev.nkap.server.provider.AdapterRegistry;
+import dev.nkap.server.provider.PublicBaseUrl;
 import dev.nkap.server.support.LogCapture;
 import dev.nkap.server.webhook.InMemoryWebhookEndpointStore;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -47,7 +48,8 @@ class PaymentServiceTest {
     private final InMemoryOutbox outbox = new InMemoryOutbox();
     private final InMemoryWebhookEndpointStore endpoints = new InMemoryWebhookEndpointStore();
     private final PaymentService service = new PaymentService(payments, adapters,
-            new OutboxNotifier(outbox, endpoints, new ObjectMapper()), new DirectTransactionManager());
+            new OutboxNotifier(outbox, endpoints, new ObjectMapper()), new PublicBaseUrl(""),
+            new DirectTransactionManager());
 
     private static PaymentIntent intent() {
         return new PaymentIntent(Capability.Operation.COLLECT, Money.of(5000, Currency.EUR),

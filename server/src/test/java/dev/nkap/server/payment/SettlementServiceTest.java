@@ -301,6 +301,153 @@ class SettlementServiceTest {
         assertThat(ledger.entries()).isEmpty();
     }
 
+    // --- issue #198: a path-attributed callback may supply the provider reference ---------
+
+    @Test
+    @DisplayName("a candidate provider reference is used for the confirming query when the payment holds none, "
+            + "and recorded once the operator has answered under it")
+    void a_candidate_is_used_and_recorded_when_the_payment_holds_none() throws Exception {
+        Payment payment = persisted(PaymentState.SUBMITTED);
+        when(adapter.query(any(), any())).thenReturn(status(PaymentState.SUCCEEDED, "SUCCESSFUL"));
+
+        ConfirmationOutcome outcome = settlement.confirm(MTN, payment.reference(), PaymentTransition.Cause.CALLBACK,
+                "checkout-req-1");
+
+        verify(adapter).query(new QuerySubject(payment.reference(), "checkout-req-1"), Capability.Operation.COLLECT);
+        assertThat(outcome.resolved()).isTrue();
+        assertThat(payment.state()).isEqualTo(PaymentState.SUCCEEDED);
+        assertThat(payment.providerReference())
+                .as("the operator answered a query asked under this candidate, so it is now the payment's own")
+                .isEqualTo("checkout-req-1");
+    }
+
+    @Test
+    @DisplayName("a candidate is not persisted when the confirming query does not answer -- neither the status "
+            + "nor the association")
+    void a_candidate_is_not_recorded_when_the_query_does_not_answer() throws Exception {
+        Payment payment = persisted(PaymentState.SUBMITTED);
+        when(adapter.query(any(), any())).thenThrow(new ProviderUnavailableException("read timed out"));
+
+        ConfirmationOutcome outcome = settlement.confirm(MTN, payment.reference(), PaymentTransition.Cause.CALLBACK,
+                "checkout-req-1");
+
+        assertThat(outcome.kind()).isEqualTo(ConfirmationOutcome.Kind.NO_ANSWER);
+        assertThat(payment.state()).isEqualTo(PaymentState.SUBMITTED);
+        assertThat(payment.providerReference())
+                .as("an unauthenticated candidate is trusted only once the operator has vouched for it -- "
+                        + "no answer means no vouching")
+                .isEmpty();
+    }
+
+    @Test
+    @DisplayName("a candidate is not recorded when the confirming query answers UNKNOWN")
+    void an_unknown_answer_does_not_record_the_candidate() throws Exception {
+        // An unmapped answer does not establish that the operator recognised this reference
+        // at all -- it is the same shape as a reference the operator never received (the
+        // conformance kit's currency-mismatch rule relies on exactly that). The vouching
+        // argument recordProviderReferenceIfCandidate's javadoc makes has no leg to stand on
+        // here, so nothing is written, even though a candidate was offered.
+        Payment payment = persisted(PaymentState.SUBMITTED);
+        when(adapter.query(any(), any())).thenReturn(status(PaymentState.UNKNOWN, "INTERNAL_PROCESSING_ERROR"));
+
+        ConfirmationOutcome outcome = settlement.confirm(MTN, payment.reference(), PaymentTransition.Cause.CALLBACK,
+                "checkout-req-1");
+
+        assertThat(outcome.kind()).isEqualTo(ConfirmationOutcome.Kind.INCONCLUSIVE);
+        assertThat(payment.state()).isEqualTo(PaymentState.SUBMITTED);
+        assertThat(payment.providerReference())
+                .as("an unmapped answer never vouches for the reference it was asked under")
+                .isEmpty();
+    }
+
+    @Test
+    @DisplayName("a candidate is ignored for the query, and never overwrites, a provider reference the payment already holds")
+    void a_candidate_is_ignored_when_the_payment_already_holds_one() throws Exception {
+        Payment payment = persisted(PaymentState.SUBMITTED);
+        payment.recordProviderReference("op-ref-from-submit");
+        when(adapter.query(any(), any())).thenReturn(status(PaymentState.SUCCEEDED, "SUCCESSFUL"));
+
+        settlement.confirm(MTN, payment.reference(), PaymentTransition.Cause.CALLBACK, "attacker-supplied-candidate");
+
+        verify(adapter).query(new QuerySubject(payment.reference(), "op-ref-from-submit"), Capability.Operation.COLLECT);
+        assertThat(payment.providerReference())
+                .as("submit's own value is never overwritten by a later candidate")
+                .isEqualTo("op-ref-from-submit");
+    }
+
+    @Test
+    @DisplayName("a candidate that already resolves to a different payment of this provider settles the status "
+            + "but the association is not written")
+    void a_candidate_belonging_to_another_payment_is_not_recorded() throws Exception {
+        Payment other = persisted(PaymentState.SUBMITTED);
+        other.recordProviderReference("shared-checkout-req");
+        payments.save(other);
+        Payment payment = persisted(PaymentState.SUBMITTED);
+        when(adapter.query(any(), any())).thenReturn(status(PaymentState.SUCCEEDED, "SUCCESSFUL"));
+
+        ConfirmationOutcome outcome = settlement.confirm(MTN, payment.reference(), PaymentTransition.Cause.CALLBACK,
+                "shared-checkout-req");
+
+        assertThat(outcome.resolved()).as("the operator's answer still applies").isTrue();
+        assertThat(payment.state()).isEqualTo(PaymentState.SUCCEEDED);
+        assertThat(payment.providerReference())
+                .as("writing it here would manufacture the exact ambiguity findByProviderReference refuses to guess between")
+                .isEmpty();
+        assertThat(other.providerReference()).isEqualTo("shared-checkout-req");
+    }
+
+    @Test
+    @DisplayName("the reconciler's own call, with no candidate, behaves exactly as it always has")
+    void the_three_argument_confirm_is_unaffected() throws Exception {
+        Payment payment = persisted(PaymentState.SUBMITTED);
+        when(adapter.query(any(), any())).thenReturn(status(PaymentState.SUCCEEDED, "SUCCESSFUL"));
+
+        settlement.confirm(MTN, payment.reference(), PaymentTransition.Cause.RECONCILER);
+
+        verify(adapter).query(QuerySubject.of(payment.reference()), Capability.Operation.COLLECT);
+        assertThat(payment.state()).isEqualTo(PaymentState.SUCCEEDED);
+        assertThat(payment.providerReference()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("a candidate is recorded even when the operator's answer matches the payment's current state exactly")
+    void a_candidate_is_recorded_when_the_answer_repeats_the_current_state() throws Exception {
+        // Mapped, not UNKNOWN, and no transition at all -- the vouching argument does not
+        // require the answer to be news, only that the operator recognised the reference.
+        Payment payment = persisted(PaymentState.SUBMITTED);
+        when(adapter.query(any(), any())).thenReturn(status(PaymentState.SUBMITTED, "PENDING"));
+
+        ConfirmationOutcome outcome = settlement.confirm(MTN, payment.reference(), PaymentTransition.Cause.CALLBACK,
+                "checkout-req-1");
+
+        assertThat(outcome.kind()).isEqualTo(ConfirmationOutcome.Kind.INCONCLUSIVE);
+        assertThat(payment.state()).as("no transition happened").isEqualTo(PaymentState.SUBMITTED);
+        assertThat(payment.providerReference())
+                .as("the operator still recognised the reference it was asked to look up")
+                .isEqualTo("checkout-req-1");
+    }
+
+    @Test
+    @DisplayName("a candidate is recorded even when the operator's mapped answer is one the state machine refuses")
+    void a_candidate_is_recorded_when_the_transition_is_refused() throws Exception {
+        // CREATED is mapped, not UNKNOWN -- the operator answered under this reference -- but
+        // SUBMITTED cannot legally move to CREATED, so applyConfirmed's own state machine
+        // refuses the transition. The vouching argument does not depend on the state machine
+        // accepting the answer, only on the answer being one the operator's own vocabulary
+        // produced.
+        Payment payment = persisted(PaymentState.SUBMITTED);
+        when(adapter.query(any(), any())).thenReturn(status(PaymentState.CREATED, "SOME_UNEXPECTED_CODE"));
+
+        ConfirmationOutcome outcome = settlement.confirm(MTN, payment.reference(), PaymentTransition.Cause.CALLBACK,
+                "checkout-req-1");
+
+        assertThat(outcome.kind()).isEqualTo(ConfirmationOutcome.Kind.INCONCLUSIVE);
+        assertThat(payment.state()).as("no transition happened").isEqualTo(PaymentState.SUBMITTED);
+        assertThat(payment.providerReference())
+                .as("the operator still recognised the reference it was asked to look up")
+                .isEqualTo("checkout-req-1");
+    }
+
     @Test
     @DisplayName("a callback for an already-terminal payment does not even query, and changes nothing")
     void a_terminal_payment_is_left_alone() throws Exception {

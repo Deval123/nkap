@@ -199,7 +199,10 @@ class CallbackControllerTest {
         ResponseEntity<Void> response = controller.receive("mtn", reference.toString(), Map.of(), "{}");
 
         assertThat(response.getStatusCode().value()).isEqualTo(202);
-        verify(settlement).confirm(MTN, reference, PaymentTransition.Cause.CALLBACK);
+        // Issue #198: the operator's own reference travels to SettlementService as a
+        // candidate on this route, never logged, never used to resolve the payment itself
+        // -- the path already did that.
+        verify(settlement).confirm(MTN, reference, PaymentTransition.Cause.CALLBACK, "provider-owns-this-one-alone");
         // The old route's provider-reference resolution is bypassed entirely on the new
         // route: the path already told this handler which payment the callback concerns.
         verify(payments, org.mockito.Mockito.never()).findByProviderReference(any(), any());
@@ -225,7 +228,7 @@ class CallbackControllerTest {
         assertThat(knownResponse.getStatusCode().value()).isEqualTo(202);
         assertThat(unknownResponse.getStatusCode().value()).isEqualTo(202);
         assertThat(malformedResponse.getStatusCode().value()).isEqualTo(202);
-        verify(settlement).confirm(MTN, known, PaymentTransition.Cause.CALLBACK);
+        verify(settlement).confirm(MTN, known, PaymentTransition.Cause.CALLBACK, "op-ref-1");
         assertThat(counterTagged("nkap.callback.rejected", "reason", "unknown_reference")).isEqualTo(2.0);
         assertThat(counter("nkap.callback.confirmed")).isEqualTo(1.0);
     }

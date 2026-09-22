@@ -19,6 +19,7 @@ import dev.nkap.server.provider.AdapterRegistry;
 import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
@@ -109,6 +110,28 @@ public class SettlementService {
      * reconciler — that has to decide what to do next.
      */
     public ConfirmationOutcome confirm(ProviderId providerId, ReferenceId reference, PaymentTransition.Cause cause) {
+        return confirm(providerId, reference, cause, null);
+    }
+
+    /**
+     * {@code candidateProviderReference} is the operator's own reference for this request, as
+     * read out of a callback body the gateway attributed by the address it composed, not by
+     * anything the body itself named (issue #185, issue #198) — {@code null} for every other
+     * caller, including the reconciler, which passes none and behaves exactly as
+     * {@link #confirm(ProviderId, ReferenceId, PaymentTransition.Cause)} always has.
+     *
+     * <p>The candidate is body-supplied and therefore exactly as attacker-controlled as the
+     * body itself ({@code CallbackController}'s own class javadoc). It is used for the
+     * confirming query only when the payment holds no provider reference of its own — never
+     * overriding one {@code submit} already recorded — and it is persisted only in
+     * {@link #applyConfirmed}, only once the operator has answered this query with anything
+     * other than {@link PaymentState#UNKNOWN} — not only when that answer changes the
+     * payment's state, see {@link #recordProviderReferenceIfCandidate}'s own javadoc for why
+     * those are different bars. A value volunteered by an unauthenticated caller is trusted
+     * only once the operator itself has vouched for it by answering a question asked under it.
+     */
+    public ConfirmationOutcome confirm(ProviderId providerId, ReferenceId reference, PaymentTransition.Cause cause,
+                                       String candidateProviderReference) {
         Payment peek = payments.findByReference(reference).orElse(null);
         if (peek == null) {
             return ConfirmationOutcome.notHeld();
@@ -122,6 +145,14 @@ public class SettlementService {
                 return ConfirmationOutcome.alreadyResolved(peek.state());
             }
 
+            // The persisted provider reference wins whenever there is one; the candidate is
+            // only ever a stand-in for a blank field left that way because submit's response
+            // was lost (issue #198). Never blank-but-non-null: recordProviderReference and
+            // this method's own callers only ever hand a null or a genuinely non-blank value.
+            String queriedProviderReference = peek.providerReference().isBlank() && candidateProviderReference != null
+                    ? candidateProviderReference
+                    : peek.providerReference();
+
             ProviderStatus status;
             try {
                 // The capability travels with the reference (ADR 0008): the payment records
@@ -131,7 +162,7 @@ public class SettlementService {
                 // recorded rather than assumed blank -- MTN ignores it, an operator whose
                 // status call needs a token it issued would not be able to.
                 status = adapters.require(providerId)
-                        .query(new QuerySubject(reference, peek.providerReference()), peek.intent().operation());
+                        .query(new QuerySubject(reference, queriedProviderReference), peek.intent().operation());
             } catch (ProviderUnavailableException noAnswer) {
                 // DEBUG, not INFO (issue #129): this fires on every reconciler attempt that
                 // still gets no answer, per unresolved payment, on a loop -- loud here is
@@ -142,12 +173,13 @@ public class SettlementService {
                 return ConfirmationOutcome.noAnswer();
             }
 
-            return tx.execute(txStatus -> applyConfirmed(reference, status, cause));
+            return tx.execute(txStatus -> applyConfirmed(reference, status, cause, candidateProviderReference));
         }
     }
 
     /** The read-decide-write, in one transaction, on the row locked with {@code FOR UPDATE}. */
-    private ConfirmationOutcome applyConfirmed(ReferenceId reference, ProviderStatus status, PaymentTransition.Cause cause) {
+    private ConfirmationOutcome applyConfirmed(ReferenceId reference, ProviderStatus status,
+                                               PaymentTransition.Cause cause, String candidateProviderReference) {
         Payment payment = payments.findByReferenceForUpdate(reference).orElseThrow();
         if (payment.state().isTerminal()) {
             return ConfirmationOutcome.alreadyResolved(payment.state());
@@ -165,7 +197,15 @@ public class SettlementService {
             // the two levels move together, not just this one.
             log.debug("{} for {}: the operator's answer is not conclusive ({}), changing nothing",
                     cause, reference, blankToDash(status.providerStatusCode()));
+            // No recordProviderReferenceIfCandidate here, deliberately: see that method's
+            // own javadoc for why UNKNOWN is the one mapped-or-not outcome that proves
+            // nothing about whether the operator recognised this reference at all.
             return ConfirmationOutcome.inconclusive(payment.state(), status.providerStatusCode());
+        }
+        // The operator mapped this query to a real state — proof it recognised the reference
+        // it was asked under, whether or not that state turns out to be news (issue #198).
+        if (recordProviderReferenceIfCandidate(payment, candidateProviderReference)) {
+            payments.save(payment);
         }
         if (confirmed == payment.state()) {
             return ConfirmationOutcome.inconclusive(payment.state(), status.providerStatusCode());
@@ -197,6 +237,9 @@ public class SettlementService {
         payment.applyTransition(confirmed, cause,
                 status.providerStatusCode(), status.failureReason(), status.rawResponse());
         status.transactionId().ifPresent(payment::recordProviderTransactionId);
+        // The association, if any, was already recorded above -- as soon as a mapped answer
+        // established the operator recognised this reference, before this method knew
+        // whether that answer would turn out to change anything.
         log.info("{} for {}: {} -> {} ({})", cause, reference, previousState, confirmed,
                 blankToDash(status.providerStatusCode()));
 
@@ -222,6 +265,56 @@ public class SettlementService {
         return payment.state().isTerminal()
                 ? ConfirmationOutcome.resolved(payment.state(), status.providerStatusCode())
                 : ConfirmationOutcome.advanced(payment.state(), status.providerStatusCode());
+    }
+
+    /**
+     * Persists {@code candidateProviderReference} on {@code payment}, the association issue
+     * #198 exists for — but only once the operator has already answered <strong>a query asked
+     * under it</strong> with something other than {@link PaymentState#UNKNOWN}. That is a
+     * lower bar than "this answer changed the payment": {@link #applyConfirmed} calls this
+     * once, as soon as it knows {@code status.state()} mapped to a real state at all, before
+     * it has decided whether that state is news, matches what the payment already shows, or
+     * is one the state machine refuses outright. All three still mean the operator recognised
+     * the reference it was asked to look up — the vouching argument does not care whether the
+     * answer was interesting.
+     *
+     * <p><strong>{@code UNKNOWN} is excluded, and this is not merely "inconclusive so skip
+     * it"</strong>: an operator's mapped states are drawn from its own vocabulary, so any of
+     * them means "yes, I have this reference." An unmapped answer proves nothing of the kind
+     * — it is the same shape as "I have never heard of this reference," which is exactly what
+     * the conformance kit's currency-mismatch rule already relies on
+     * ({@code ProviderAdapterConformanceTest.a_currency_mismatch_is_not_attempted_and_never_reaches_the_operator}:
+     * a reference never submitted answers {@code UNKNOWN} indistinguishably from one that was
+     * submitted and refused). Recording an association on {@code UNKNOWN} would let a
+     * candidate the operator never actually vouched for ride in on an answer that is silent
+     * about whether the operator recognises it at all — the one gap this method must not
+     * close.
+     *
+     * <p>Two further refusals, silent because neither is this payment's caller's fault:
+     *
+     * <ul>
+     *   <li>{@code payment} already holds a provider reference — {@code submit} recorded one,
+     *       or an earlier call already recorded this one, and neither is ever overwritten;</li>
+     *   <li>{@code candidateProviderReference} already resolves, via
+     *       {@link PaymentRepository#findByProviderReference}, to a <strong>different</strong>
+     *       payment of this provider — writing it here anyway would manufacture the exact
+     *       ambiguity that method already refuses to guess between.</li>
+     * </ul>
+     *
+     * @return whether the association was actually written — the caller's cue that the
+     *         payment now needs {@link PaymentRepository#save} even on a branch that would
+     *         otherwise return without persisting anything
+     */
+    private boolean recordProviderReferenceIfCandidate(Payment payment, String candidateProviderReference) {
+        if (candidateProviderReference == null || !payment.providerReference().isBlank()) {
+            return false;
+        }
+        Optional<Payment> clash = payments.findByProviderReference(payment.provider(), candidateProviderReference);
+        if (clash.isPresent() && !clash.get().reference().equals(payment.reference())) {
+            return false;
+        }
+        payment.recordProviderReference(candidateProviderReference);
+        return true;
     }
 
     /**

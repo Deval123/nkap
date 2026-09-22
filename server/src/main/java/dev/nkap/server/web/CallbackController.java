@@ -81,6 +81,13 @@ import org.springframework.web.bind.annotation.RestController;
  * "cannot act on this" traffic can still be told apart by whoever is alerting on the counter,
  * even though neither is safe to write one line per request for.
  *
+ * <p><strong>The path-attributed branch may also hand {@link SettlementService#confirm} the
+ * operator's own reference as a candidate (issue #198)</strong> — when the payment holds none
+ * of its own, {@code submit}'s response having been lost. {@code SettlementService} decides
+ * whether it is ever trusted with anything more than one confirming query; this class only
+ * ever offers it, and only on the one branch where the payment was already identified by an
+ * address the gateway itself composed, never by anything the body named.
+ *
  * <p><strong>What this class does about being unauthenticated and internet-reachable by
  * design (issue #129; {@code docs/security-notes.md} §5 records a public hostname scanned
  * within forty-five minutes of coming up):</strong> every request increments a counter —
@@ -179,6 +186,12 @@ class CallbackController {
         }
 
         ReferenceId reference = event.reference();
+        // Candidate for SettlementService.confirm's confirming query, never for anything
+        // logged: set only on the path-attributed branch below, where the payment was
+        // identified by an address the gateway itself composed rather than by anything the
+        // body named (issue #198). Every other branch passes null and confirm behaves
+        // exactly as it always has.
+        String candidateProviderReference = null;
         if (reference == null && pathReference != null) {
             // Attribution by the address the gateway chose, not by anything the body
             // carries (issue #185) -- the whole point of the second route. A path segment
@@ -187,6 +200,10 @@ class CallbackController {
             // "unknown reference" branch below, which answers both identically, on purpose
             // (see the class javadoc).
             reference = tryParseReference(pathReference);
+            // event.providerReference() is never blank here: CallbackEvent's own compact
+            // constructor refuses a callback with reference() null and providerReference()
+            // blank, and reference() is null on this branch by construction.
+            candidateProviderReference = event.providerReference();
         } else if (reference == null) {
             // This operator's callback never carries a value Nkap chose (issue #149, ADR
             // 0011 §2) -- only the operator's own reference, which the adapter has already
@@ -253,7 +270,15 @@ class CallbackController {
         try (var ignored = MDC.putCloseable("reference", reference.toString())) {
             log.info("callback on /callbacks/{} received for reference {}", providerId, reference);
         }
-        settlement.confirm(id, reference, PaymentTransition.Cause.CALLBACK);
+        // The candidate overload only on the one branch that ever has one to offer, so
+        // every other branch's call is indistinguishable from before issue #198 (issue
+        // #185's own reconciler and callback tests do not need to know this method grew a
+        // second overload).
+        if (candidateProviderReference != null) {
+            settlement.confirm(id, reference, PaymentTransition.Cause.CALLBACK, candidateProviderReference);
+        } else {
+            settlement.confirm(id, reference, PaymentTransition.Cause.CALLBACK);
+        }
         return ResponseEntity.accepted().build();
     }
 

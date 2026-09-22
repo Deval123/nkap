@@ -165,8 +165,11 @@ becomes `UNKNOWN`, and the reconciler resolves it. **For M-Pesa STK Push, as the
 stand, it cannot.** A submission whose response is lost leaves Nkap with no
 `CheckoutRequestID`; the query refuses the reference Nkap does hold; re-submitting creates a
 second, independent payment (see *There is no idempotency* above); and the callback, which
-does arrive, names only identifiers Nkap has never seen, so it cannot be attributed to
-anything. The payment stays `UNKNOWN` until a person reads Safaricom's portal.
+does arrive, names only identifiers Nkap has never seen in its own body. **That no longer
+means it cannot be attributed at all** — see *One way out*, below, for what has changed on
+the gateway's side since this finding was written, and what has not. Until an M-Pesa adapter
+exists to actually use it, the payment still stays `UNKNOWN` until a person reads Safaricom's
+portal; nothing on this page is that adapter.
 
 **Transaction Status does not soften this.** Safaricom's documented example request, read on
 the portal 2026-09-18:
@@ -281,6 +284,37 @@ payment's callback carries, or how a success is handled once acknowledged first.
 modes were tried (an explicit `500`, a failed delivery); nothing says whether a different
 non-2xx status, or a wait longer than three-quarters of an hour, would change the answer. The
 relevant *Still unknown* entries below are narrowed by this, not closed.
+
+**The gap this section closed with a hedge — "so it *can* be attributed" — now has a use,
+on the gateway's own side.** Before [pull request #200](https://github.com/Deval123/nkap/pull/200),
+`CallbackEvent.providerReference()` reached `CallbackController` on the path-attributed branch
+and went no further: a lost submission a callback later confirmed still left the payment with
+no provider reference to query with on the reconciler's next pass. `SettlementService` now
+records it — once a query asked under that candidate lands on a state the adapter could map
+at all, anything but `UNKNOWN` (`SettlementService.recordProviderReferenceIfCandidate`'s own
+javadoc states why `UNKNOWN` is excluded: an operator code the adapter cannot map is still
+answered in the operator's own vocabulary, and still yields `UNKNOWN` — reaching it proves
+nothing about whether the operator recognises the reference).
+
+**For M-Pesa specifically, this is not only caution.** A reference Safaricom does not
+recognise was observed, 2026-09-18, answering `HTTP 500`, `errorCode 500.001.1001`
+(*Querying, and what querying reveals*, above) — and that section's actual finding is that a
+genuine server failure would arrive as the same `HTTP 500`, indistinguishable from it, nothing
+more specific shared between the two. So a candidate the operator has never heard of is, on
+this page's own observation, answered exactly the way an adapter must map to `UNKNOWN`
+regardless. The guard above rests on this operator's own recorded behaviour, not only on
+caution about what an unmapped answer could in principle mean.
+
+**This is a code path, covered by unit tests, and nothing more.** Nothing above was run
+against Safaricom a third time to confirm it, and there is still no M-Pesa adapter in this
+repository to hand it a real payment. What it does mean is that
+[ADR 0014](../adr/0014-resolvable-not-queryable.md)'s admitted `CALLBACK`-only resolution — a
+lost submission resolved without a human, by the address the gateway itself composed — is no
+longer only a decision on paper: the mechanism exists end to end on the gateway's side.
+Whether an adapter built on it could ever be certified is a separate, still-open gap: the
+conformance kit fails an adapter that declares `CALLBACK` without `QUERY` today, by design,
+until it can drive
+an operator's own callback ([issue #199](https://github.com/Deval123/nkap/issues/199)).
 
 ## `ResultCode` is the contract; `ResultDesc` is not
 

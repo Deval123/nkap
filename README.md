@@ -432,8 +432,13 @@ contribution the architecture was built to accept: a new adapter is a self-conta
 that has to pass the conformance kit, which is what lets a maintainer merge an operator they
 have no account with. The goal is every mobile money operator worth integrating. Under
 [ADR 0014](docs/adr/0014-resolvable-not-queryable.md), M-Pesa's lost-submission case is
-resolvable by callback rather than by query, and attributing that callback to a payment
-needs issue #185 first.
+resolvable by callback rather than by query. The gateway side of that now exists — a callback
+URL composed per payment, and the operator's own reference recorded once it answers a query
+asked under one ([#194](https://github.com/Deval123/nkap/pull/194),
+[#200](https://github.com/Deval123/nkap/pull/200)) — but no M-Pesa adapter exists yet to use
+it, and the conformance kit cannot certify a `CALLBACK`-only adapter until it can drive an
+operator's own callback itself
+([issue #199](https://github.com/Deval123/nkap/issues/199)).
 
 Nkap runs on one container and one database. Kafka is an optional connector, not a
 requirement — see [ADR 0003](docs/adr/0003-kafka-is-optional.md).

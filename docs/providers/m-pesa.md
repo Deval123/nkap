@@ -140,6 +140,21 @@ application/json;charset=UTF-8`, carrying a `BusinessShortCode` header. Body:
 already recorded in this repository. And **nothing the caller chose**: no `AccountReference`,
 under that name or any other.
 
+**A second run, 2026-09-22 ~10:35 UTC, confirms this shape rather than adding a new one.**
+`CallBackURL` was `https://<tunnel-host>/callbacks/mpesa/b09bc5ff-9217-4517-9432-0648a45de77b`
+— deliberately the per-payment shape issue #185 makes this gateway compose. The callback
+arrived **27 seconds** after submission (26 seconds in September; both close enough to call
+"under half a minute" rather than two different numbers), on the exact path supplied, the
+extra segment intact. The body was the same shape again: `MerchantRequestID`,
+`CheckoutRequestID`, `ResultCode: 1037`, `ResultDesc: "No response from user."`, nested under
+`Body.stkCallback`, and again nothing the caller chose. The source was the same address as
+September, `196.201.212.69`, `Cf-Ipcountry: KE` — two samples of one value now, still not
+enough to treat as an allow-list anyone could filter on. **New this time: the exact header
+carrying the shortcode**, where September only noted that one arrived —
+`Businessshortcode: 174379`, that capitalisation, as an HTTP header rather than a body field.
+Still no signature, no credential of any kind, on either run: anyone who learns the URL can
+post to it.
+
 ## The finding this page exists for
 
 `CONTRIBUTING.md`'s second ground rule is that a timeout is not a failure: an unanswered call
@@ -211,6 +226,40 @@ choosing — `providerCallbackHost` with no per-submission `X-Callback-Url`, the
 callback would work without issue #116 — still needs it, so both mechanisms exist for now,
 per issue #185's own pull request.
 
+**The shape works end to end against the real sandbox, run 2026-09-22:** the per-payment
+`CallBackURL` above was accepted at submission and delivered on the exact path supplied,
+extra segment intact — see *The callback* above. `docs/providers/mtn.md` records the
+equivalent run against MTN's real sandbox the same day: two operators, one mechanism, both
+observed, neither trimming or rejecting the longer path.
+
+**Working end to end is not the same as closing the question this page opens, and the same
+run shows why.** The recorder answered that callback's delivery with `500`, and **nothing
+further arrived by 11:07Z — thirty-one minutes, one delivery.** Write that precisely: a
+callback Safaricom delivered successfully, to a receiver that then refused it, was not
+retried, at least not within half an hour. That is narrower than "a lost callback is never
+retried" — an explicit `500` means the delivery *worked* and the receiver rejected it; a
+receiver that is actually down refuses the connection or hangs instead, which this run never
+produced and which many systems treat differently. (A second run, testing exactly that
+distinction with the origin stopped, was under way as this page was last edited; its result
+belongs here as one more sentence, not a rewrite of this paragraph.)
+
+Put this beside [ADR 0014](../adr/0014-resolvable-not-queryable.md), which admits an adapter
+that resolves a lost submission by `CALLBACK` alone — M-Pesa is the operator that forced it.
+The callback now carries the gateway's own reference in its URL, so it *can* be attributed
+without anything the body carries; but if the receiver's own processing answers anything
+other than success, this run says that single delivery is all there was. For MTN a transient
+failure on the receiving end costs nothing — the operator's own retry covers it. Here it
+would turn a resolvable payment back into one only a person reading Safaricom's portal can
+settle. The consequence for an adapter is concrete: **acknowledge first, process after.**
+Answering `200` only once the payment is resolved — the ordering a careful implementer
+usually reaches for — is exactly what this operator's behaviour, as observed, punishes.
+
+**The limits of this run, in the same breath rather than left for a reader to assume past
+them:** one sample, sandbox, STK Push only, one refusal status (`500`), one path shape, and
+the timeout outcome only — the sandbox payer never approves a payment, so nothing here says
+what a *successful* payment's callback carries, or how a success is handled once acknowledged
+first. The relevant *Still unknown* entry below is unchanged by this run.
+
 ## Still unknown
 
 Left open deliberately rather than guessed. Each is worth a pull request adding a line here.
@@ -221,10 +270,17 @@ Left open deliberately rather than guessed. Each is worth a pull request adding 
 - **What a successful payment's callback carries** (`CallbackMetadata`, receipt number, payer
   MSISDN) — everything above is the timeout path, because the sandbox payer never answers.
 - **What a genuinely in-flight query answers**, as opposed to one already concluded.
-- **The complete `ResultCode` vocabulary**, and what an unrecognised one looks like.
-- **Whether a non-2xx answer makes Safaricom retry the callback.** Only one delivery was
-  seen, and the recorder answered `200`, so nothing was learned either way. MTN retried; that
-  was a real finding, and its absence here is not evidence.
+- **The complete `ResultCode` vocabulary**, and what an unrecognised one looks like. `1037`
+  ("No response from user") is now confirmed twice, on two independent runs (2026-09-18,
+  2026-09-22), across both the query and the callback — but one member of a vocabulary is
+  not the vocabulary. Every other code, and what an unrecognised one looks like, is unknown.
+- **Whether a non-2xx answer makes Safaricom retry the callback — narrowed, not answered.**
+  The September run only had a `200` to look back on, so nothing was learned either way. The
+  2026-09-22 run answered one delivery with `500` and saw nothing further in the following
+  thirty-one minutes — one sample, one status code, one window. Still unknown: any other
+  non-2xx status, a wait longer than half an hour, and what Safaricom does when the receiver
+  refuses the connection outright rather than answering with an explicit error (a second run
+  testing exactly that was under way as this page was last edited).
 - **Disbursement (B2C)**, whose authentication is different again — the portal's *Test
   Credentials* page generates an encrypted *Security Credential* from an initiator password,
   nothing like STK Push's bearer token.

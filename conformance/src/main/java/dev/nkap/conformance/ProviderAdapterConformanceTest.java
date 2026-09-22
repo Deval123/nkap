@@ -3,6 +3,7 @@ package dev.nkap.conformance;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -12,12 +13,14 @@ import dev.nkap.core.money.Currency;
 import dev.nkap.core.money.Money;
 import dev.nkap.core.payment.PaymentState;
 import dev.nkap.core.payment.ReferenceId;
+import dev.nkap.provider.CallbackEvent;
 import dev.nkap.provider.Capability;
 import dev.nkap.provider.PaymentIntent;
 import dev.nkap.provider.ProviderAdapter;
 import dev.nkap.provider.ProviderStatus;
 import dev.nkap.provider.ProviderUnavailableException;
 import dev.nkap.provider.QuerySubject;
+import dev.nkap.provider.RawCallback;
 import dev.nkap.provider.Resolution;
 import dev.nkap.provider.SubmitResult;
 import dev.nkap.provider.UntrustedCallbackException;
@@ -231,20 +234,37 @@ public abstract class ProviderAdapterConformanceTest {
     /**
      * ADR 0014: a lost submission must be resolvable without a human, by <strong>at least
      * one</strong> mechanism the adapter declares in {@link ProviderAdapter#resolves()} —
-     * querying is one such mechanism, not the definition. {@link Resolution#QUERY} keeps
-     * exactly the assertion this rule always made: a query built from only the reference
-     * Nkap chose must resolve. MTN declares both members, so it always takes that branch.
+     * querying is one such mechanism, not the definition. Each declared mechanism is checked
+     * independently — an adapter declaring both, as MTN does, is held to both, not only to
+     * whichever is checked first.
      *
-     * <p>An adapter that declares {@link Resolution#CALLBACK} without {@code QUERY} cannot be
-     * exercised by that assertion at all — polling cannot work for it by definition — and the
-     * kit has no harness capability yet to drive the operator's own callback and check it
-     * resolves the payment (issue #175; not built in this slice, per ADR 0014 decision 2).
-     * The kit's job is to certify, not to note that it did not look, so the {@code
-     * CALLBACK}-only branch <strong>fails</strong>, naming the issue: a skipped test is
-     * green, and green here would say this adapter's lost-submission handling was checked
-     * when it was not — the exact defect class issue #186 was about. No adapter here takes
-     * this branch today; the day one does, failing is the correct answer until issue #175
-     * exists to make this rule assert something real.
+     * <ul>
+     *   <li>{@link Resolution#QUERY} keeps exactly the assertion this rule always made: a query
+     *       built from only the reference Nkap chose must resolve.</li>
+     *   <li>{@link Resolution#CALLBACK} drives the operator's own callback
+     *       ({@link ConformanceHarness#aDeliveredCallback()}) and hands it to
+     *       {@link ProviderAdapter#parseCallback}. The result must resolve the payment by
+     *       whichever shape the adapter can produce: the event names the reference Nkap chose,
+     *       which alone resolves it; or it names only the operator's own reference, which must
+     *       then be non-blank, and a query built from it must answer something other than
+     *       {@link PaymentState#UNKNOWN}.</li>
+     * </ul>
+     *
+     * An adapter declaring neither still fails, below — {@link Resolution#of} should already
+     * have refused to construct such a set, so reaching that branch names a bug in
+     * {@code Resolution} itself, not in an adapter.
+     *
+     * <p><strong>What this does not prove.</strong> The harness <em>supplies</em> the callback
+     * — it puts the operator into the state where the operator calls back, and hands the kit
+     * exactly what arrived. So the {@code CALLBACK} half of this rule proves that an adapter
+     * given the operator's own callback can resolve the payment from it. It does <strong>not</strong>
+     * prove the adapter arranged for that callback to reach this gateway in the first place: an
+     * adapter that silently ignored the callback URL handed to it in
+     * {@link PaymentIntent#providerOptions()} would have the operator call back somewhere else
+     * entirely, and this rule — which only ever sees what the harness's own receiver caught —
+     * would still pass. Closing that gap needs a call-observation hook this kit does not have
+     * (issue #175); until it exists, this rule certifies the adapter's parsing of a callback it
+     * received, not that it will receive one.
      */
     @Test
     @DisplayName("a call that does not answer yields UNKNOWN, never a failure — resolved by whichever mechanism the adapter declares")
@@ -258,17 +278,36 @@ public abstract class ProviderAdapterConformanceTest {
         assertThrows(ProviderUnavailableException.class,
                 () -> adapter.submit(harness.anIntent(), reference));
 
+        boolean resolvedSomehow = false;
+
         if (resolves.contains(Resolution.QUERY)) {
+            resolvedSomehow = true;
             // The payment may still exist at the operator: a later query can resolve it.
             // QuerySubject.of(reference) is correct here, not a shortcut: submit() threw, so
             // there is no SubmitResult and nothing a real caller could have kept.
             assertSame(PaymentState.SUCCEEDED,
                     adapter.query(QuerySubject.of(reference), operationUnderTest()).state());
-        } else if (resolves.contains(Resolution.CALLBACK)) {
-            fail("adapter declares CALLBACK without QUERY; the kit cannot yet drive the operator's own "
-                    + "callback and cannot certify this adapter's lost-submission handling until issue "
-                    + "#175 lands");
-        } else {
+        }
+
+        if (resolves.contains(Resolution.CALLBACK)) {
+            resolvedSomehow = true;
+            RawCallback delivered = harness.aDeliveredCallback();
+            CallbackEvent event = assertDoesNotThrow(() -> adapter.parseCallback(delivered),
+                    "an adapter declaring CALLBACK must be able to parse the callback its own harness delivers");
+
+            if (event.reference() != null) {
+                assertEquals(reference, event.reference(),
+                        "the callback must be attributable to the reference Nkap chose for this submission");
+            } else {
+                assertTrue(!event.providerReference().isBlank(),
+                        "an event naming no reference Nkap chose must at least name a non-blank provider reference");
+                assertNotSame(PaymentState.UNKNOWN,
+                        adapter.query(new QuerySubject(reference, event.providerReference()), operationUnderTest()).state(),
+                        "neither the reference nor the provider reference resolved the payment");
+            }
+        }
+
+        if (!resolvedSomehow) {
             fail("adapter.resolves() returned " + resolves + ", which declares neither QUERY nor CALLBACK "
                     + "-- Resolution.of(...) should have refused to construct this");
         }

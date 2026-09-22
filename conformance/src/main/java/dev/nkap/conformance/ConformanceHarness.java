@@ -90,6 +90,24 @@ public interface ConformanceHarness extends AutoCloseable {
      */
     RawCallback anUntrustedCallback();
 
+    /**
+     * The {@link RawCallback} the operator actually delivers for the submission the kit has
+     * already made through {@link #adapter()} — the counterpart of {@link #anUntrustedCallback()},
+     * which fabricates a callback no operator sent; this one must not. A harness earns the right
+     * to answer this method only by putting the operator into a state where it calls back for a
+     * real, already-made submission — driving the operator's own webhook mechanism, not
+     * constructing a plausible-looking body by hand — and returning it exactly as it arrived:
+     * headers and body untouched, the same discipline {@link RawCallback} itself documents. The
+     * assertion this method exists to serve is only as trustworthy as this method's honesty about
+     * what actually crossed the wire.
+     *
+     * <p>Called at most once per test, after a submission whose response was lost
+     * ({@link #makeSubmitNeverAnswer()}), and only by a harness whose adapter declares
+     * {@link dev.nkap.provider.Resolution#CALLBACK}. Blocks until the operator's callback
+     * arrives.
+     */
+    RawCallback aDeliveredCallback();
+
     /** Returns the operator to a clean state. Narrowed so implementers need not declare {@code throws}. */
     @Override
     void close();

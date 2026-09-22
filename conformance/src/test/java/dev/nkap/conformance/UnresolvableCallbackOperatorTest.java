@@ -14,6 +14,7 @@ import dev.nkap.provider.PaymentIntent;
 import dev.nkap.provider.ProviderAdapter;
 import dev.nkap.provider.ProviderId;
 import dev.nkap.provider.ProviderStatus;
+import dev.nkap.provider.ProviderUnavailableException;
 import dev.nkap.provider.QuerySubject;
 import dev.nkap.provider.RawCallback;
 import dev.nkap.provider.Resolution;
@@ -22,48 +23,44 @@ import dev.nkap.provider.UntrustedCallbackException;
 import java.time.Duration;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 import org.opentest4j.AssertionFailedError;
 
 /**
- * Issue #186: no adapter in this repository behaves this way — MTN is idempotent, so
- * {@code MtnConformanceTest} passing proves only that MTN does not trip the new assertion in
- * {@link ProviderAdapterConformanceTest#a_reused_reference_is_safe_and_a_disagreeing_provider_reference_is_caught()}.
- * This drives that rule directly against a stub adapter shaped the way Safaricom's STK Push is
- * documented to behave (two submissions of one gateway reference, two different, non-blank
- * provider references — proof the operator created a second payment) and checks the rule now
- * fails instead of reporting a single, safe outcome.
+ * Issue #199's own requirement on itself: the {@code CALLBACK} half of
+ * {@link ProviderAdapterConformanceTest#a_call_that_does_not_answer_is_never_a_failure()} must
+ * be able to fail, or it certifies nothing. This drives that rule against a stub adapter that
+ * declares only {@link Resolution#CALLBACK} and whose callback names neither the reference Nkap
+ * chose nor a provider reference {@code query} can do anything with — the one shape the rule
+ * names as unresolved — and checks the rule reports exactly that, instead of passing because
+ * something merely came back from {@code parseCallback} without throwing.
  */
-class NonIdempotentOperatorTest {
+class UnresolvableCallbackOperatorTest {
 
     @Test
-    void a_second_provider_reference_that_differs_from_the_first_fails_the_rule() throws Throwable {
+    void a_callback_naming_neither_a_usable_reference_fails_the_rule() throws Throwable {
         ProviderAdapterConformanceTest rule = new ProviderAdapterConformanceTest() {
             @Override
             protected ConformanceHarness newHarness() {
-                return new NonIdempotentOperatorHarness();
+                return new UnresolvableCallbackHarness();
             }
         };
 
         rule.openHarness();
         try {
             AssertionFailedError failure = assertThrows(AssertionFailedError.class,
-                    rule::a_reused_reference_is_safe_and_a_disagreeing_provider_reference_is_caught);
-            String message = failure.getMessage();
-            assertTrue(message.contains("proof of two payments"),
-                    () -> "expected the new assertion's message, got: " + message);
-            assertTrue(message.contains("checkout-request-1") && message.contains("checkout-request-2"),
-                    () -> "expected both provider references in the failure, got: " + message);
+                    rule::a_call_that_does_not_answer_is_never_a_failure);
+            assertTrue(failure.getMessage().contains("neither the reference nor the provider reference resolved the payment"),
+                    () -> "expected the rule's own failure message, got: " + failure.getMessage());
         } finally {
             rule.closeHarness();
         }
     }
 
-    /** Two submissions of one reference each acknowledge, each with a different, non-blank id. */
-    private static final class NonIdempotentOperatorHarness implements ConformanceHarness {
+    /** A submission that never answers, resolved only by a callback that never resolves. */
+    private static final class UnresolvableCallbackHarness implements ConformanceHarness {
 
-        private final NonIdempotentOperator adapter = new NonIdempotentOperator();
+        private final UnresolvableCallbackOperator adapter = new UnresolvableCallbackOperator();
 
         @Override
         public ProviderAdapter adapter() {
@@ -78,7 +75,7 @@ class NonIdempotentOperatorTest {
 
         @Override
         public void makeSubmitNeverAnswer() {
-            throw new UnsupportedOperationException("not exercised by this test");
+            // already how the stub adapter always behaves below
         }
 
         @Override
@@ -88,7 +85,7 @@ class NonIdempotentOperatorTest {
 
         @Override
         public void makeNextQuerySucceed() {
-            // already the default below
+            throw new UnsupportedOperationException("not exercised by this test");
         }
 
         @Override
@@ -118,7 +115,10 @@ class NonIdempotentOperatorTest {
 
         @Override
         public RawCallback aDeliveredCallback() {
-            throw new UnsupportedOperationException("not exercised by this test");
+            // Names an operator reference, but one the stub's own query() below can never
+            // resolve -- the shape the rule must catch, not the untrusted-body shape
+            // an_untrusted_callback_is_rejected already covers.
+            return new RawCallback(Map.of(), "{\"providerReference\":\"opaque-1\"}");
         }
 
         @Override
@@ -127,14 +127,12 @@ class NonIdempotentOperatorTest {
         }
     }
 
-    /** Acknowledges every submission with a fresh, non-blank provider reference. */
-    private static final class NonIdempotentOperator implements ProviderAdapter {
-
-        private final AtomicInteger submissions = new AtomicInteger();
+    /** Declares CALLBACK alone; its callback names only a provider reference query never resolves. */
+    private static final class UnresolvableCallbackOperator implements ProviderAdapter {
 
         @Override
         public ProviderId id() {
-            return ProviderId.of("non-idempotent-stub");
+            return ProviderId.of("unresolvable-callback-stub");
         }
 
         @Override
@@ -144,23 +142,24 @@ class NonIdempotentOperatorTest {
 
         @Override
         public Set<Resolution> resolves() {
-            return Resolution.of(Resolution.QUERY);
+            return Resolution.of(Resolution.CALLBACK);
         }
 
         @Override
-        public SubmitResult submit(PaymentIntent intent, ReferenceId reference) {
-            String providerReference = "checkout-request-" + submissions.incrementAndGet();
-            return new SubmitResult.Acknowledged(PaymentState.SUBMITTED, providerReference, "");
+        public SubmitResult submit(PaymentIntent intent, ReferenceId reference) throws ProviderUnavailableException {
+            throw new ProviderUnavailableException("simulated: this submission never answers");
         }
 
         @Override
         public ProviderStatus query(QuerySubject subject, Capability.Operation capability) {
-            return new ProviderStatus(PaymentState.SUCCEEDED, "", subject.providerReference(), null, "", "");
+            // Never resolves anything, whatever it is asked about -- the property this stub
+            // exists to exercise.
+            return ProviderStatus.unknown("", "");
         }
 
         @Override
         public CallbackEvent parseCallback(RawCallback callback) throws UntrustedCallbackException {
-            throw new UnsupportedOperationException("not exercised by this test");
+            return CallbackEvent.unattributed("opaque-1", new ProviderStatus(PaymentState.SUCCEEDED, "", "", null, "", ""));
         }
 
         @Override

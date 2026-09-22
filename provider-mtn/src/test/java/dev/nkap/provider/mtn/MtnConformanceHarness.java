@@ -17,6 +17,15 @@ import java.util.Map;
  * so the harness holds the three dimensions it cares about — the submit outcome, the query
  * outcome, the token — as clauses and re-declares the lot whenever one changes. That is the
  * only real awkwardness in writing one of these.
+ *
+ * <p>{@link #aDeliveredCallback()} needs a fourth thing: an address of its own. Every
+ * declaration therefore also tells the simulator to call back — {@code after: PT0S},
+ * {@code SUCCESSFUL} — to {@code route}, this harness's own private, isolated path on a real
+ * HTTP receiver shared across the whole test class (see {@link CallbackReceiver}'s own javadoc
+ * for why the receiver itself is not started fresh per harness, and why a route is not shared),
+ * so that whichever submission the kit happens to be exercising, the callback the operator
+ * sends for it lands somewhere real, belonging to no other harness, and is handed back exactly
+ * as it arrived.
  */
 final class MtnConformanceHarness implements ConformanceHarness {
 
@@ -24,14 +33,16 @@ final class MtnConformanceHarness implements ConformanceHarness {
     private static final Duration CREDENTIAL_LIFETIME = Duration.ofSeconds(2);
 
     private final SimulatorUnderTest simulator;
+    private final CallbackReceiver.Route route;
     private final MtnCollectionsAdapter adapter;
 
     private String onSubmit = "\"onSubmit\":{\"outcome\":\"ACCEPT\"}";
     private String onQuery = "\"onQuery\":[{\"status\":\"SUCCESSFUL\"}]";
     private String token = "\"token\":{\"ttl\":\"PT1H\"}";
 
-    MtnConformanceHarness(SimulatorUnderTest simulator) {
+    MtnConformanceHarness(SimulatorUnderTest simulator, CallbackReceiver callbacks) {
         this.simulator = simulator;
+        this.route = callbacks.open();
         MtnProfile profile = new MtnProfile(simulator.baseUrl(), "sandbox", "sub-key", "api-user", "api-key",
                 Currency.EUR, "sandbox");
         this.adapter = new MtnCollectionsAdapter(profile, Duration.ofSeconds(2));
@@ -103,11 +114,19 @@ final class MtnConformanceHarness implements ConformanceHarness {
     }
 
     @Override
+    public RawCallback aDeliveredCallback() {
+        return route.poll(Duration.ofSeconds(5));
+    }
+
+    @Override
     public void close() {
         simulator.reset();
+        route.close();
     }
 
     private void redeclare() {
-        simulator.declare("{" + token + ",\"rules\":[{\"scenario\":{" + onSubmit + "," + onQuery + "}}]}");
+        simulator.declare("{" + token + ",\"callbackUrl\":\"" + route.url() + "\","
+                + "\"rules\":[{\"scenario\":{" + onSubmit + "," + onQuery
+                + ",\"callbacks\":[{\"after\":\"PT0S\",\"status\":\"SUCCESSFUL\"}]}}]}");
     }
 }

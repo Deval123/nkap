@@ -3,6 +3,7 @@ package dev.nkap.simulator;
 import dev.nkap.simulator.scenario.CallbackStep;
 import dev.nkap.simulator.scenario.Timeline;
 import dev.nkap.simulator.scenario.TimelineEngine;
+import java.util.Map;
 import org.springframework.stereotype.Component;
 
 /**
@@ -47,6 +48,15 @@ public class Submissions<T extends Timeline<?, ? extends CallbackStep<S>>, S> {
         this.store = store;
         this.callbacks = callbacks;
         this.identity = identity;
+        boolean coherent = switch (identity.mintedBy()) {
+            case CALLER -> identity.onRepeat() == PaymentIdentity.Repeat.REFUSED;
+            case OPERATOR -> identity.onRepeat() == PaymentIdentity.Repeat.NOT_DEDUPLICATED;
+        };
+        if (!coherent) {
+            throw new IllegalStateException("no face has declared an identity minted by " + identity.mintedBy()
+                    + " together with repeats " + identity.onRepeat() + ", and the core does not guess what it"
+                    + " would mean; see PaymentIdentity");
+        }
     }
 
     /**
@@ -58,23 +68,39 @@ public class Submissions<T extends Timeline<?, ? extends CallbackStep<S>>, S> {
      */
     public Submission<T> submit(Product product, String reference, String msisdn, String amount, String currency,
                                 String callbackUrl) {
+        return submit(product, reference, msisdn, amount, currency, callbackUrl, Map.of());
+    }
+
+    /**
+     * As {@link #submit(Product, String, String, String, String, String)}, carrying
+     * {@code callbackData} — what the face keeps from the submission to say its callbacks —
+     * to every callback this submission schedules.
+     */
+    public Submission<T> submit(Product product, String reference, String msisdn, String amount, String currency,
+                                String callbackUrl, Map<String, String> callbackData) {
         String paymentId = switch (identity.mintedBy()) {
             case CALLER -> identity.canonical(reference);
+            case OPERATOR -> identity.mint(msisdn);
         };
 
         if (!store.record(product, paymentId)) {
-            boolean refused = switch (identity.onRepeat()) {
-                case REFUSED -> true;
-            };
-            if (refused) {
-                return new Submission<>(paymentId, null);
+            switch (identity.onRepeat()) {
+                case REFUSED -> {
+                    return new Submission<>(paymentId, null);
+                }
+                case NOT_DEDUPLICATED -> throw new IllegalStateException(
+                        "the operator minted " + paymentId + ", an identity it had already recorded: a minted"
+                                + " identity must be new, or two payments would answer to one");
             }
         }
 
-        T scenario = engine.resolveForSubmission(product, paymentId, msisdn, amount, currency);
+        // Rules match the reference the caller chose: when the operator mints the identity,
+        // nothing else about the payment existed for a rule to name.
+        String matchedReference = reference == null ? null : identity.canonical(reference);
+        T scenario = engine.resolveForSubmission(product, paymentId, matchedReference, msisdn, amount, currency);
 
         String url = (callbackUrl != null && !callbackUrl.isBlank()) ? callbackUrl : engine.callbackUrl();
-        callbacks.schedule(paymentId, amount, currency, scenario.callbacks(), url);
+        callbacks.schedule(paymentId, amount, currency, callbackData, scenario.callbacks(), url);
 
         return new Submission<>(paymentId, scenario);
     }

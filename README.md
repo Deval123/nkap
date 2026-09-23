@@ -185,6 +185,7 @@ ORDER BY escalated_at;
 | `conformance` | The test kit every adapter must pass to be merged. |
 | `simulator-core` | What the fake operator does: scenarios, its memory of payments, callbacks, the `/_nkap` control plane. |
 | `simulator-mtn` | How the fake operator says it the way MTN does: routes, bodies, statuses, authentication. |
+| `simulator-mpesa` | How it says it the way Safaricom's M-Pesa STK Push does. Tested on its own; not yet in the image. |
 | `simulator` | A scriptable fake operator that misbehaves on command — the application and image built from the two above. |
 | `server` | Spring Boot: REST, webhooks, outbox, schedulers. |
 

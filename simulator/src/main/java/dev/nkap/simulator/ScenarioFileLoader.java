@@ -77,7 +77,9 @@ class ScenarioFileLoader {
         int rules;
         try {
             rules = controlPlane.load(json, path);
-        } catch (IOException e) {
+        } catch (IOException | ControlPlane.UnplayableScenario e) {
+            // A scenario this face's operator cannot play is refused the way a malformed one
+            // is, so the file's own message names it and its field in the same words.
             throw new IllegalStateException("nkap.scenario.file " + path + " could not be read as a scenario "
                     + "declaration (field: " + ControlPlane.offendingField(e) + "): " + e.getMessage(), e);
         }

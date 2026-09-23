@@ -1,5 +1,6 @@
 package dev.nkap.simulator;
 
+import java.util.UUID;
 import org.springframework.stereotype.Component;
 
 /**
@@ -25,5 +26,11 @@ class MtnPaymentIdentity implements PaymentIdentity {
     @Override
     public String canonical(String identity) {
         return References.canonical(identity);
+    }
+
+    /** A random UUID: the shape every {@code X-Reference-Id} has, so one no client ever sent. */
+    @Override
+    public String neverSubmitted() {
+        return UUID.randomUUID().toString();
     }
 }

@@ -92,15 +92,27 @@ public class TimelineEngine<R extends Rule<T>, T extends Timeline<Q, ?>, Q> {
      * payment space the resulting state is recorded in.
      */
     public T resolveForSubmission(Product product, String paymentId, String msisdn, String amount, String currency) {
-        T scenario = match(paymentId, msisdn, amount, currency);
+        return resolveForSubmission(product, paymentId, paymentId, msisdn, amount, currency);
+    }
+
+    /**
+     * As {@link #resolveForSubmission(Product, String, String, String, String)}, but matching
+     * rules against {@code reference} — the reference the caller chose — while freezing the
+     * scenario against {@code paymentId}. The two are the same value when the caller chooses
+     * the payment's identity; when the operator mints it, a rule can only ever have been
+     * written against the caller's reference, since the identity did not exist yet.
+     */
+    public T resolveForSubmission(Product product, String paymentId, String reference, String msisdn, String amount,
+                                  String currency) {
+        T scenario = match(reference, msisdn, amount, currency);
         states.get(product).put(paymentId, new ReferenceState<>(scenario, Instant.now(), 0));
         log.info("reference {} resolved to scenario '{}' for {}", paymentId, scenario.name(), product);
         return scenario;
     }
 
-    private T match(String paymentId, String msisdn, String amount, String currency) {
+    private T match(String reference, String msisdn, String amount, String currency) {
         for (R rule : rules) {
-            if (rule.match().matches(paymentId, msisdn, amount, currency)) {
+            if (rule.match().matches(reference, msisdn, amount, currency)) {
                 return rule.scenario();
             }
         }

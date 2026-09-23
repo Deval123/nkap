@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.nkap.simulator.scenario.AccountBehaviour;
 import dev.nkap.simulator.scenario.Rule;
+import dev.nkap.simulator.scenario.SubmitOutcome;
+import dev.nkap.simulator.scenario.Timeline;
 import dev.nkap.simulator.scenario.TimelineEngine;
 import dev.nkap.simulator.scenario.TokenBehaviour;
 import java.io.IOException;
@@ -45,7 +47,7 @@ import org.springframework.web.server.ResponseStatusException;
  * @param <R> the face's rule
  */
 @RequestMapping("/_nkap")
-public abstract class ControlPlane<D extends ControlPlane.Declared<R>, R extends Rule<?>> {
+public abstract class ControlPlane<D extends ControlPlane.Declared<R>, R extends Rule<? extends Timeline<?, ?>>> {
 
     /**
      * What every face's declaration document holds: the whole declared configuration —
@@ -90,7 +92,49 @@ public abstract class ControlPlane<D extends ControlPlane.Declared<R>, R extends
     @PostMapping("/scenarios")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void declare(@RequestBody D body) {
+        refuseWhatThisOperatorCannotDo(body.rules());
         engine.replaceConfiguration(body.token(), body.callbackUrl(), body.rules(), body.account());
+    }
+
+    /**
+     * A scenario the face's own declared policy says its operator can never play is refused
+     * here, when it is declared, the way a malformed one is — not played by inventing an
+     * answer on the wire for something the real operator was never seen to say. One such
+     * case today: {@link SubmitOutcome#CONFLICT}, a refusal of a repeated reference, declared
+     * against a face whose operator does not deduplicate ({@link PaymentIdentity.Repeat#NOT_DEDUPLICATED}).
+     * Nothing is replaced when a declaration is refused.
+     */
+    private void refuseWhatThisOperatorCannotDo(List<R> rules) {
+        if (identity.onRepeat() != PaymentIdentity.Repeat.NOT_DEDUPLICATED) {
+            return;
+        }
+        for (int i = 0; i < rules.size(); i++) {
+            if (rules.get(i).scenario().onSubmit().outcome() == SubmitOutcome.CONFLICT) {
+                throw new UnplayableScenario("rules.[" + i + "].scenario.onSubmit.outcome",
+                        "This operator does not refuse a repeated reference (its face declares Repeat."
+                                + PaymentIdentity.Repeat.NOT_DEDUPLICATED + "); this scenario declared CONFLICT anyway");
+            }
+        }
+    }
+
+    /**
+     * A well-formed scenario naming something the face's declared policy rules out. Public
+     * because the deployable's startup file loader reports it the way it reports a malformed
+     * file, naming the file and {@link #offendingField(Throwable) the field}.
+     */
+    public static final class UnplayableScenario extends RuntimeException {
+
+        private final String field;
+
+        UnplayableScenario(String field, String detail) {
+            super(detail);
+            this.field = field;
+        }
+
+        /** The offending field, in the same notation {@link #offendingField(Throwable)} uses. */
+        public String field() {
+            return field;
+        }
     }
 
     @GetMapping("/scenarios")
@@ -173,6 +217,18 @@ public abstract class ControlPlane<D extends ControlPlane.Declared<R>, R extends
     }
 
     /**
+     * A scenario this face's operator cannot play is refused with the same 400, in the same
+     * words, as a malformed one: to the test author both are a scenario that has to change.
+     */
+    @ExceptionHandler(UnplayableScenario.class)
+    public ResponseEntity<Map<String, String>> unplayableScenario(UnplayableScenario e) {
+        return ResponseEntity.badRequest().body(Map.of(
+            "error", "malformed scenario",
+            "field", e.field,
+            "detail", e.getMessage()));
+    }
+
+    /**
      * Reads a declaration document from {@code path} with the same binding a {@code POST}
      * gets, and applies it exactly as {@link #declare} does — for the deployable's startup
      * scenario file. Returns how many rules it declared.
@@ -186,12 +242,15 @@ public abstract class ControlPlane<D extends ControlPlane.Declared<R>, R extends
     /**
      * The offending field of a malformed declaration, walked from Jackson's own
      * path — {@code "(unknown)"} when the failure is not attributable to one field (a
-     * syntax error, for instance). Shared with the deployable's startup file loader, which
-     * binds the same document from a file at startup: the two ways of declaring a scenario
-     * diagnose a mistake in exactly the same words, not two messages that happen to agree
-     * today.
+     * syntax error, for instance) — or the field an {@link UnplayableScenario} names.
+     * Shared with the deployable's startup file loader, which binds the same document from
+     * a file at startup: the two ways of declaring a scenario diagnose a mistake in exactly
+     * the same words, not two messages that happen to agree today.
      */
     public static String offendingField(Throwable cause) {
+        if (cause instanceof UnplayableScenario unplayable) {
+            return unplayable.field();
+        }
         if (cause instanceof JsonMappingException mapping && !mapping.getPath().isEmpty()) {
             return mapping.getPath().stream()
                 .map(ref -> ref.getFieldName() != null ? ref.getFieldName() : "[" + ref.getIndex() + "]")

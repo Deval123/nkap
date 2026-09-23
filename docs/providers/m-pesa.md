@@ -104,10 +104,69 @@ as its own finding: *does not exist* and *our server is broken* arrive as the sa
 an adapter cannot tell them apart and must map both to `UNKNOWN`. The invariant survives — by
 making an informative answer unusable.
 
+**Correction, 2026-09-23: `500.001.1001` does not mean "the transaction does not exist".**
+The paragraph above stands as it was written, as an observation: on 2026-09-18 an
+unrecognised reference *was* answered that way, message and all. What the paragraph implies
+does not stand. On 2026-09-23 the same code came back four times out of nineteen for a
+reference that unquestionably existed, interleaved with `HTTP 200` answers to the identical
+request seconds either side (*A query in flight*, below). So the code distinguishes nothing:
+not an unknown reference, not a server fault, not a known reference on a bad second. The
+mapping the paragraph draws from it, `UNKNOWN`, is corrected as well; see *What this means for
+whoever writes the adapter*, below.
+
 **There is no idempotency on the caller's reference.** Two submissions carrying an identical
 `AccountReference` were both accepted and produced two different `CheckoutRequestID`s and two
 different `MerchantRequestID`s. This is the question `orange-money.md` calls "the single most
 important thing to know before writing an adapter", asked and answered.
+
+**A query in flight, 2026-09-23.** A third run observed the query rather than the callback.
+Collections / STK Push, sandbox, shortcode `174379`, test MSISDN `254708374149`, amount `1`,
+`CallBackURL` `https://example.invalid/nkap/mpesa`; our own reference `nkap171931`.
+`CheckoutRequestID` `ws_CO_230920262019337708374149`, submitted at `17:19:34Z`. The
+identifier reads `23092026 201933`, which is `20:19:33` in Nairobi, UTC+3. That is the third
+confirmation of *`CheckoutRequestID` encodes Nairobi local time*, above. The query was then
+sent every five seconds for 150 seconds, and got nineteen answers:
+
+| elapsed | HTTP | `ResultCode` | `errorCode` | description |
+| --- | --- | --- | --- | --- |
+| 0s | 200 | **`4999`** | — | `The transaction is still under processing` |
+| 6s | 200 | **`4999`** | — | `The transaction is still under processing` |
+| 14s | 200 | `1037` | — | `DS timeout user cannot be reached.` |
+| 20s–69s (eight answers) | 200 | `1037` | — | `DS timeout user cannot be reached.` |
+| **75s** | **500** | — | **`500.001.1001`** | — |
+| 87s | 200 | `1037` | — | `DS timeout user cannot be reached.` |
+| 96s | 200 | `1037` | — | `DS timeout user cannot be reached.` |
+| **103s** | **500** | — | **`500.001.1001`** | — |
+| 115s | 200 | `1037` | — | `DS timeout user cannot be reached.` |
+| 121s | 200 | `1037` | — | `DS timeout user cannot be reached.` |
+| **130s** | **500** | — | **`500.001.1001`** | — |
+| **141s** | **500** | — | **`500.001.1001`** | — |
+
+**In-flight is a state, not an error.** `4999` is the second member of the `ResultCode`
+vocabulary this page has observed. It is also the first one an adapter would map to a
+non-terminal state. Before the payment concluded, Safaricom answered `HTTP 200` with a code
+that says *not finished yet*. It did not answer with an error. That matters beyond M-Pesa. A
+reconciler that polls has to handle an operator that errors on "not finished yet" separately,
+and this operator does not do that. The window was short here, two answers and gone by
+fourteen seconds. But this run's payer is the sandbox's, who can never be reached. How long
+`4999` lasts for a payer who has a prompt to answer is not something this run shows (see
+*Still unknown*).
+
+**What this means for whoever writes the adapter.** This is what the observation implies, not
+something already built, because there is no M-Pesa adapter in this repository. A
+`500.001.1001` should raise `ProviderUnavailableException`, meaning *no answer was obtained*,
+and the reconciler comes back later. The adapter should not map it to an `UNKNOWN` status.
+`ProviderUnavailableException`'s own contract already names a `5xx` as one of the cases it
+covers. Both choices are safe: neither concludes anything, and the gateway treats the
+reconciler's two outcomes, `NO_ANSWER` and `INCONCLUSIVE`, alike today. Only the first is
+true, though. Mapping the code to a status claims that Safaricom gave an answer about the
+payment when it gave none. This is not a judgement call. It is the rule
+[ADR 0013](../adr/0013-a-refusal-the-operator-never-made.md) states for the gateway, "No
+`payment_transition` row may claim an operator spoke when none did", broken one layer lower,
+in an adapter. The effect would be concrete, not hypothetical. `Reconciler`'s escalation
+warning logs `outcome.lastOperatorAnswer()` under the words "operator's last answer", so
+that is where `500.001.1001` would appear, in place of "no answer". One poll in five on this
+run would have been recorded that way.
 
 ## The callback
 
@@ -303,7 +362,11 @@ genuine server failure would arrive as the same `HTTP 500`, indistinguishable fr
 more specific shared between the two. So a candidate the operator has never heard of is, on
 this page's own observation, answered exactly the way an adapter must map to `UNKNOWN`
 regardless. The guard above rests on this operator's own recorded behaviour, not only on
-caution about what an unmapped answer could in principle mean.
+caution about what an unmapped answer could in principle mean. The run of 2026-09-23 adds a
+second, independent reason. The same `500.001.1001` also answered four polls in nineteen for
+a reference Safaricom unquestionably held, so even taken at its word it cannot separate a
+candidate the operator has never heard of from one it knows (see the correction under
+*Querying, and what querying reveals*, above).
 
 **This is a code path, covered by unit tests, and nothing more.** Nothing above was run
 against Safaricom a third time to confirm it, and there is still no M-Pesa adapter in this
@@ -342,14 +405,21 @@ Left open deliberately rather than guessed. Each is worth a pull request adding 
   holding the subdomain's existence constant, or the reverse — see *The callback* above.
 - **What a successful payment's callback carries** (`CallbackMetadata`, receipt number, payer
   MSISDN) — everything above is the timeout path, because the sandbox payer never answers.
-- **What a genuinely in-flight query answers**, as opposed to one already concluded.
-- **The complete `ResultCode` vocabulary**, and what an unrecognised one looks like. `1037`
-  ("No response from user") is now confirmed across three observations on two days
-  (2026-09-18's query; 2026-09-22's callback and its own status query) — but one member of a
-  vocabulary is not the vocabulary. Every other code, and what an unrecognised one looks
-  like, is unknown. See *`ResultCode` is the contract; `ResultDesc` is not*, above, for a
-  second thing those three observations settle: the code is stable across channels, the
-  prose describing it is not.
+- **Whether the in-flight window looks the same for a payer who can be reached.** What a
+  genuinely in-flight query answers is no longer unknown: `HTTP 200`, `ResultCode 4999`, "The
+  transaction is still under processing". This was seen in one run, on 2026-09-23 (*A query in
+  flight*, above). That run's `4999` window was short, but its payer can never be reached.
+  Nothing yet observed shows how long `4999` lasts for a payer who has a prompt to answer, or
+  whether it is the only answer an in-flight query gives.
+- **The complete `ResultCode` vocabulary**, and what an unrecognised one looks like —
+  narrowed, not closed. `1037` ("No response from user") is now confirmed across three
+  observations on two days (2026-09-18's query; 2026-09-22's callback and its own status
+  query), and it was answered again by 2026-09-23's query. `4999` ("The transaction is still
+  under processing") was observed once, on 2026-09-23. That makes two members out of an
+  unknown total, and two members of a vocabulary are not the vocabulary. Every other code,
+  and what an unrecognised one looks like, is unknown. See *`ResultCode` is the contract;
+  `ResultDesc` is not*, above, for a second thing those three observations settle: the code
+  is stable across channels, the prose describing it is not.
 - **Whether a non-2xx answer, or a failed delivery, makes Safaricom retry the callback —
   narrowed, not answered.** The September run only had a `200` to look back on. Two runs on
   2026-09-22 tried both remaining shapes: an explicit `500` (nothing further in the following

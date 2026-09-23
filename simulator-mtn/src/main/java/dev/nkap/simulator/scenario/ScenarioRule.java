@@ -5,7 +5,7 @@ package dev.nkap.simulator.scenario;
  * matches. Rules are consulted in order and the first match wins; a rule with no
  * matcher matches everything.
  */
-public record ScenarioRule(RequestMatcher match, Scenario scenario) {
+public record ScenarioRule(RequestMatcher match, Scenario scenario) implements Rule<Scenario> {
 
     public ScenarioRule {
         match = match != null ? match : new RequestMatcher(null, null, null, null);

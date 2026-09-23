@@ -17,8 +17,13 @@ This is why the simulator is built *first*, not last.
 ## Running it
 
 ```bash
-mvn -B -pl simulator spring-boot:run
+mvn -B -pl simulator -am package -DskipTests
+java -jar simulator/target/nkap-simulator-*-boot.jar
 ```
+
+`-am` builds the two modules the simulator is assembled from — `simulator-core`, which
+decides what happens, and `simulator-mtn`, which says it the way MTN does — in the same
+run, so nothing stale is picked up from a local repository.
 
 It listens on **port 8081** (`server.port` in `simulator/src/main/resources/application.yml`).
 State is held in memory only — every restart is a clean operator.

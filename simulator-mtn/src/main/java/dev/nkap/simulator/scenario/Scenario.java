@@ -4,7 +4,8 @@ import java.util.List;
 
 /**
  * A scenario is a timeline: what the simulator does at each interaction point of
- * one payment. See ADR 0002 for why this shape and not a response mapping.
+ * one payment. See ADR 0002 for why this shape and not a response mapping. This is
+ * MTN's: its queries answer and its callbacks report a {@link MomoStatus}.
  *
  * <p>Every field is optional in JSON and defaults sensibly, so the document that declares
  * it -- posted to {@code /_nkap/scenarios}, or loaded from a file at startup (issue #99) --
@@ -27,7 +28,7 @@ public record Scenario(
         String name,
         SubmitBehaviour onSubmit,
         List<QueryBehaviour> onQuery,
-        List<CallbackSpec> callbacks) {
+        List<CallbackSpec> callbacks) implements Timeline<QueryBehaviour, CallbackSpec> {
 
     /** The name a scenario carries when the document declaring it does not give it one. */
     public static final String DEFAULT_NAME = "happy-path";

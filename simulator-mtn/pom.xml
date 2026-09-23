@@ -8,22 +8,18 @@
     <artifactId>nkap-parent</artifactId>
     <version>2.1.0-SNAPSHOT</version>
   </parent>
-  <artifactId>nkap-simulator</artifactId>
-  <name>Nkap :: Simulator</name>
+  <artifactId>nkap-simulator-mtn</artifactId>
+  <name>Nkap :: Simulator :: MTN</name>
 
   <!--
-    The deployable, and nothing else: the Spring Boot application that assembles the
-    neutral core with each operator's face, and the image built from it.
+    MTN MoMo's face on the simulator: routes, request parsing, response and error bodies,
+    the status vocabulary, the callback body and the authentication scheme. What happens
+    is simulator-core's; this module decides only how MTN says it.
   -->
   <dependencies>
     <dependency>
       <groupId>dev.nkap</groupId>
       <artifactId>nkap-simulator-core</artifactId>
-      <version>${project.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>dev.nkap</groupId>
-      <artifactId>nkap-simulator-mtn</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
@@ -46,27 +42,6 @@
           <!-- Spring MVC binds @PathVariable / @RequestHeader by parameter name. -->
           <parameters>true</parameters>
         </configuration>
-      </plugin>
-      <plugin>
-        <groupId>org.springframework.boot</groupId>
-        <artifactId>spring-boot-maven-plugin</artifactId>
-        <version>${spring-boot.version}</version>
-        <executions>
-          <!--
-            The runnable, layered jar the Dockerfile packages. A classifier keeps it
-            beside the plain jar, which the server module still depends on as a test
-            library — a fat jar there would not resolve.
-          -->
-          <execution>
-            <id>repackage-boot-jar</id>
-            <goals>
-              <goal>repackage</goal>
-            </goals>
-            <configuration>
-              <classifier>boot</classifier>
-            </configuration>
-          </execution>
-        </executions>
       </plugin>
     </plugins>
   </build>

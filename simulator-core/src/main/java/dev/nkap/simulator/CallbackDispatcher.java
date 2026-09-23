@@ -1,8 +1,6 @@
 package dev.nkap.simulator;
 
-import dev.nkap.simulator.scenario.CallbackSpec;
-import dev.nkap.simulator.scenario.CallbackTarget;
-import dev.nkap.simulator.scenario.MomoStatus;
+import dev.nkap.simulator.scenario.CallbackStep;
 import jakarta.annotation.PreDestroy;
 import java.time.Duration;
 import java.time.Instant;
@@ -32,53 +30,60 @@ import org.springframework.web.client.RestClientResponseException;
  * <p>The simulator sends exactly what the scenario says: <strong>no retries</strong>.
  * A retry would be a scenario feature, not a default. A failed delivery is
  * recorded and logged, and that is all.
+ *
+ * <p>When a callback goes out and where to are decided here; what it says is the face's
+ * {@link CallbackBody}.
+ *
+ * @param <S> the face's status, carried to the body and into the attempt log unread
  */
 @Component
-public class CallbackDispatcher {
+public class CallbackDispatcher<S> {
 
     private static final Logger log = LoggerFactory.getLogger(CallbackDispatcher.class);
 
     /**
      * One delivery attempt, as {@code GET /_nkap/callbacks/{referenceId}} reports
-     * it: when it went out, to which URL, for which reference and with which
+     * it: when it went out, to which URL, for which payment and with which
      * status, whether the receiver answered at all, its HTTP status if it did,
      * and the error if it did not.
      */
-    public record Attempt(
+    public record Attempt<S>(
             Instant at,
             String url,
             String targetReferenceId,
-            MomoStatus status,
+            S status,
             boolean answered,
             Integer responseStatus,
             String error) {}
 
     private final ScheduledExecutorService scheduler;
     private final RestClient http;
+    private final CallbackBody<S> body;
 
     /**
-     * Maximum number of attempts retained per submission reference to prevent
+     * Maximum number of attempts retained per submitted payment to prevent
      * unbounded memory growth in long-running simulator instances (#16).
      */
     static final int MAX_ATTEMPTS_PER_REFERENCE = 100;
 
     /**
-     * Maximum number of submission references retained in memory.
-     * Oldest references are evicted first once this bound is exceeded.
+     * Maximum number of submitted payments retained in memory.
+     * Oldest payments are evicted first once this bound is exceeded.
      */
     static final int MAX_REFERENCES = 1000;
 
-    /** Attempts keyed by the reference the client submitted with, bounded by MAX_REFERENCES. */
-    private final Map<String, List<Attempt>> attempts = Collections.synchronizedMap(
+    /** Attempts keyed by the submitted payment's identity, bounded by MAX_REFERENCES. */
+    private final Map<String, List<Attempt<S>>> attempts = Collections.synchronizedMap(
             new LinkedHashMap<>(16, 0.75f, true) {
                 @Override
-                protected boolean removeEldestEntry(Map.Entry<String, List<Attempt>> eldest) {
+                protected boolean removeEldestEntry(Map.Entry<String, List<Attempt<S>>> eldest) {
                     return size() > MAX_REFERENCES;
                 }
             }
     );
 
-    CallbackDispatcher() {
+    CallbackDispatcher(CallbackBody<S> body) {
+        this.body = body;
         ThreadFactory threads = runnable -> {
             Thread t = new Thread(runnable, "callback-dispatcher");
             t.setDaemon(true);
@@ -104,19 +109,25 @@ public class CallbackDispatcher {
      * scenarios have no callbacks — so it is logged at INFO, not WARN.
      */
     public void schedule(String submissionReferenceId, String amount, String currency,
-                         List<CallbackSpec> callbacks, String url) {
+                         List<? extends CallbackStep<S>> callbacks, String url) {
         if (callbacks.isEmpty()) {
             return;
         }
         if (url == null || url.isBlank()) {
             log.info("reference {} resolved to a scenario with {} callback(s) but no callback URL "
-                    + "(X-Callback-Url header or control-plane callbackUrl); delivering none",
+                    + "(none named by the submission, none declared in the control plane); delivering none",
                     submissionReferenceId, callbacks.size());
             return;
         }
-        for (CallbackSpec spec : callbacks) {
+        for (CallbackStep<S> spec : callbacks) {
             String targetReferenceId = switch (spec.target()) {
                 case SAME_REFERENCE -> submissionReferenceId;
+                // A known leak, recorded here because nothing else would show it: a random
+                // UUID is MTN's identity format, and the core has no business choosing the
+                // shape of an operator's identity. It survived the check that keeps this
+                // module neutral because it names no operator. When a second face needs a
+                // different shape for an identity nobody submitted, PaymentIdentity is where
+                // that face will declare it.
                 case UNKNOWN_REFERENCE -> UUID.randomUUID().toString();
             };
             for (int i = 0; i < spec.times(); i++) {
@@ -129,8 +140,8 @@ public class CallbackDispatcher {
         log.info("scheduled callback delivery for reference {} to {}", submissionReferenceId, url);
     }
 
-    /** Attempts recorded for a submission reference, oldest first; empty if none. */
-    public List<Attempt> attemptsFor(String submissionReferenceId) {
+    /** Attempts recorded for a submitted payment, oldest first; empty if none. */
+    public List<Attempt<S>> attemptsFor(String submissionReferenceId) {
         return List.copyOf(attempts.getOrDefault(submissionReferenceId, List.of()));
     }
 
@@ -145,20 +156,8 @@ public class CallbackDispatcher {
     }
 
     private void deliver(String submissionReferenceId, String url, String targetReferenceId,
-                         String amount, String currency, MomoStatus status) {
-        Map<String, Object> body = new LinkedHashMap<>();
-        body.put("referenceId", targetReferenceId);
-        body.put("status", status.name());
-        if (amount != null) {
-            body.put("amount", amount);
-        }
-        if (currency != null) {
-            body.put("currency", currency);
-        }
-        body.put("financialTransactionId", financialTransactionId(targetReferenceId));
-        if (status == MomoStatus.FAILED) {
-            body.put("reason", "SIMULATED_FAILURE");
-        }
+                         String amount, String currency, S status) {
+        Map<String, Object> body = this.body.render(targetReferenceId, amount, currency, status);
 
         Instant at = Instant.now();
         boolean answered = false;
@@ -180,7 +179,7 @@ public class CallbackDispatcher {
             error = e.getClass().getSimpleName() + (e.getMessage() != null ? ": " + e.getMessage() : "");
         }
 
-        record(submissionReferenceId, new Attempt(at, url, targetReferenceId, status, answered, responseStatus, error));
+        record(submissionReferenceId, new Attempt<>(at, url, targetReferenceId, status, answered, responseStatus, error));
 
         if (answered && responseStatus != null && responseStatus < 300) {
             log.info("callback for {} delivered to {} ({})", targetReferenceId, url, responseStatus);
@@ -190,9 +189,9 @@ public class CallbackDispatcher {
         }
     }
 
-    void recordAttempt(String submissionReferenceId, Attempt attempt) {
+    void recordAttempt(String submissionReferenceId, Attempt<S> attempt) {
         attempts.compute(submissionReferenceId, (k, list) -> {
-            List<Attempt> current = (list != null) ? list : new CopyOnWriteArrayList<>();
+            List<Attempt<S>> current = (list != null) ? list : new CopyOnWriteArrayList<>();
             current.add(attempt);
             while (current.size() > MAX_ATTEMPTS_PER_REFERENCE) {
                 current.remove(0);
@@ -201,15 +200,7 @@ public class CallbackDispatcher {
         });
     }
 
-    private void record(String submissionReferenceId, Attempt attempt) {
+    private void record(String submissionReferenceId, Attempt<S> attempt) {
         recordAttempt(submissionReferenceId, attempt);
-    }
-
-    /**
-     * A stand-in for MTN's numeric transaction id. Derived from the reference so
-     * a scenario stays deterministic across runs (ADR 0002), not random.
-     */
-    private static String financialTransactionId(String reference) {
-        return Long.toString(Integer.toUnsignedLong(reference.hashCode()));
     }
 }

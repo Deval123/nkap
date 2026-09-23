@@ -183,7 +183,9 @@ ORDER BY escalated_at;
 | `provider-api` | The `ProviderAdapter` contract an operator integration implements. |
 | `provider-mtn` | The MTN MoMo adapter. |
 | `conformance` | The test kit every adapter must pass to be merged. |
-| `simulator` | A scriptable fake operator that misbehaves on command. |
+| `simulator-core` | What the fake operator does: scenarios, its memory of payments, callbacks, the `/_nkap` control plane. |
+| `simulator-mtn` | How the fake operator says it the way MTN does: routes, bodies, statuses, authentication. |
+| `simulator` | A scriptable fake operator that misbehaves on command — the application and image built from the two above. |
 | `server` | Spring Boot: REST, webhooks, outbox, schedulers. |
 
 `core` has no dependencies on purpose. It makes the accounting invariants testable in

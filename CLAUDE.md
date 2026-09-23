@@ -79,7 +79,9 @@ not in the test.
 | `provider-api` | the `ProviderAdapter` contract | `core` |
 | `provider-mtn` | the MTN MoMo adapter | `provider-api`; `simulator` at test scope only |
 | `conformance` | the kit every adapter must pass | `provider-api` |
-| `simulator` | scriptable fake operator (Spring Boot) | — |
+| `simulator-core` | the fake operator's behaviour: scenarios, payment memory, callbacks, control plane | — (never a face module, at any scope) |
+| `simulator-mtn` | MTN's face on it: routes, bodies, statuses, authentication | `simulator-core` |
+| `simulator` | the deployable fake operator (Spring Boot application, image) | `simulator-core`, `simulator-mtn` |
 | `server` | REST, webhooks, outbox, schedulers (Spring Boot) | `provider-api` |
 
 An adapter translates; it never decides. State transitions, idempotency and bookkeeping
@@ -93,7 +95,8 @@ Spring Boot is imported as a BOM in the root POM, never as a parent — that is 
 ```bash
 mvn -B clean verify              # everything
 mvn -B -pl core test             # the invariants, in milliseconds
-mvn -B -pl simulator spring-boot:run   # the fake operator, on port 8081
+mvn -B -pl simulator -am package -DskipTests \
+  && java -jar simulator/target/nkap-simulator-*-boot.jar   # the fake operator, on port 8081
 ```
 
 ## Tests

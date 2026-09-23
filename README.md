@@ -182,6 +182,7 @@ ORDER BY escalated_at;
 | `core` | Ledger, state machine, idempotency. Pure domain — no web, no Spring, no database. |
 | `provider-api` | The `ProviderAdapter` contract an operator integration implements. |
 | `provider-mtn` | The MTN MoMo adapter. |
+| `provider-mpesa` | The M-Pesa STK Push adapter. Certified by the kit; not yet wired into the server. |
 | `conformance` | The test kit every adapter must pass to be merged. |
 | `simulator-core` | What the fake operator does: scenarios, its memory of payments, callbacks, the `/_nkap` control plane. |
 | `simulator-mtn` | How the fake operator says it the way MTN does: routes, bodies, statuses, authentication. |
@@ -430,18 +431,18 @@ database constraints, reconciliation, signed webhooks, the conformance kit, and 
 [`docs/roadmap/v1.0.0-mtn-end-to-end.md`](docs/roadmap/v1.0.0-mtn-end-to-end.md) was the full
 definition of done — a historical record now, not a plan.
 
-**After 1.0.0 — the other operators.** Orange Money, Wave, M-Pesa, Airtel. This is the
-contribution the architecture was built to accept: a new adapter is a self-contained module
-that has to pass the conformance kit, which is what lets a maintainer merge an operator they
-have no account with. The goal is every mobile money operator worth integrating. Under
-[ADR 0014](docs/adr/0014-resolvable-not-queryable.md), M-Pesa's lost-submission case is
-resolvable by callback rather than by query. The gateway side of that now exists — a callback
-URL composed per payment, and the operator's own reference recorded once it answers a query
-asked under one ([#194](https://github.com/Deval123/nkap/pull/194),
-[#200](https://github.com/Deval123/nkap/pull/200)) — but no M-Pesa adapter exists yet to use
-it, and the conformance kit cannot certify a `CALLBACK`-only adapter until it can drive an
-operator's own callback itself
-([issue #199](https://github.com/Deval123/nkap/issues/199)).
+**After 1.0.0 — the other operators.** This is the contribution the architecture was built
+to accept, and the goal is every mobile money operator worth integrating. A new operator is
+two modules: an adapter, which has to pass the conformance kit, and a face on the simulator,
+which is what the kit drives — the operator's routes, bodies, statuses and authentication,
+over a neutral core every face shares. Together they are what lets a maintainer merge an
+operator they have no account with. M-Pesa is the first to show it: `provider-mpesa` (STK
+Push, Collections) passes every rule of the kit against `simulator-mpesa`, and was written
+without a Safaricom account. Under [ADR 0014](docs/adr/0014-resolvable-not-queryable.md) its
+lost-submission case is resolved by callback rather than by query, using the callback URL the
+gateway composes per payment ([#194](https://github.com/Deval123/nkap/pull/194),
+[#200](https://github.com/Deval123/nkap/pull/200)). It is not wired into the server's
+configuration yet, so a deployment cannot be pointed at Safaricom.
 
 Nkap runs on one container and one database. Kafka is an optional connector, not a
 requirement — see [ADR 0003](docs/adr/0003-kafka-is-optional.md).

@@ -71,14 +71,16 @@ public abstract class ControlPlane<D extends ControlPlane.Declared<R>, R extends
     private final TimelineEngine<R, ?, ?> engine;
     private final ReferenceStore store;
     private final CallbackDispatcher<?> callbacks;
+    private final SubmissionCount submissions;
     private final PaymentIdentity identity;
     private final Class<D> documentType;
 
     protected ControlPlane(TimelineEngine<R, ?, ?> engine, ReferenceStore store, CallbackDispatcher<?> callbacks,
-                           PaymentIdentity identity, Class<D> documentType) {
+                           SubmissionCount submissions, PaymentIdentity identity, Class<D> documentType) {
         this.engine = engine;
         this.store = store;
         this.callbacks = callbacks;
+        this.submissions = submissions;
         this.identity = identity;
         this.documentType = documentType;
     }
@@ -88,6 +90,9 @@ public abstract class ControlPlane<D extends ControlPlane.Declared<R>, R extends
 
     /** The body of {@code GET /_nkap/state/{referenceId}}. */
     public record StateView(String scenario, int queryCount, Instant submittedAt) {}
+
+    /** The body of {@code GET /_nkap/submissions}. */
+    public record SubmissionsView(int count) {}
 
     @PostMapping("/scenarios")
     @ResponseStatus(HttpStatus.NO_CONTENT)
@@ -190,7 +195,7 @@ public abstract class ControlPlane<D extends ControlPlane.Declared<R>, R extends
 
     /**
      * Forgets every reference — in the engine, the idempotency gate and the
-     * callback log. This is what lets one test suite run its cases in sequence
+     * callback log — and resets the count of processed submissions. This is what lets one test suite run its cases in sequence
      * without each inheriting the previous one's references. It leaves the
      * declared configuration — rules, token and callback URL — alone: that is
      * {@code DELETE /_nkap/scenarios}.
@@ -201,6 +206,17 @@ public abstract class ControlPlane<D extends ControlPlane.Declared<R>, R extends
         engine.forgetAllState();
         store.clear();
         callbacks.clear();
+        submissions.reset();
+    }
+
+    /**
+     * How many submissions the operator has processed since {@code DELETE /_nkap/state} —
+     * see {@link SubmissionCount} for exactly what counts. A test reads it to tell whether a
+     * call reached the operator, and how many times (issue #175).
+     */
+    @GetMapping("/submissions")
+    public SubmissionsView submissions() {
+        return new SubmissionsView(submissions.processed());
     }
 
     /**

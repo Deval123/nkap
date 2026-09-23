@@ -113,6 +113,11 @@ an observation hook `ConformanceHarness` does not have, which is issue #175. Unt
 the kit keeps issue #186's reference comparison as a partial catch, and says in its own javadoc
 what it does not establish.
 
+**Addendum, 2026-09-23: the condition above is met.** Issue #175 gave the kit
+`ConformanceHarness.submissionsReceived()`, counted at the operator. The partial catch is
+replaced by the assertion this decision asked for: each rule submits once, and the operator must
+have processed exactly one submission for it.
+
 ### 5. `README.md` stops promising M-Pesa unconditionally
 
 The roadmap names M-Pesa among the operators to come. Under this ADR an M-Pesa adapter becomes

@@ -1,5 +1,7 @@
 package dev.nkap.simulator;
 
+import dev.nkap.simulator.Submissions.Submission;
+import dev.nkap.simulator.scenario.MomoStatus;
 import dev.nkap.simulator.scenario.QueryBehaviour;
 import dev.nkap.simulator.scenario.Scenario;
 import dev.nkap.simulator.scenario.ScenarioEngine;
@@ -22,13 +24,13 @@ import org.springframework.web.server.ResponseStatusException;
 
 /**
  * The MTN MoMo Collections {@code requesttopay} surface. The controller decides
- * nothing about payment behaviour: it asks {@link ScenarioEngine} what to do and
- * carries out the answer (ADR 0002). What stays here are the protocol rules that
- * are not simulated behaviour:
+ * nothing about payment behaviour: it hands the submission to {@link Submissions}, asks
+ * {@link ScenarioEngine} what a query answers, and carries out the answer (ADR 0002).
+ * What stays here is how MTN says it:
  *
  * <ul>
  *   <li>{@code X-Reference-Id} is a client-supplied UUID and the idempotency
- *       key. A second POST with the same one is a 409.</li>
+ *       key ({@link MtnPaymentIdentity}). A second POST with the same one is a 409.</li>
  *   <li>A missing or malformed {@code X-Reference-Id} is a 400.</li>
  *   <li>The POST returns 202 with an <em>empty</em> body: the status is only
  *       ever available through the GET.</li>
@@ -40,16 +42,14 @@ import org.springframework.web.server.ResponseStatusException;
 @RestController
 public class RequestToPayController {
 
-    private final ReferenceStore store;
+    private final Submissions<Scenario, MomoStatus> submissions;
     private final ScenarioEngine engine;
-    private final CallbackDispatcher callbacks;
     private final TokenAuthenticator authenticator;
 
-    RequestToPayController(ReferenceStore store, ScenarioEngine engine,
-                           CallbackDispatcher callbacks, TokenAuthenticator authenticator) {
-        this.store = store;
+    RequestToPayController(Submissions<Scenario, MomoStatus> submissions, ScenarioEngine engine,
+                           TokenAuthenticator authenticator) {
+        this.submissions = submissions;
         this.engine = engine;
-        this.callbacks = callbacks;
         this.authenticator = authenticator;
     }
 
@@ -77,22 +77,19 @@ public class RequestToPayController {
         String amount = field(body, "amount");
         String currency = field(body, "currency");
 
-        if (!store.record(Product.COLLECTIONS, reference)) {
+        // Submit now — which schedules the callbacks as the scenario resolves — and only
+        // THEN apply the submit delay below. Schedule first, sleep second, respond third:
+        // that ordering is the only reason a callback declared with after:PT0S can reach
+        // the client while this call is still blocked on onSubmit.delay() — issue #6, the
+        // callback that arrives before the submit response. It looks arbitrary until you
+        // need it.
+        Submission<Scenario> submission =
+                submissions.submit(Product.COLLECTIONS, reference, msisdn, amount, currency, callbackUrl);
+        if (submission.refused()) {
             throw new MtnErrorException(HttpStatus.CONFLICT, MtnErrorResponse.duplicateReference());
         }
 
-        Scenario scenario = engine.resolveForSubmission(Product.COLLECTIONS, reference, msisdn, amount, currency);
-
-        // Schedule callbacks now — when the scenario resolves, and BEFORE the
-        // submit delay below. Schedule first, sleep second, respond third: that
-        // ordering is the only reason a callback declared with after:PT0S can
-        // reach the client while this call is still blocked on onSubmit.delay()
-        // — issue #6, the callback that arrives before the submit response. It
-        // looks arbitrary until you need it.
-        String url = (callbackUrl != null && !callbackUrl.isBlank()) ? callbackUrl : engine.callbackUrl();
-        callbacks.schedule(reference, amount, currency, scenario.callbacks(), url);
-
-        SubmitBehaviour onSubmit = scenario.onSubmit();
+        SubmitBehaviour onSubmit = submission.scenario().onSubmit();
 
         if (onSubmit.outcome() == SubmitOutcome.NO_RESPONSE) {
             return neverAnswer();

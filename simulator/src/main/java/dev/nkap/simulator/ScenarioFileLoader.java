@@ -1,8 +1,6 @@
 package dev.nkap.simulator;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import dev.nkap.simulator.ControlPlaneController.Declaration;
-import dev.nkap.simulator.scenario.ScenarioEngine;
 import jakarta.annotation.PostConstruct;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -14,11 +12,11 @@ import org.springframework.stereotype.Component;
 
 /**
  * Loads a scenario declaration from a file at startup, applying it exactly as if it had
- * been {@code POST}ed to {@code /_nkap/scenarios} (issue #99) — the same {@link Declaration}
- * shape, the same Jackson binding {@link ControlPlaneController#declare} uses, the same
- * {@link ScenarioEngine#replaceConfiguration} call. This is not a second source of truth:
- * after this runs, the file has no further existence. {@code GET /_nkap/scenarios} keeps
- * answering what is active in {@link ScenarioEngine}, whatever established it, and a later
+ * been {@code POST}ed to {@code /_nkap/scenarios} (issue #99) — the same declaration
+ * document, the same Jackson binding {@link ControlPlane#declare} uses, the same call to
+ * {@link ControlPlane#declare} itself. This is not a second source of truth: after this
+ * runs, the file has no further existence. {@code GET /_nkap/scenarios} keeps answering
+ * what is active in the engine, whatever established it, and a later
  * {@code POST} replaces what this loaded exactly the way it replaces an earlier {@code POST}
  * (ADR 0002's amendment).
  *
@@ -38,7 +36,7 @@ import org.springframework.stereotype.Component;
  * scenario, exactly as it did before this existed. A path that exists but is not a regular
  * file — most often a directory, which {@code docker run -v ./scenario.json:...} creates on
  * the container side when the host path does not exist — and a file that exists but does not
- * parse as a {@link Declaration} both refuse to start, naming the path and what was wrong
+ * parse as a declaration both refuse to start, naming the path and what was wrong
  * with it: a simulator that silently ignored the scenario it was handed would produce test
  * results nobody could explain.
  */
@@ -49,19 +47,19 @@ class ScenarioFileLoader {
 
     private final Path path;
     private final ObjectMapper json;
-    private final ScenarioEngine engine;
+    private final ControlPlane<?, ?> controlPlane;
 
     // The default is repeated here, not left to application.yml alone: EmbeddedSimulator
-    // (server module) and provider-mtn's own equivalent boot SimulatorApplication inside a
+    // (server module) and the adapter tests' own equivalent boot SimulatorApplication inside a
     // host JVM that carries its own application.yml on the same classpath, and Spring Boot's
     // classpath:/application.yml resolution is not guaranteed to load both. Losing this
     // inline default there would fail an unrelated test class's static initializer on an
     // unresolved placeholder -- a failure with nothing to do with what that test is about.
     ScenarioFileLoader(@Value("${nkap.scenario.file:/etc/nkap/scenario.json}") String path,
-                       ObjectMapper json, ScenarioEngine engine) {
+                       ObjectMapper json, ControlPlane<?, ?> controlPlane) {
         this.path = Path.of(path);
         this.json = json;
-        this.engine = engine;
+        this.controlPlane = controlPlane;
     }
 
     @PostConstruct
@@ -76,15 +74,14 @@ class ScenarioFileLoader {
                     + "was started, so Docker created a directory there instead of mounting a file");
         }
 
-        Declaration declaration;
+        int rules;
         try {
-            declaration = json.readValue(path.toFile(), Declaration.class);
+            rules = controlPlane.load(json, path);
         } catch (IOException e) {
             throw new IllegalStateException("nkap.scenario.file " + path + " could not be read as a scenario "
-                    + "declaration (field: " + ControlPlaneController.offendingField(e) + "): " + e.getMessage(), e);
+                    + "declaration (field: " + ControlPlane.offendingField(e) + "): " + e.getMessage(), e);
         }
 
-        engine.replaceConfiguration(declaration.token(), declaration.callbackUrl(), declaration.rules(), declaration.account());
-        log.info("loaded {} scenario rule(s) from {}, active before the first request", declaration.rules().size(), path);
+        log.info("loaded {} scenario rule(s) from {}, active before the first request", rules, path);
     }
 }

@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <parent>
+    <groupId>dev.nkap</groupId>
+    <artifactId>nkap-parent</artifactId>
+    <version>2.1.0-SNAPSHOT</version>
+  </parent>
+  <artifactId>nkap-simulator-core</artifactId>
+  <name>Nkap :: Simulator :: Core</name>
+
+  <!--
+    The operator-neutral half of the simulator: which scenario applies, accept or refuse
+    or never answer, a status that flaps, a credential that expires, when a callback is
+    due and where it goes, the operator's memory of payments, and the /_nkap control
+    plane. How any of it is said on the wire belongs to a face module (simulator-mtn).
+
+    Depends on no face module, at any scope. A face depends on this; never the reverse.
+
+    The Java packages (dev.nkap.simulator, dev.nkap.simulator.scenario) span this module
+    and the face modules, so package-private access no longer marks the boundary between
+    core and face. The only real boundary is this Maven dependency direction.
+
+    Production code does not cross it. Tests in the deployable module (simulator) do, for
+    setup and for asserting the dispatcher's own bookkeeping: ProductRoutingTest,
+    RequestToPayApiTest and TransferApiTest call the package-private ReferenceStore.clear(),
+    and CallbackDeliveryTest uses CallbackDispatcher's package-private
+    MAX_ATTEMPTS_PER_REFERENCE, MAX_REFERENCES and recordAttempt. That is tolerated for now,
+    and it is the first thing to revisit when this module gains tests of its own. Those
+    tests were crossing before anyone decided it was allowed, which is why the seam needs a
+    boundary stronger than a convention.
+  -->
+  <dependencies>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-web</artifactId>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <configuration>
+          <!-- Spring MVC binds @PathVariable / @RequestHeader by parameter name. -->
+          <parameters>true</parameters>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
+</project>

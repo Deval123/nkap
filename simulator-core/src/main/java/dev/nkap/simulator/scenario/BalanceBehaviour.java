@@ -1,11 +1,11 @@
 package dev.nkap.simulator.scenario;
 
 /**
- * How {@code GET .../account/balance} answers: {@code availableBalance} as MTN's own decimal
- * string in the major unit, and a {@code currency} — the shape the Account Balance API
- * documents, not one observed against a live sandbox (issue #72; see "Still unknown" in
- * {@code docs/providers/mtn.md}). {@link AccountOutcome#NO_RESPONSE} is the operator going
- * silent, the same case {@link SubmitOutcome#NO_RESPONSE} covers for a submission.
+ * How the account-balance read answers (issue #72): an {@code availableBalance}, kept as the
+ * string the operator states it in rather than parsed into a number — the face that answers
+ * decides what that string looks like on the wire — and a {@code currency}.
+ * {@link AccountOutcome#NO_RESPONSE} is the operator going silent, the same case
+ * {@link SubmitOutcome#NO_RESPONSE} covers for a submission.
  */
 public record BalanceBehaviour(AccountOutcome outcome, String availableBalance, String currency) {
 

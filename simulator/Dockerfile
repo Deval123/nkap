@@ -1,7 +1,8 @@
 # The scriptable fake operator, built from source. Same shape as server/Dockerfile;
 # the comments there explain the multi-stage build and the layered "-boot" jar.
 #
-# The simulator depends on no other module, so its build does not need `-am`.
+# The deployable depends on its sibling modules (simulator-core, simulator-mtn), so its
+# build needs `-am` to build them in the same reactor.
 
 # ---- build ---------------------------------------------------------------------------
 FROM maven:3.9.9-eclipse-temurin-21 AS build
@@ -12,7 +13,7 @@ COPY . .
 # and binding repackage would hand a fat jar to the modules that depend on this one as a
 # test library. Repackaging only in the image keeps that blast radius at zero.
 RUN --mount=type=cache,target=/root/.m2 \
-    mvn -B -ntp -q -pl simulator package -DskipTests \
+    mvn -B -ntp -q -pl simulator -am package -DskipTests \
  && cp simulator/target/nkap-simulator-*-boot.jar app.jar \
  && java -Djarmode=tools -jar app.jar extract --layers --destination extracted
 

@@ -25,6 +25,8 @@
     <module>provider-api</module>
     <module>provider-mtn</module>
     <module>conformance</module>
+    <module>simulator-core</module>
+    <module>simulator-mtn</module>
     <module>simulator</module>
     <module>server</module>
   </modules>

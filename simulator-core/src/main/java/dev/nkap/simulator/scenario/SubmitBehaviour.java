@@ -15,8 +15,8 @@ import java.time.Duration;
  * {@link SubmitOutcome#ACCEPT} and {@link SubmitOutcome#NO_RESPONSE}, which have
  * no error body.
  *
- * <p>The codes themselves are not listed here: the vocabulary is MTN's, and it
- * lives with the error model that answers with it.
+ * <p>The codes themselves are not listed here: the vocabulary is the operator's, and
+ * it lives with the face whose error model answers with it.
  */
 public record SubmitBehaviour(Duration delay, SubmitOutcome outcome, String code) {
 

@@ -10,7 +10,8 @@ import java.time.Duration;
  * <p>{@code times} with {@code every} reads as the requirement of issue #5 does:
  * "the same callback twice, a configurable interval apart".
  */
-public record CallbackSpec(Duration after, Duration every, int times, CallbackTarget target, MomoStatus status) {
+public record CallbackSpec(Duration after, Duration every, int times, CallbackTarget target, MomoStatus status)
+        implements CallbackStep<MomoStatus> {
 
     public CallbackSpec {
         after = after != null ? after : Duration.ZERO;

@@ -1,5 +1,7 @@
 package dev.nkap.simulator;
 
+import dev.nkap.simulator.Submissions.Submission;
+import dev.nkap.simulator.scenario.MomoStatus;
 import dev.nkap.simulator.scenario.QueryBehaviour;
 import dev.nkap.simulator.scenario.Scenario;
 import dev.nkap.simulator.scenario.ScenarioEngine;
@@ -25,7 +27,7 @@ import org.springframework.web.server.ResponseStatusException;
  * {@link RequestToPayController}, on {@code /disbursement/v1_0/transfer}. Same protocol
  * rules (a client-supplied {@code X-Reference-Id} UUID that is the idempotency key, a 202
  * with an empty body, a status GET, a 404 for an unknown reference), same
- * {@link ScenarioEngine} driving behaviour (ADR 0002). The only shape difference is that a
+ * {@link Submissions} and {@link ScenarioEngine} driving behaviour (ADR 0002). The only shape difference is that a
  * transfer body names the counterparty {@code payee}, where a collection says {@code payer}.
  *
  * <p>It is a parallel controller rather than a refactor of the collections one on purpose:
@@ -35,16 +37,14 @@ import org.springframework.web.server.ResponseStatusException;
 @RestController
 public class TransferController {
 
-    private final ReferenceStore store;
+    private final Submissions<Scenario, MomoStatus> submissions;
     private final ScenarioEngine engine;
-    private final CallbackDispatcher callbacks;
     private final TokenAuthenticator authenticator;
 
-    TransferController(ReferenceStore store, ScenarioEngine engine,
-                       CallbackDispatcher callbacks, TokenAuthenticator authenticator) {
-        this.store = store;
+    TransferController(Submissions<Scenario, MomoStatus> submissions, ScenarioEngine engine,
+                       TokenAuthenticator authenticator) {
+        this.submissions = submissions;
         this.engine = engine;
-        this.callbacks = callbacks;
         this.authenticator = authenticator;
     }
 
@@ -62,16 +62,13 @@ public class TransferController {
         String amount = field(body, "amount");
         String currency = field(body, "currency");
 
-        if (!store.record(Product.DISBURSEMENTS, reference)) {
+        Submission<Scenario> submission =
+                submissions.submit(Product.DISBURSEMENTS, reference, msisdn, amount, currency, callbackUrl);
+        if (submission.refused()) {
             throw new MtnErrorException(HttpStatus.CONFLICT, MtnErrorResponse.duplicateReference());
         }
 
-        Scenario scenario = engine.resolveForSubmission(Product.DISBURSEMENTS, reference, msisdn, amount, currency);
-
-        String url = (callbackUrl != null && !callbackUrl.isBlank()) ? callbackUrl : engine.callbackUrl();
-        callbacks.schedule(reference, amount, currency, scenario.callbacks(), url);
-
-        SubmitBehaviour onSubmit = scenario.onSubmit();
+        SubmitBehaviour onSubmit = submission.scenario().onSubmit();
         if (onSubmit.outcome() == SubmitOutcome.NO_RESPONSE) {
             return neverAnswer();
         }

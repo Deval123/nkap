@@ -5,7 +5,7 @@ package dev.nkap.simulator.scenario;
  * timeline: the account balance and account-holder validation (issue #72). Like the token
  * lifetime, this is declared configuration, not per-reference state — set alongside the
  * rules and answered identically to whichever caller asks, because neither read is part of
- * any payment's timeline the way {@link Scenario} is (ADR 0002 does not apply here).
+ * any payment's timeline the way a {@link Timeline} is (ADR 0002 does not apply here).
  */
 public record AccountBehaviour(BalanceBehaviour balance, HolderBehaviour holder) {
 

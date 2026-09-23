@@ -1,10 +1,13 @@
 package dev.nkap.simulator;
 
 import com.fasterxml.jackson.databind.JsonMappingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.nkap.simulator.scenario.AccountBehaviour;
-import dev.nkap.simulator.scenario.ScenarioEngine;
-import dev.nkap.simulator.scenario.ScenarioRule;
+import dev.nkap.simulator.scenario.Rule;
+import dev.nkap.simulator.scenario.TimelineEngine;
 import dev.nkap.simulator.scenario.TokenBehaviour;
+import java.io.IOException;
+import java.nio.file.Path;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -22,59 +25,77 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
-import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
 /**
  * The scenario control plane. Namespaced under {@code /_nkap/} so it can never
  * collide with an operator path, and it is the one part of the simulator that
- * deliberately does not imitate MTN — it is how a test, in any language, tells
- * the simulator how to misbehave (ADR 0002).
+ * deliberately does not imitate any operator — it is how a test, in any language,
+ * tells the simulator how to misbehave (ADR 0002).
  *
  * <p>Durations travel as ISO-8601 strings: {@code "PT2S"}, {@code "PT0S"}.
+ *
+ * <p>Everything here is the same for every operator except one thing: the words a
+ * scenario is written in. So a face binds this class to its own declaration document,
+ * {@code D}, by extending it — which is also what lets Spring bind a posted document to
+ * the face's concrete types, exactly as it would bind a class of its own — and marks the
+ * subclass as the controller.
+ *
+ * @param <D> the face's declaration document
+ * @param <R> the face's rule
  */
-@RestController
 @RequestMapping("/_nkap")
-public class ControlPlaneController {
+public abstract class ControlPlane<D extends ControlPlane.Declared<R>, R extends Rule<?>> {
 
-    private final ScenarioEngine engine;
+    /**
+     * What every face's declaration document holds: the whole declared configuration —
+     * the token lifetime, the fallback callback URL, the rule list, and the account
+     * balance / holder-validation answers (issue #72). Posting one replaces the lot
+     * atomically.
+     *
+     * @param <R> the face's rule
+     */
+    public interface Declared<R> {
+
+        TokenBehaviour token();
+
+        String callbackUrl();
+
+        List<R> rules();
+
+        AccountBehaviour account();
+    }
+
+    private final TimelineEngine<R, ?, ?> engine;
     private final ReferenceStore store;
-    private final CallbackDispatcher callbacks;
+    private final CallbackDispatcher<?> callbacks;
+    private final PaymentIdentity identity;
+    private final Class<D> documentType;
 
-    ControlPlaneController(ScenarioEngine engine, ReferenceStore store, CallbackDispatcher callbacks) {
+    protected ControlPlane(TimelineEngine<R, ?, ?> engine, ReferenceStore store, CallbackDispatcher<?> callbacks,
+                           PaymentIdentity identity, Class<D> documentType) {
         this.engine = engine;
         this.store = store;
         this.callbacks = callbacks;
+        this.identity = identity;
+        this.documentType = documentType;
     }
 
-    /**
-     * The request and response body of {@code /_nkap/scenarios}: the whole
-     * declared configuration in one document — the token lifetime, the fallback
-     * callback URL, the rule list, and the account balance / holder-validation
-     * answers (issue #72). All optional; {@code token} defaults to one hour,
-     * {@code rules} to empty, {@code callbackUrl} to none, {@code account} to the
-     * default balance and an active holder. Posting it replaces the lot atomically.
-     */
-    public record Declaration(TokenBehaviour token, String callbackUrl, List<ScenarioRule> rules, AccountBehaviour account) {
-        public Declaration {
-            token = token != null ? token : new TokenBehaviour(null);
-            rules = rules != null ? List.copyOf(rules) : List.of();
-            account = account != null ? account : AccountBehaviour.defaultBehaviour();
-        }
-    }
+    /** The face's document holding exactly this configuration, for {@code GET /_nkap/scenarios}. */
+    protected abstract D document(TokenBehaviour token, String callbackUrl, List<R> rules, AccountBehaviour account);
 
     /** The body of {@code GET /_nkap/state/{referenceId}}. */
     public record StateView(String scenario, int queryCount, Instant submittedAt) {}
 
     @PostMapping("/scenarios")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void declare(@RequestBody Declaration body) {
+    public void declare(@RequestBody D body) {
         engine.replaceConfiguration(body.token(), body.callbackUrl(), body.rules(), body.account());
     }
 
     @GetMapping("/scenarios")
-    public Declaration current() {
-        return new Declaration(engine.token(), engine.callbackUrl(), engine.rules(), engine.account());
+    public D current() {
+        return document(engine.token(), engine.callbackUrl(), engine.rules(), engine.account());
     }
 
     @DeleteMapping("/scenarios")
@@ -84,7 +105,7 @@ public class ControlPlaneController {
     }
 
     /**
-     * Issue #69: once a reference can exist under more than one {@link Product}, this route
+     * Issue #69: once a payment's identity can exist under more than one {@link Product}, this route
      * cannot answer from the reference alone without risking an answer for the wrong one.
      * Answers only when <strong>exactly one</strong> product holds {@code referenceId} —
      * {@code 404} both when neither does (unchanged: unknown reference, as before) and when
@@ -94,7 +115,7 @@ public class ControlPlaneController {
      */
     @GetMapping("/state/{referenceId}")
     public StateView state(@PathVariable String referenceId) {
-        String reference = References.canonical(referenceId);
+        String reference = identity.canonical(referenceId);
         Product product = onlyProductHolding(reference)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "unknown reference"));
         return engine.state(product, reference)
@@ -114,8 +135,8 @@ public class ControlPlaneController {
      * under one answer. {@code 404} there, not a guess at whose callbacks these are.
      */
     @GetMapping("/callbacks/{referenceId}")
-    public List<CallbackDispatcher.Attempt> callbackAttempts(@PathVariable String referenceId) {
-        String reference = References.canonical(referenceId);
+    public List<? extends CallbackDispatcher.Attempt<?>> callbackAttempts(@PathVariable String referenceId) {
+        String reference = identity.canonical(referenceId);
         if (engine.productsHolding(reference).size() > 1) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND,
                     "reference is used by more than one product; ask each product's own state instead");
@@ -152,13 +173,25 @@ public class ControlPlaneController {
     }
 
     /**
-     * The offending field of a malformed {@link Declaration}, walked from Jackson's own
-     * path — {@code "(unknown)"} when the failure is not attributable to one field (a
-     * syntax error, for instance). Shared with {@link ScenarioFileLoader}, which binds the
-     * same document from a file at startup: the two ways of declaring a scenario diagnose a
-     * mistake in exactly the same words, not two messages that happen to agree today.
+     * Reads a declaration document from {@code path} with the same binding a {@code POST}
+     * gets, and applies it exactly as {@link #declare} does — for the deployable's startup
+     * scenario file. Returns how many rules it declared.
      */
-    static String offendingField(Throwable cause) {
+    public int load(ObjectMapper json, Path path) throws IOException {
+        D declaration = json.readValue(path.toFile(), documentType);
+        declare(declaration);
+        return declaration.rules().size();
+    }
+
+    /**
+     * The offending field of a malformed declaration, walked from Jackson's own
+     * path — {@code "(unknown)"} when the failure is not attributable to one field (a
+     * syntax error, for instance). Shared with the deployable's startup file loader, which
+     * binds the same document from a file at startup: the two ways of declaring a scenario
+     * diagnose a mistake in exactly the same words, not two messages that happen to agree
+     * today.
+     */
+    public static String offendingField(Throwable cause) {
         if (cause instanceof JsonMappingException mapping && !mapping.getPath().isEmpty()) {
             return mapping.getPath().stream()
                 .map(ref -> ref.getFieldName() != null ? ref.getFieldName() : "[" + ref.getIndex() + "]")

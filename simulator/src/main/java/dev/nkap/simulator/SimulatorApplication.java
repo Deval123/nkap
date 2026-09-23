@@ -4,7 +4,8 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 /**
- * A fake MTN MoMo operator, in memory.
+ * A fake MTN MoMo operator, in memory: the neutral core ({@code simulator-core}) assembled
+ * with MTN's face ({@code simulator-mtn}).
  *
  * <p>It exposes the Collections API surface and plays a scenario — a timeline of
  * what happens at each interaction point of a payment (ADR 0002). Scenarios are

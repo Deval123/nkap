@@ -112,7 +112,13 @@ class StkPushController {
             // record the message, so the one observed with the same code on 2026-09-18 is used.
             return MpesaError.transactionDoesNotExist().answer(HttpStatus.INTERNAL_SERVER_ERROR);
         }
-        return ResponseEntity.ok(queryAnswer(checkoutRequestId, behaviour.status()));
+        if (behaviour.resultCode() != null) {
+            // Test-only, and said so on the wire: see MpesaQueryBehaviour.
+            return ResponseEntity.ok(queryAnswer(checkoutRequestId, behaviour.resultCode(),
+                    MpesaQueryBehaviour.TEST_ONLY_DESCRIPTION));
+        }
+        MpesaResult result = behaviour.status();
+        return ResponseEntity.ok(queryAnswer(checkoutRequestId, result.code(), result.queryDescription()));
     }
 
     /**
@@ -139,12 +145,12 @@ class StkPushController {
      * names the payment it is about. {@code ResultCode} is a JSON number here, as it is in the
      * observed callback; its type on the query channel is not recorded.
      */
-    private static Map<String, Object> queryAnswer(String checkoutRequestId, MpesaResult result) {
+    private static Map<String, Object> queryAnswer(String checkoutRequestId, int resultCode, String resultDesc) {
         Map<String, Object> answer = new LinkedHashMap<>();
         answer.put("MerchantRequestID", MpesaPaymentIdentity.merchantRequestId(checkoutRequestId));
         answer.put("CheckoutRequestID", checkoutRequestId);
-        answer.put("ResultCode", result.code());
-        answer.put("ResultDesc", result.queryDescription());
+        answer.put("ResultCode", resultCode);
+        answer.put("ResultDesc", resultDesc);
         return answer;
     }
 

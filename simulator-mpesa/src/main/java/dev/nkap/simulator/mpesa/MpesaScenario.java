@@ -30,7 +30,7 @@ public record MpesaScenario(
         name = (name == null || name.isBlank()) ? DEFAULT_NAME : name;
         onSubmit = onSubmit != null ? onSubmit : new SubmitBehaviour(null, null, null);
         onQuery = (onQuery == null || onQuery.isEmpty())
-                ? List.of(new MpesaQueryBehaviour(null, null, false))
+                ? List.of(new MpesaQueryBehaviour(null, null, false, null))
                 : List.copyOf(onQuery);
         callbacks = callbacks != null ? List.copyOf(callbacks) : List.of();
     }

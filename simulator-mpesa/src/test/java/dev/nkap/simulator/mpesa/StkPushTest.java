@@ -250,6 +250,19 @@ class StkPushTest {
     }
 
     @Test
+    @DisplayName("a test-only ResultCode is answered as declared, with a ResultDesc saying it is the simulator's, not M-Pesa's")
+    void a_test_only_result_code_is_answered_and_labelled() {
+        declare("""
+            {"rules":[{"scenario":{"onQuery":[{"resultCode":987654}]}}]}""");
+        String checkoutRequestId = read(submit("order-unrecognised", PHONE, null, null)).get("CheckoutRequestID").asText();
+
+        JsonNode answer = read(query(checkoutRequestId, null));
+
+        assertThat(answer.get("ResultCode").asInt()).isEqualTo(987654);
+        assertThat(answer.get("ResultDesc").asText()).isEqualTo(MpesaQueryBehaviour.TEST_ONLY_DESCRIPTION);
+    }
+
+    @Test
     @DisplayName("a 500 is never answered for a known payment unless a scenario declares it")
     void no_500_unless_declared() {
         String checkoutRequestId = read(submit("order-steady", PHONE, null, null)).get("CheckoutRequestID").asText();

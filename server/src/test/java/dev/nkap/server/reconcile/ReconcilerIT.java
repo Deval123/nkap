@@ -53,6 +53,7 @@ import java.util.concurrent.Future;
 import java.util.stream.Collectors;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -99,6 +100,13 @@ class ReconcilerIT {
         txManager = db.transactionManager();
         payments = new PostgresPaymentRepository(jdbc, new ObjectMapper());
         ledger = new PostgresLedger(jdbc, txManager);
+    }
+
+    @BeforeEach
+    void startFromNothingClaimable() {
+        // The cleanup below covers this class's own payments; this covers everyone else's.
+        // Every reconciler pass here claims every due payment in the table (issue #206).
+        PostgresDatabase.shared().setAsideUnresolvedPayments();
     }
 
     @AfterEach

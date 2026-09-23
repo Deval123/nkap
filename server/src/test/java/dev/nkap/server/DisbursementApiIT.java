@@ -109,6 +109,9 @@ class DisbursementApiIT {
 
     @BeforeEach
     void setUp() {
+        // reconciler.runOnce() claims every due payment in the table, not only this
+        // class's own (issue #206).
+        PostgresDatabase.shared().setAsideUnresolvedPayments();
         SIMULATOR.reset();
         apiKey = apiKeys.provision("merchant-1", false, "DisbursementApiIT").token();
     }

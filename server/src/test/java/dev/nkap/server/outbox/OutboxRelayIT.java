@@ -26,6 +26,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -49,6 +50,12 @@ class OutboxRelayIT {
         PostgresDatabase db = PostgresDatabase.shared();
         jdbc = db.jdbcTemplate();
         txManager = db.transactionManager();
+    }
+
+    @BeforeEach
+    void startFromAnEmptyQueue() {
+        // Every relay pass below claims every due event in the table (issue #206).
+        PostgresDatabase.shared().setAsidePendingOutboxEvents();
     }
 
     private static UUID insertEvent(String merchantId, String eventType, String payload) {

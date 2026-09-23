@@ -83,4 +83,41 @@ public final class PostgresDatabase {
     public PlatformTransactionManager transactionManager() {
         return transactionManager;
     }
+
+    // --- for a test that sweeps a whole table (issue #206) --------------------------------
+    //
+    // Nothing empties this database between test classes, and a few tests call something
+    // that claims every eligible row in a table, not only their own: OutboxRelay.runOnce()
+    // and Reconciler.runOnce(). Whatever an earlier class left eligible is swept up with
+    // them, so whether such a test passes depends on which classes happened to run first.
+    // Each of those tests calls one of these before it starts, so that nothing it did not
+    // create itself is claimable. They set rows aside rather than resolving them, and touch
+    // nothing a sweep would not have claimed.
+
+    /**
+     * Takes every unresolved payment off the reconciler's schedule, so that
+     * {@code Reconciler.runOnce()} claims only the payments the calling test creates after
+     * this. {@code payment_transition} is append-only and its foreign key keeps the payment
+     * row too, so nothing is deleted and no state is changed: {@code reconcile_due_at} is
+     * cleared, which the claim query requires to be set.
+     */
+    public void setAsideUnresolvedPayments() {
+        jdbcTemplate.update("""
+                UPDATE payment SET reconcile_due_at = NULL
+                 WHERE state IN ('SUBMITTED', 'PENDING', 'UNKNOWN')
+                   AND reconcile_due_at IS NOT NULL""");
+    }
+
+    /**
+     * Deletes every outbox event still waiting for delivery, so that
+     * {@code OutboxRelay.runOnce()} claims only the events the calling test appends after
+     * this. Delivered and dead-lettered events are left alone: no sweep claims them, and
+     * the tests that read them back assert on what they are. Deleting rather than
+     * dead-lettering is what {@code DeadLetteredEventsApiIT} already does with its own
+     * fixture: a dead-lettered event is something a test can read back, and this one would
+     * not be that test's.
+     */
+    public void setAsidePendingOutboxEvents() {
+        jdbcTemplate.update("DELETE FROM outbox_event WHERE delivered_at IS NULL AND dead_lettered_at IS NULL");
+    }
 }

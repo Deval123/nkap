@@ -94,6 +94,9 @@ class PaymentWebhookApiIT {
 
     @BeforeEach
     void setUp() throws Exception {
+        // relay.runOnce() claims every due event in the table, not only this class's own
+        // (issue #206).
+        PostgresDatabase.shared().setAsidePendingOutboxEvents();
         merchantId = "merchant-" + System.nanoTime();
         apiKey = apiKeys.provision(merchantId, false, "PaymentWebhookApiIT").token();
         receiver = new StubReceiver();

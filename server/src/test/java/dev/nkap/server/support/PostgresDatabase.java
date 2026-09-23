@@ -100,6 +100,12 @@ public final class PostgresDatabase {
      * this. {@code payment_transition} is append-only and its foreign key keeps the payment
      * row too, so nothing is deleted and no state is changed: {@code reconcile_due_at} is
      * cleared, which the claim query requires to be set.
+     *
+     * <p>The state list mirrors {@code PostgresReconciliationStore}'s {@code UNRESOLVED_STATES},
+     * which the claim query and the partial index in {@code V4__reconciler_chases_unresolved.sql}
+     * also depend on. If that list changes, this one must change with it. Forgetting is silent:
+     * this stops setting aside payments a sweep can claim, and the tests that sweep a whole
+     * table become order-dependent again.
      */
     public void setAsideUnresolvedPayments() {
         jdbcTemplate.update("""

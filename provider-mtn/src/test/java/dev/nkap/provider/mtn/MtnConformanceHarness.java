@@ -119,6 +119,11 @@ final class MtnConformanceHarness implements ConformanceHarness {
     }
 
     @Override
+    public int submissionsReceived() {
+        return simulator.submissionsReceived();
+    }
+
+    @Override
     public void close() {
         simulator.reset();
         route.close();

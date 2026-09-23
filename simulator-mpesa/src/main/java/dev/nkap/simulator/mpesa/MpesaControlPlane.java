@@ -4,6 +4,7 @@ import dev.nkap.simulator.CallbackDispatcher;
 import dev.nkap.simulator.ControlPlane;
 import dev.nkap.simulator.PaymentIdentity;
 import dev.nkap.simulator.ReferenceStore;
+import dev.nkap.simulator.SubmissionCount;
 import dev.nkap.simulator.scenario.AccountBehaviour;
 import dev.nkap.simulator.scenario.TokenBehaviour;
 import java.util.List;
@@ -39,8 +40,8 @@ public class MpesaControlPlane extends ControlPlane<MpesaControlPlane.Declaratio
     }
 
     MpesaControlPlane(MpesaScenarioEngine engine, ReferenceStore store, CallbackDispatcher<MpesaResult> callbacks,
-                      PaymentIdentity identity) {
-        super(engine, store, callbacks, identity, Declaration.class);
+                      SubmissionCount submissions, PaymentIdentity identity) {
+        super(engine, store, callbacks, submissions, identity, Declaration.class);
     }
 
     @Override

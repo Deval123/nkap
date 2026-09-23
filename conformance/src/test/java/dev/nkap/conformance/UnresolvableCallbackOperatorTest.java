@@ -23,6 +23,7 @@ import dev.nkap.provider.UntrustedCallbackException;
 import java.time.Duration;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 import org.opentest4j.AssertionFailedError;
 
@@ -122,6 +123,11 @@ class UnresolvableCallbackOperatorTest {
         }
 
         @Override
+        public int submissionsReceived() {
+            return adapter.processed.get();
+        }
+
+        @Override
         public void close() {
             // nothing to release
         }
@@ -129,6 +135,8 @@ class UnresolvableCallbackOperatorTest {
 
     /** Declares CALLBACK alone; its callback names only a provider reference query never resolves. */
     private static final class UnresolvableCallbackOperator implements ProviderAdapter {
+
+        private final AtomicInteger processed = new AtomicInteger();
 
         @Override
         public ProviderId id() {
@@ -147,6 +155,7 @@ class UnresolvableCallbackOperatorTest {
 
         @Override
         public SubmitResult submit(PaymentIntent intent, ReferenceId reference) throws ProviderUnavailableException {
+            processed.incrementAndGet();
             throw new ProviderUnavailableException("simulated: this submission never answers");
         }
 

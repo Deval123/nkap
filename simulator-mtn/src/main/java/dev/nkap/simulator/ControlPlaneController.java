@@ -34,8 +34,8 @@ public class ControlPlaneController extends ControlPlane<ControlPlaneController.
     }
 
     ControlPlaneController(ScenarioEngine engine, ReferenceStore store, CallbackDispatcher<MomoStatus> callbacks,
-                           PaymentIdentity identity) {
-        super(engine, store, callbacks, identity, Declaration.class);
+                           SubmissionCount submissions, PaymentIdentity identity) {
+        super(engine, store, callbacks, submissions, identity, Declaration.class);
     }
 
     @Override

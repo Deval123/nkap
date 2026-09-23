@@ -108,6 +108,22 @@ public interface ConformanceHarness extends AutoCloseable {
      */
     RawCallback aDeliveredCallback();
 
+    /**
+     * How many submissions the operator has <strong>processed</strong> since this harness
+     * opened — observed at the operator, not reported by the adapter, so an adapter cannot
+     * make it say anything (issue #175).
+     *
+     * <p>A submission counts once the operator is past authenticating it, whether it then
+     * accepted or refused it. A request refused before that — for its credential, or too
+     * malformed to process — is not counted, so an adapter retrying after a {@code 401} has
+     * not resent anything (ADR 0014, decision 4). "Exactly one call" in the kit's rules means
+     * one processed submission, not one HTTP request.
+     *
+     * <p>No default, on purpose: a default would let a harness answer nothing and have every
+     * rule built on it pass, the same reason {@code ProviderAdapter#resolves()} has none.
+     */
+    int submissionsReceived();
+
     /** Returns the operator to a clean state. Narrowed so implementers need not declare {@code throws}. */
     @Override
     void close();

@@ -41,13 +41,15 @@ public class Submissions<T extends Timeline<?, ? extends CallbackStep<S>>, S> {
     private final ReferenceStore store;
     private final CallbackDispatcher<S> callbacks;
     private final PaymentIdentity identity;
+    private final SubmissionCount count;
 
     Submissions(TimelineEngine<?, T, ?> engine, ReferenceStore store, CallbackDispatcher<S> callbacks,
-                PaymentIdentity identity) {
+                PaymentIdentity identity, SubmissionCount count) {
         this.engine = engine;
         this.store = store;
         this.callbacks = callbacks;
         this.identity = identity;
+        this.count = count;
         boolean coherent = switch (identity.mintedBy()) {
             case CALLER -> identity.onRepeat() == PaymentIdentity.Repeat.REFUSED;
             case OPERATOR -> identity.onRepeat() == PaymentIdentity.Repeat.NOT_DEDUPLICATED;
@@ -78,6 +80,10 @@ public class Submissions<T extends Timeline<?, ? extends CallbackStep<S>>, S> {
      */
     public Submission<T> submit(Product product, String reference, String msisdn, String amount, String currency,
                                 String callbackUrl, Map<String, String> callbackData) {
+        // Counted before anything can refuse it: a repeat the operator refuses was still a
+        // call that reached it, which is exactly what a resend looks like (issue #175).
+        count.increment();
+
         String paymentId = switch (identity.mintedBy()) {
             case CALLER -> identity.canonical(reference);
             case OPERATOR -> identity.mint(msisdn);

@@ -148,62 +148,92 @@ public abstract class ProviderAdapterConformanceTest {
     }
 
     /**
-     * Issue #186's trace, unchanged: the query used to be built from
-     * {@code providerReferenceFrom(again)} — the <em>second</em> submission's own reference —
-     * so an operator that created a second payment for the reused reference was asked about
-     * that second payment and answered about it happily. The fix compares what the two
-     * submissions' own return values already say for free: two <strong>different,
-     * non-blank</strong> provider references for one gateway reference is proof the operator
-     * created two payments.
+     * ADR 0014, decision 4: <strong>an adapter must not resend a submission that may already
+     * have been processed.</strong> Operator-side idempotency is not something this gateway
+     * relies on — one reference produces at most one {@code submit} call — so what would
+     * genuinely hurt is an adapter retrying on its own. Issue #175 gave the kit a way to see
+     * that: {@link ConformanceHarness#submissionsReceived()}, counted at the operator.
      *
-     * <p><strong>ADR 0014, decision 4: this was never really a check that the operator
-     * deduplicates, and it must not be named as if it were.</strong> Reading the call graph
-     * shows {@code adapter.submit} has exactly one caller per payment
-     * ({@code PaymentService.callOperator}; {@code RefundService} goes through the same
-     * method), no adapter here retries anything but a {@code 401} (which precedes
-     * processing, so it can never produce a second payment), and a merchant's retried
-     * {@code POST /payments} under the same {@code Idempotency-Key} never reaches an adapter
-     * a second time. One reference produces at most one {@code submit} call, for any
-     * operator, idempotent or not — Nkap does not depend on operator-side idempotency, so a
-     * rule requiring it was asserting a property of MTN, not a property this gateway needs.
+     * <p>Each rule submits <strong>once</strong> and asserts the operator processed exactly one
+     * submission for it. They replace a rule that submitted the same reference twice and
+     * compared the two provider references. For an operator that does not deduplicate, that
+     * rule created the second payment itself and then blamed the adapter for it: a rule
+     * failing on what it caused, the mirror of the defect issue #186 was about. Counting needs
+     * no knowledge of deduplication, or of who mints the identity, so it holds for every
+     * operator.
      *
-     * <p>What actually matters is that <strong>the adapter itself</strong> never resends a
-     * submission that may already have been processed. Submitting twice from the kit,
-     * deliberately, to see whether the operator's own two answers agree is not that, and the
-     * kit has no way to observe whether an adapter resent anything at all — proving the
-     * operator received exactly one request needs a call-observation hook
-     * {@link ConformanceHarness} does not have (issue #175). Until it exists, the comparison
-     * above stays a <strong>partial</strong> catch — real, but not the no-resend rule ADR 0014
-     * says is what matters.
-     *
-     * <p>Stays silent for MTN by a documented property of MTN — {@code providerReference} is
-     * always blank — not by looking at the wrong object; a future adapter must not "fix" the
-     * blank case by requiring a reference to be present.
+     * <p><strong>What these do not establish.</strong>
+     * <ul>
+     *   <li>A request the operator refuses before processing it is not counted — a
+     *       {@code 401}, or a request too malformed to submit (MTN's {@code 400} for a missing
+     *       {@code X-Reference-Id}). Such a request creates no payment, which is why that is
+     *       acceptable, but "exactly one call" means one processed submission, not one HTTP
+     *       request.</li>
+     *   <li>The count is read at a point in time. An adapter that resends after the kit reads
+     *       it — from a background retry, say — is not seen.</li>
+     *   <li>It certifies behaviour against the harness's operator, which for every adapter here
+     *       is the simulator, not the real operator.</li>
+     * </ul>
      */
     @Test
-    @DisplayName("reusing a reference is acknowledged safely, and a disagreeing provider reference is caught "
-            + "— this is not a check that the operator deduplicates")
-    void a_reused_reference_is_safe_and_a_disagreeing_provider_reference_is_caught() throws Exception {
+    @DisplayName("an accepted submission reaches the operator exactly once")
+    void an_adapter_never_resends_an_accepted_submission() throws Exception {
         ProviderAdapter adapter = harness.adapter();
-        ReferenceId reference = ReferenceId.newReference();
+        int before = harness.submissionsReceived();
 
-        SubmitResult first = adapter.submit(harness.anIntent(), reference);
-        SubmitResult again = adapter.submit(harness.anIntent(), reference);
+        SubmitResult result = adapter.submit(harness.anIntent(), ReferenceId.newReference());
 
-        assertInstanceOf(SubmitResult.Acknowledged.class, first, "first submission");
-        assertInstanceOf(SubmitResult.Acknowledged.class, again,
-                "the same reference again is acknowledged, not rejected and not an error");
+        assertInstanceOf(SubmitResult.Acknowledged.class, result);
+        assertEquals(before + 1, harness.submissionsReceived(),
+                "the operator must have processed exactly one submission for one submit call");
+    }
 
-        String firstProviderReference = providerReferenceFrom(first);
-        String againProviderReference = providerReferenceFrom(again);
-        if (!firstProviderReference.isBlank() && !againProviderReference.isBlank()) {
-            assertEquals(firstProviderReference, againProviderReference,
-                    "two different, non-blank provider references for one gateway reference is proof of two payments");
-        }
+    /**
+     * The case a resend would actually come from: the operator took the submission and never
+     * answered. An adapter that retried on its own timeout would have made the operator
+     * process it twice — the payment the kit cannot see, and the one a reconciler cannot
+     * undo. See {@link #an_adapter_never_resends_an_accepted_submission()} for what this does
+     * not establish.
+     */
+    @Test
+    @DisplayName("a submission that never answers is not resent: the operator processed it exactly once")
+    void an_adapter_never_resends_a_submission_that_never_answered() {
+        ProviderAdapter adapter = harness.adapter();
+        harness.makeSubmitNeverAnswer();
+        int before = harness.submissionsReceived();
 
-        assertSame(PaymentState.SUCCEEDED,
-                adapter.query(new QuerySubject(reference, againProviderReference), operationUnderTest()).state(),
-                "the reused reference resolves to a single outcome");
+        assertThrows(ProviderUnavailableException.class,
+                () -> adapter.submit(harness.anIntent(), ReferenceId.newReference()));
+
+        assertEquals(before + 1, harness.submissionsReceived(),
+                "a submission that never answered may already have been processed, so it must not be resent");
+    }
+
+    /**
+     * The retry ADR 0014 decision 4 keeps: a submission refused for its credential was never
+     * processed, so renewing the credential and trying again is not a resend. The first
+     * submission here only puts a credential in the adapter's hands; after it expires, the
+     * second must reach the operator exactly once, however the adapter renews. It does not
+     * force the {@code 401} path: an adapter that renews before its credential expires, as
+     * MTN's does, never meets one here. That a {@code 401} is not counted is the simulator's
+     * own test to prove, not this rule's. See
+     * {@link #an_adapter_never_resends_an_accepted_submission()} for what else this does not
+     * establish.
+     */
+    @Test
+    @DisplayName("renewing an expired credential resends nothing the operator processed")
+    void an_adapter_renewing_a_credential_resends_nothing_processed() throws Exception {
+        ProviderAdapter adapter = harness.adapter();
+        harness.expireCredentialsMidFlight();
+        adapter.submit(harness.anIntent(), ReferenceId.newReference());
+        Thread.sleep(harness.credentialLifetime().plusMillis(500).toMillis());
+        int before = harness.submissionsReceived();
+
+        SubmitResult result = adapter.submit(harness.anIntent(), ReferenceId.newReference());
+
+        assertInstanceOf(SubmitResult.Acknowledged.class, result, "the submission after renewal is accepted");
+        assertEquals(before + 1, harness.submissionsReceived(),
+                "a retry after a refused credential is not a resend: the operator processed one submission");
     }
 
     /**
@@ -262,9 +292,10 @@ public abstract class ProviderAdapterConformanceTest {
      * adapter that silently ignored the callback URL handed to it in
      * {@link PaymentIntent#providerOptions()} would have the operator call back somewhere else
      * entirely, and this rule — which only ever sees what the harness's own receiver caught —
-     * would still pass. Closing that gap needs a call-observation hook this kit does not have
-     * (issue #175); until it exists, this rule certifies the adapter's parsing of a callback it
-     * received, not that it will receive one.
+     * would still pass. {@link ConformanceHarness#submissionsReceived()} does not close that
+     * gap: it counts that a submission reached the operator, not where the operator was told to
+     * call back. Until the kit can observe that, this rule certifies the adapter's parsing of a
+     * callback it received, not that it will receive one.
      */
     @Test
     @DisplayName("a call that does not answer yields UNKNOWN, never a failure — resolved by whichever mechanism the adapter declares")
@@ -402,19 +433,21 @@ public abstract class ProviderAdapterConformanceTest {
      * the adapter can know, so it must be refused as data ({@link SubmitResult.NotAttempted}),
      * not by calling the operator and letting it refuse instead.
      *
-     * <p>Two assertions, and they establish different things. The return value is
-     * {@code NotAttempted} — that much any adapter honouring the contract must produce. The
-     * follow-up {@code query} answering {@link PaymentState#UNKNOWN} establishes only that no
-     * submission under this reference was ever <em>accepted</em> by the operator — the same
-     * thing an unrelated, never-submitted reference would answer. It does <strong>not</strong>
-     * establish that no call was made: an adapter that called the operator with this currency
-     * and was refused would see the same {@code UNKNOWN}, because the operator records nothing
-     * under a reference it refused either. So this rule catches an adapter whose submission
-     * would have <em>succeeded</em> had it gone out; it cannot yet distinguish "never called"
-     * from "called, and refused" — the gap is a call-observation hook
-     * {@link ConformanceHarness} does not have today, and is not worth inventing on no
-     * adapter's real need until one exists to prove it matters. See
-     * <a href="https://github.com/Deval123/nkap/issues/175">issue #175</a>.
+     * <p>Three assertions:
+     * <ul>
+     *   <li>The return value is {@code NotAttempted} — what any adapter honouring the contract
+     *       must produce.</li>
+     *   <li>The operator processed no submission at all (issue #175). This is what tells
+     *       "never called" from "called, and refused": an operator records nothing under a
+     *       reference it refused, so a follow-up query alone could never tell the two apart.
+     *       It shares the no-resend rules' limits: a request refused before processing is not
+     *       counted, and the count is read at one point in time.</li>
+     *   <li>A follow-up query carrying only the reference Nkap chose. An adapter that declares
+     *       {@link Resolution#QUERY} can form that query and must answer {@link PaymentState#UNKNOWN},
+     *       since the operator has never heard of the reference. One that does not declare it
+     *       cannot form the query at all, and must raise {@link ProviderUnavailableException} —
+     *       no answer was obtained — rather than return a status it was never given.</li>
+     * </ul>
      */
     @Test
     @DisplayName("an intent in a currency the adapter does not settle in is not attempted, and no submission reaches the operator")
@@ -425,12 +458,22 @@ public abstract class ProviderAdapterConformanceTest {
         PaymentIntent mismatched = new PaymentIntent(template.operation(), Money.of(1000, unsettled),
                 template.counterpartyMsisdn(), template.payerMessage(), template.payeeNote(), template.providerOptions());
         ReferenceId reference = ReferenceId.newReference();
+        int before = harness.submissionsReceived();
 
         SubmitResult result = adapter.submit(mismatched, reference);
 
         assertInstanceOf(SubmitResult.NotAttempted.class, result);
-        assertSame(PaymentState.UNKNOWN, adapter.query(QuerySubject.of(reference), operationUnderTest()).state(),
-                "the operator must never have heard of this reference at all");
+        assertEquals(before, harness.submissionsReceived(),
+                "an intent the adapter refused itself must never reach the operator");
+        if (adapter.resolves().contains(Resolution.QUERY)) {
+            assertSame(PaymentState.UNKNOWN, adapter.query(QuerySubject.of(reference), operationUnderTest()).state(),
+                    "the operator must never have heard of this reference at all");
+        } else {
+            assertThrows(ProviderUnavailableException.class,
+                    () -> adapter.query(QuerySubject.of(reference), operationUnderTest()),
+                    "an adapter that cannot form a query from Nkap's reference alone must say no answer was "
+                            + "obtained, not return a status");
+        }
     }
 
     @Test

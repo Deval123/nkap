@@ -124,7 +124,8 @@ Java fixture, no recompilation.
 | `DELETE` | `/_nkap/scenarios` | Back to the happy path: a one-hour token, enforcement off, no callback URL. **204**. |
 | `GET` | `/_nkap/state/{referenceId}` | `{scenario, queryCount, submittedAt}`, or **404**. |
 | `GET` | `/_nkap/callbacks/{referenceId}` | The callback delivery attempts for that reference, oldest first — `[]` if none. |
-| `DELETE` | `/_nkap/state` | Forget every reference and its callback attempts, so a test suite's cases do not leak into one another. Leaves the declared configuration alone. **204**. |
+| `GET` | `/_nkap/submissions` | `{"count": n}`: how many submissions the operator has processed since the last `DELETE /_nkap/state` — past authentication, accepted or refused. A submission refused for its token (**401**) or too malformed to submit is not counted. |
+| `DELETE` | `/_nkap/state` | Forget every reference, its callback attempts and the submission count, so a test suite's cases do not leak into one another. Leaves the declared configuration alone. **204**. |
 
 ### A flapping scenario, end to end
 

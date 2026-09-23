@@ -130,6 +130,10 @@ passes, in exactly this order:
 - Until 1.0.0, the minor number carried breaking changes — `provider-api` is the surface
   that matters, so breaking it took a minor release, never a patch. From 1.0.0 it takes a
   major release, the discipline that makes third-party adapters possible.
+  `nkap-conformance` is not held to that rule, though contributors build against it too:
+  it is a test-scope dependency, so breaking it fails a contributor's build loudly, before
+  anything runs, and never makes an adapter misbehave where money moves. A minor release
+  may break it, and its release note must say so.
 - Step 3, in full: the workflow runs the full reactor build, then publishes
   `ghcr.io/deval123/nkap-gateway` and `ghcr.io/deval123/nkap-simulator` for `linux/amd64`
   and `linux/arm64`, tagged `X.Y.Z` and the moving `latest` — never on a push to `main`, and

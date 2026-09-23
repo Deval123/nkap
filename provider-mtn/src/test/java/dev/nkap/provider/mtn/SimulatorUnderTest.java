@@ -6,6 +6,8 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import org.springframework.boot.Banner;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.web.servlet.context.ServletWebServerApplicationContext;
@@ -17,6 +19,8 @@ import org.springframework.context.ConfigurableApplicationContext;
  * against it, never against the real sandbox.
  */
 final class SimulatorUnderTest implements AutoCloseable {
+
+    private static final Pattern SUBMISSIONS_COUNT = Pattern.compile("\"count\"\\s*:\\s*(\\d+)");
 
     private final ConfigurableApplicationContext context;
     private final URI baseUrl;
@@ -45,13 +49,26 @@ final class SimulatorUnderTest implements AutoCloseable {
         call("POST", "/_nkap/scenarios", configurationJson);
     }
 
+    /**
+     * How many submissions the simulator has processed since its state was last forgotten —
+     * {@code GET /_nkap/submissions} (issue #175).
+     */
+    int submissionsReceived() {
+        String body = call("GET", "/_nkap/submissions", null);
+        Matcher count = SUBMISSIONS_COUNT.matcher(body);
+        if (!count.find()) {
+            throw new IllegalStateException("GET /_nkap/submissions answered " + body);
+        }
+        return Integer.parseInt(count.group(1));
+    }
+
     /** Back to the happy path, no enforcement, and every reference forgotten. */
     void reset() {
         call("DELETE", "/_nkap/scenarios", null);
         call("DELETE", "/_nkap/state", null);
     }
 
-    private void call(String method, String path, String body) {
+    private String call(String method, String path, String body) {
         HttpRequest.Builder request = HttpRequest.newBuilder(baseUrl.resolve(path)).timeout(Duration.ofSeconds(5));
         if (body == null) {
             request.method(method, HttpRequest.BodyPublishers.noBody());
@@ -63,6 +80,7 @@ final class SimulatorUnderTest implements AutoCloseable {
             if (response.statusCode() >= 300) {
                 throw new IllegalStateException(method + " " + path + " -> " + response.statusCode() + " " + response.body());
             }
+            return response.body();
         } catch (Exception e) {
             throw new IllegalStateException("control-plane call failed: " + method + " " + path, e);
         }

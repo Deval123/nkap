@@ -284,18 +284,26 @@ public abstract class ProviderAdapterConformanceTest {
      * have refused to construct such a set, so reaching that branch names a bug in
      * {@code Resolution} itself, not in an adapter.
      *
-     * <p><strong>What this does not prove.</strong> The harness <em>supplies</em> the callback
-     * — it puts the operator into the state where the operator calls back, and hands the kit
-     * exactly what arrived. So the {@code CALLBACK} half of this rule proves that an adapter
-     * given the operator's own callback can resolve the payment from it. It does <strong>not</strong>
-     * prove the adapter arranged for that callback to reach this gateway in the first place: an
-     * adapter that silently ignored the callback URL handed to it in
-     * {@link PaymentIntent#providerOptions()} would have the operator call back somewhere else
-     * entirely, and this rule — which only ever sees what the harness's own receiver caught —
-     * would still pass. {@link ConformanceHarness#submissionsReceived()} does not close that
-     * gap: it counts that a submission reached the operator, not where the operator was told to
-     * call back. Until the kit can observe that, this rule certifies the adapter's parsing of a
-     * callback it received, not that it will receive one.
+     * <p><strong>What this proves depends on how the operator learns where to call.</strong>
+     * The harness <em>supplies</em> the callback: it puts the operator into the state where the
+     * operator calls back, and hands the kit exactly what arrived. So the {@code CALLBACK} half
+     * of this rule always proves that an adapter given the operator's own callback can resolve
+     * the payment from it. Whether it also proves the adapter arranged for that callback to
+     * arrive at all is not the kit's to decide. It follows from the operator's shape:
+     *
+     * <ul>
+     *   <li><strong>The address travels with the submission</strong> — M-Pesa's
+     *       {@code CallBackURL} — and the harness declares no fallback. Then a callback only
+     *       ever reaches the harness if the adapter forwarded the URL it was handed in
+     *       {@link PaymentIntent#providerOptions()}, and this rule proves it did.
+     *       {@code provider-mpesa}'s harness is built this way.</li>
+     *   <li><strong>The operator calls an address it learned elsewhere</strong> — one registered
+     *       with it, the way {@code provider-mtn}'s harness declares its route in the simulator's
+     *       control plane. Then the callback arrives whatever the adapter did with the URL it was
+     *       handed, and an adapter that silently ignored it would still pass. For this shape the
+     *       rule certifies the adapter's parsing of a callback it received, not that it will
+     *       receive one.</li>
+     * </ul>
      */
     @Test
     @DisplayName("a call that does not answer yields UNKNOWN, never a failure — resolved by whichever mechanism the adapter declares")

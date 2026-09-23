@@ -78,6 +78,7 @@ not in the test.
 | `core` | ledger, payment state machine, idempotency | nothing |
 | `provider-api` | the `ProviderAdapter` contract | `core` |
 | `provider-mtn` | the MTN MoMo adapter | `provider-api`; `simulator` at test scope only |
+| `provider-mpesa` | the M-Pesa STK Push adapter | `provider-api`; `simulator-mpesa` at test scope only |
 | `conformance` | the kit every adapter must pass | `provider-api` |
 | `simulator-core` | the fake operator's behaviour: scenarios, payment memory, callbacks, control plane | — (never a face module, at any scope) |
 | `simulator-mtn` | MTN's face on it: routes, bodies, statuses, authentication | `simulator-core` |

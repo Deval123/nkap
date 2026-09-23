@@ -1,0 +1,90 @@
+package dev.nkap.provider.mpesa;
+
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.time.Duration;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import org.springframework.boot.Banner;
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.web.servlet.context.ServletWebServerApplicationContext;
+import org.springframework.context.ConfigurableApplicationContext;
+
+/**
+ * Boots M-Pesa's face on the simulator's core on a random port for the lifetime of a test
+ * class, and drives its control plane. The same shape as {@code provider-mtn}'s own, which is
+ * test-scope there and so cannot be shared.
+ */
+final class MpesaSimulatorUnderTest implements AutoCloseable {
+
+    private static final Pattern SUBMISSIONS_COUNT = Pattern.compile("\"count\"\\s*:\\s*(\\d+)");
+
+    private final ConfigurableApplicationContext context;
+    private final URI baseUrl;
+    private final HttpClient http = HttpClient.newHttpClient();
+
+    MpesaSimulatorUnderTest() {
+        SpringApplication app = new SpringApplication(MpesaSimulatorApplication.class);
+        app.setBannerMode(Banner.Mode.OFF);
+        // Immediate shutdown: NO_RESPONSE deliberately leaves a request hanging, and graceful
+        // shutdown would wait out its full timeout. Durations as ISO-8601 strings, as the
+        // deployable's own application.yml sets them.
+        this.context = app.run(
+                "--server.port=0",
+                "--server.shutdown=immediate",
+                "--spring.lifecycle.timeout-per-shutdown-phase=3s",
+                "--spring.jackson.serialization.write-durations-as-timestamps=false");
+        int port = ((ServletWebServerApplicationContext) context).getWebServer().getPort();
+        this.baseUrl = URI.create("http://localhost:" + port);
+    }
+
+    URI baseUrl() {
+        return baseUrl;
+    }
+
+    /** POST a configuration document to {@code /_nkap/scenarios}. */
+    void declare(String configurationJson) {
+        call("POST", "/_nkap/scenarios", configurationJson);
+    }
+
+    /** {@code GET /_nkap/submissions}: submissions the simulator processed since its state was forgotten. */
+    int submissionsReceived() {
+        String body = call("GET", "/_nkap/submissions", null);
+        Matcher count = SUBMISSIONS_COUNT.matcher(body);
+        if (!count.find()) {
+            throw new IllegalStateException("GET /_nkap/submissions answered " + body);
+        }
+        return Integer.parseInt(count.group(1));
+    }
+
+    /** Back to the happy path, no enforcement, and every payment forgotten. */
+    void reset() {
+        call("DELETE", "/_nkap/scenarios", null);
+        call("DELETE", "/_nkap/state", null);
+    }
+
+    private String call(String method, String path, String body) {
+        HttpRequest.Builder request = HttpRequest.newBuilder(baseUrl.resolve(path)).timeout(Duration.ofSeconds(5));
+        if (body == null) {
+            request.method(method, HttpRequest.BodyPublishers.noBody());
+        } else {
+            request.method(method, HttpRequest.BodyPublishers.ofString(body)).header("Content-Type", "application/json");
+        }
+        try {
+            HttpResponse<String> response = http.send(request.build(), HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() >= 300) {
+                throw new IllegalStateException(method + " " + path + " -> " + response.statusCode() + " " + response.body());
+            }
+            return response.body();
+        } catch (Exception e) {
+            throw new IllegalStateException("control-plane call failed: " + method + " " + path, e);
+        }
+    }
+
+    @Override
+    public void close() {
+        context.close();
+    }
+}

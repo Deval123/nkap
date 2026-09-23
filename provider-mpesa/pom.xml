@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <parent>
+    <groupId>dev.nkap</groupId>
+    <artifactId>nkap-parent</artifactId>
+    <version>2.1.0-SNAPSHOT</version>
+  </parent>
+  <artifactId>nkap-provider-mpesa</artifactId>
+  <name>Nkap :: M-Pesa</name>
+
+  <!--
+    The M-Pesa adapter: Safaricom Daraja's STK Push, Collections only. Like provider-mtn it
+    depends only on provider-api and Jackson, and its HTTP client is java.net.http. No Spring:
+    an adapter must be embeddable in a plain JVM process.
+
+    Its only source is docs/providers/m-pesa.md. It was written and certified without a
+    Safaricom account: the tests run against simulator-mpesa (test scope only), booted on its
+    own, since the simulator image assembles MTN's face alone.
+  -->
+  <dependencies>
+    <dependency>
+      <groupId>dev.nkap</groupId>
+      <artifactId>nkap-provider-api</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.fasterxml.jackson.core</groupId>
+      <artifactId>jackson-databind</artifactId>
+    </dependency>
+
+    <dependency>
+      <groupId>dev.nkap</groupId>
+      <artifactId>nkap-conformance</artifactId>
+      <version>${project.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>dev.nkap</groupId>
+      <artifactId>nkap-simulator-mpesa</artifactId>
+      <version>${project.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.assertj</groupId>
+      <artifactId>assertj-core</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+</project>

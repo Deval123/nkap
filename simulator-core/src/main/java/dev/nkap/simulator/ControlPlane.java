@@ -117,14 +117,23 @@ public abstract class ControlPlane<D extends ControlPlane.Declared<R>, R extends
         }
     }
 
-    /** A well-formed scenario naming something the face's declared policy rules out. */
-    static final class UnplayableScenario extends RuntimeException {
+    /**
+     * A well-formed scenario naming something the face's declared policy rules out. Public
+     * because the deployable's startup file loader reports it the way it reports a malformed
+     * file, naming the file and {@link #offendingField(Throwable) the field}.
+     */
+    public static final class UnplayableScenario extends RuntimeException {
 
         private final String field;
 
         UnplayableScenario(String field, String detail) {
             super(detail);
             this.field = field;
+        }
+
+        /** The offending field, in the same notation {@link #offendingField(Throwable)} uses. */
+        public String field() {
+            return field;
         }
     }
 
@@ -233,12 +242,15 @@ public abstract class ControlPlane<D extends ControlPlane.Declared<R>, R extends
     /**
      * The offending field of a malformed declaration, walked from Jackson's own
      * path — {@code "(unknown)"} when the failure is not attributable to one field (a
-     * syntax error, for instance). Shared with the deployable's startup file loader, which
-     * binds the same document from a file at startup: the two ways of declaring a scenario
-     * diagnose a mistake in exactly the same words, not two messages that happen to agree
-     * today.
+     * syntax error, for instance) — or the field an {@link UnplayableScenario} names.
+     * Shared with the deployable's startup file loader, which binds the same document from
+     * a file at startup: the two ways of declaring a scenario diagnose a mistake in exactly
+     * the same words, not two messages that happen to agree today.
      */
     public static String offendingField(Throwable cause) {
+        if (cause instanceof UnplayableScenario unplayable) {
+            return unplayable.field();
+        }
         if (cause instanceof JsonMappingException mapping && !mapping.getPath().isEmpty()) {
             return mapping.getPath().stream()
                 .map(ref -> ref.getFieldName() != null ? ref.getFieldName() : "[" + ref.getIndex() + "]")

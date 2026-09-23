@@ -8,6 +8,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import dev.nkap.simulator.ControlPlane;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
@@ -18,6 +21,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -59,6 +63,9 @@ class StkPushTest {
 
     @Autowired
     MockMvc mvc;
+
+    @Autowired
+    MpesaControlPlane controlPlane;
 
     private RestClient client;
 
@@ -334,6 +341,19 @@ class StkPushTest {
         JsonNode active = read(client.get().uri(base() + "/_nkap/scenarios").retrieve().toEntity(String.class));
         assertThat(active.get("rules").get(0).get("scenario").get("name").asText())
                 .as("the refused declaration replaced nothing").isEqualTo("kept");
+    }
+
+    @Test
+    @DisplayName("the same refusal from a scenario file names the offending field, for the startup loader's message")
+    void conflict_in_a_file_is_refused_with_its_field(@TempDir Path directory) throws Exception {
+        Path file = directory.resolve("scenario.json");
+        Files.writeString(file, """
+            {"rules":[{"scenario":{"onSubmit":{"outcome":"CONFLICT"}}}]}""");
+
+        assertThatThrownBy(() -> controlPlane.load(json, file))
+                .isInstanceOf(ControlPlane.UnplayableScenario.class)
+                .satisfies(refused -> assertThat(ControlPlane.offendingField(refused))
+                        .isEqualTo("rules.[0].scenario.onSubmit.outcome"));
     }
 
     // --- helpers ----------------------------------------------------------------------------

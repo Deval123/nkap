@@ -27,6 +27,7 @@
     <module>conformance</module>
     <module>simulator-core</module>
     <module>simulator-mtn</module>
+    <module>simulator-mpesa</module>
     <module>simulator</module>
     <module>server</module>
   </modules>

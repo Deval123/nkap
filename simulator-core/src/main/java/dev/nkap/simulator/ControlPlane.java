@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.nkap.simulator.scenario.AccountBehaviour;
 import dev.nkap.simulator.scenario.Rule;
+import dev.nkap.simulator.scenario.SubmitOutcome;
+import dev.nkap.simulator.scenario.Timeline;
 import dev.nkap.simulator.scenario.TimelineEngine;
 import dev.nkap.simulator.scenario.TokenBehaviour;
 import java.io.IOException;
@@ -45,7 +47,7 @@ import org.springframework.web.server.ResponseStatusException;
  * @param <R> the face's rule
  */
 @RequestMapping("/_nkap")
-public abstract class ControlPlane<D extends ControlPlane.Declared<R>, R extends Rule<?>> {
+public abstract class ControlPlane<D extends ControlPlane.Declared<R>, R extends Rule<? extends Timeline<?, ?>>> {
 
     /**
      * What every face's declaration document holds: the whole declared configuration —
@@ -90,7 +92,40 @@ public abstract class ControlPlane<D extends ControlPlane.Declared<R>, R extends
     @PostMapping("/scenarios")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void declare(@RequestBody D body) {
+        refuseWhatThisOperatorCannotDo(body.rules());
         engine.replaceConfiguration(body.token(), body.callbackUrl(), body.rules(), body.account());
+    }
+
+    /**
+     * A scenario the face's own declared policy says its operator can never play is refused
+     * here, when it is declared, the way a malformed one is — not played by inventing an
+     * answer on the wire for something the real operator was never seen to say. One such
+     * case today: {@link SubmitOutcome#CONFLICT}, a refusal of a repeated reference, declared
+     * against a face whose operator does not deduplicate ({@link PaymentIdentity.Repeat#NOT_DEDUPLICATED}).
+     * Nothing is replaced when a declaration is refused.
+     */
+    private void refuseWhatThisOperatorCannotDo(List<R> rules) {
+        if (identity.onRepeat() != PaymentIdentity.Repeat.NOT_DEDUPLICATED) {
+            return;
+        }
+        for (int i = 0; i < rules.size(); i++) {
+            if (rules.get(i).scenario().onSubmit().outcome() == SubmitOutcome.CONFLICT) {
+                throw new UnplayableScenario("rules.[" + i + "].scenario.onSubmit.outcome",
+                        "This operator does not refuse a repeated reference (its face declares Repeat."
+                                + PaymentIdentity.Repeat.NOT_DEDUPLICATED + "); this scenario declared CONFLICT anyway");
+            }
+        }
+    }
+
+    /** A well-formed scenario naming something the face's declared policy rules out. */
+    static final class UnplayableScenario extends RuntimeException {
+
+        private final String field;
+
+        UnplayableScenario(String field, String detail) {
+            super(detail);
+            this.field = field;
+        }
     }
 
     @GetMapping("/scenarios")
@@ -170,6 +205,18 @@ public abstract class ControlPlane<D extends ControlPlane.Declared<R>, R extends
             "error", "malformed scenario",
             "field", offendingField(e.getCause()),
             "detail", e.getMostSpecificCause().getMessage()));
+    }
+
+    /**
+     * A scenario this face's operator cannot play is refused with the same 400, in the same
+     * words, as a malformed one: to the test author both are a scenario that has to change.
+     */
+    @ExceptionHandler(UnplayableScenario.class)
+    public ResponseEntity<Map<String, String>> unplayableScenario(UnplayableScenario e) {
+        return ResponseEntity.badRequest().body(Map.of(
+            "error", "malformed scenario",
+            "field", e.field,
+            "detail", e.getMessage()));
     }
 
     /**

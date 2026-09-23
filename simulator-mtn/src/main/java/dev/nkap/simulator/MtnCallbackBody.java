@@ -14,18 +14,18 @@ import org.springframework.stereotype.Component;
 class MtnCallbackBody implements CallbackBody<MomoStatus> {
 
     @Override
-    public Map<String, Object> render(String paymentId, String amount, String currency, MomoStatus status) {
+    public Map<String, Object> render(Callback<MomoStatus> callback) {
         Map<String, Object> body = new LinkedHashMap<>();
-        body.put("referenceId", paymentId);
-        body.put("status", status.name());
-        if (amount != null) {
-            body.put("amount", amount);
+        body.put("referenceId", callback.paymentId());
+        body.put("status", callback.status().name());
+        if (callback.amount() != null) {
+            body.put("amount", callback.amount());
         }
-        if (currency != null) {
-            body.put("currency", currency);
+        if (callback.currency() != null) {
+            body.put("currency", callback.currency());
         }
-        body.put("financialTransactionId", financialTransactionId(paymentId));
-        if (status == MomoStatus.FAILED) {
+        body.put("financialTransactionId", financialTransactionId(callback.paymentId()));
+        if (callback.status() == MomoStatus.FAILED) {
             body.put("reason", "SIMULATED_FAILURE");
         }
         return body;

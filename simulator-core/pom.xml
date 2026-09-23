@@ -15,7 +15,8 @@
     The operator-neutral half of the simulator: which scenario applies, accept or refuse
     or never answer, a status that flaps, a credential that expires, when a callback is
     due and where it goes, the operator's memory of payments, and the /_nkap control
-    plane. How any of it is said on the wire belongs to a face module (simulator-mtn).
+    plane. How any of it is said on the wire belongs to a face module (simulator-mtn,
+    simulator-mpesa).
 
     Depends on no face module, at any scope. A face depends on this; never the reverse.
 

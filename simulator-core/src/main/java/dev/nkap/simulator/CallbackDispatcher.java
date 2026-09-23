@@ -8,7 +8,6 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -16,7 +15,6 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
@@ -59,6 +57,7 @@ public class CallbackDispatcher<S> {
     private final ScheduledExecutorService scheduler;
     private final RestClient http;
     private final CallbackBody<S> body;
+    private final PaymentIdentity identity;
 
     /**
      * Maximum number of attempts retained per submitted payment to prevent
@@ -82,8 +81,9 @@ public class CallbackDispatcher<S> {
             }
     );
 
-    CallbackDispatcher(CallbackBody<S> body) {
+    CallbackDispatcher(CallbackBody<S> body, PaymentIdentity identity) {
         this.body = body;
+        this.identity = identity;
         ThreadFactory threads = runnable -> {
             Thread t = new Thread(runnable, "callback-dispatcher");
             t.setDaemon(true);
@@ -110,6 +110,15 @@ public class CallbackDispatcher<S> {
      */
     public void schedule(String submissionReferenceId, String amount, String currency,
                          List<? extends CallbackStep<S>> callbacks, String url) {
+        schedule(submissionReferenceId, amount, currency, Map.of(), callbacks, url);
+    }
+
+    /**
+     * As {@link #schedule(String, String, String, List, String)}, carrying {@code submission}
+     * — what the face kept from the submission for its callbacks — to every delivery.
+     */
+    public void schedule(String submissionReferenceId, String amount, String currency, Map<String, String> submission,
+                         List<? extends CallbackStep<S>> callbacks, String url) {
         if (callbacks.isEmpty()) {
             return;
         }
@@ -122,18 +131,16 @@ public class CallbackDispatcher<S> {
         for (CallbackStep<S> spec : callbacks) {
             String targetReferenceId = switch (spec.target()) {
                 case SAME_REFERENCE -> submissionReferenceId;
-                // A known leak, recorded here because nothing else would show it: a random
-                // UUID is MTN's identity format, and the core has no business choosing the
-                // shape of an operator's identity. It survived the check that keeps this
-                // module neutral because it names no operator. When a second face needs a
-                // different shape for an identity nobody submitted, PaymentIdentity is where
-                // that face will declare it.
-                case UNKNOWN_REFERENCE -> UUID.randomUUID().toString();
+                // The shape of an identity nobody submitted is the operator's, so the face
+                // declares it. It was a random UUID here once, one operator's shape, until a
+                // second face needed its own.
+                case UNKNOWN_REFERENCE -> identity.neverSubmitted();
             };
             for (int i = 0; i < spec.times(); i++) {
                 Duration delay = spec.after().plus(spec.every().multipliedBy(i));
                 scheduler.schedule(
-                        () -> deliver(submissionReferenceId, url, targetReferenceId, amount, currency, spec.status()),
+                        () -> deliver(submissionReferenceId, url,
+                                new CallbackBody.Callback<>(targetReferenceId, amount, currency, spec.status(), submission)),
                         Math.max(delay.toMillis(), 0), TimeUnit.MILLISECONDS);
             }
         }
@@ -155,9 +162,10 @@ public class CallbackDispatcher<S> {
         scheduler.shutdownNow();
     }
 
-    private void deliver(String submissionReferenceId, String url, String targetReferenceId,
-                         String amount, String currency, S status) {
-        Map<String, Object> body = this.body.render(targetReferenceId, amount, currency, status);
+    private void deliver(String submissionReferenceId, String url, CallbackBody.Callback<S> callback) {
+        String targetReferenceId = callback.paymentId();
+        S status = callback.status();
+        Map<String, Object> rendered = body.render(callback);
 
         Instant at = Instant.now();
         boolean answered = false;
@@ -165,8 +173,9 @@ public class CallbackDispatcher<S> {
         String error = null;
         try {
             ResponseEntity<Void> response = http.post().uri(url)
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .body(body)
+                    .contentType(body.contentType())
+                    .headers(headers -> headers.addAll(body.headers(callback)))
+                    .body(rendered)
                     .retrieve()
                     .toBodilessEntity();
             answered = true;

@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <parent>
+    <groupId>dev.nkap</groupId>
+    <artifactId>nkap-parent</artifactId>
+    <version>2.1.0-SNAPSHOT</version>
+  </parent>
+  <artifactId>nkap-simulator-mpesa</artifactId>
+  <name>Nkap :: Simulator :: M-Pesa</name>
+
+  <!--
+    M-Pesa's face on the simulator (Safaricom Daraja, STK Push, Collections only): routes,
+    request parsing, response and error bodies, the ResultCode vocabulary, the callback and
+    the authentication scheme. What happens is simulator-core's; this module decides only
+    how Safaricom says it. Its only source is docs/providers/m-pesa.md: what that page
+    records as observed is reproduced as observed, and everything else is labelled
+    modelled where it is written.
+
+    Not assembled into the simulator image yet: the core runs one face per application
+    context today. The face's own tests boot it on its own.
+  -->
+  <dependencies>
+    <dependency>
+      <groupId>dev.nkap</groupId>
+      <artifactId>nkap-simulator-core</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-web</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-test</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <configuration>
+          <!-- Spring MVC binds @PathVariable / @RequestHeader by parameter name. -->
+          <parameters>true</parameters>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
+</project>

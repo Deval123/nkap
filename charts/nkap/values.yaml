@@ -81,7 +81,14 @@ provider:
     # One entry per country -- its own portal, its own subscription keys, its own currency.
     # Empty by default: the gateway starts with no MTN adapter configured, which is enough
     # to provision an API key and check /actuator/health before any MTN credential exists
-    # (nkap-standalone.compose.yaml makes the same point, the same way). Every credential
+    # (nkap-standalone.compose.yaml makes the same point, the same way).
+    #
+    # Correction, 2026-09-24: the sentence above was false from the day this chart was
+    # added, 2026-09-14, until this correction. application.yml defaults MTN Cameroon's
+    # country to "cm", and nkap-standalone.compose.yaml blanks it explicitly; this chart did
+    # not. With this list empty, the gateway built mtn-cm with no credentials and refused to
+    # start. The chart now blanks that country whenever no installation here claims cm
+    # (templates/_helpers.tpl), which makes the sentence true. Every credential
     # field below is a Secret reference, never a value -- see "The credential rule" in
     # charts/nkap/README.md. Example, one collections-only installation for Cameroon:
     #

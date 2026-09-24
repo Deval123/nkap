@@ -67,6 +67,24 @@ Names are exactly what nkap-standalone.compose.yaml and application.yml already 
 - name: NKAP_PUBLIC_BASE_URL
   value: {{ .Values.publicBaseUrl | quote }}
 {{- end }}
+{{- /*
+Blank MTN Cameroon's country unless an installation below claims cm. This exists only because
+application.yml defaults that one slot's country to "cm" (NKAP_PROVIDER_MTN_CM_COUNTRY:cm):
+left unset, the gateway builds mtn-cm with no credentials and refuses to start, so a
+deployment with no MTN installation -- the chart's empty default, or M-Pesa alone -- could
+never come up. nkap-standalone.compose.yaml blanks it the same way. If that default changes
+or goes, this block goes with it.
+*/}}
+{{- $claimsCameroon := false }}
+{{- range .Values.provider.mtn.installations }}
+{{- if and .country (eq (.country | lower) "cm") }}
+{{- $claimsCameroon = true }}
+{{- end }}
+{{- end }}
+{{- if not $claimsCameroon }}
+- name: NKAP_PROVIDER_MTN_CM_COUNTRY
+  value: ""
+{{- end }}
 {{- range $i, $installation := .Values.provider.mtn.installations }}
 {{- $country := required (printf "provider.mtn.installations[%d].country is required" $i) $installation.country }}
 {{- $prefix := printf "NKAP_PROVIDER_MTN_%s" ($country | upper) }}

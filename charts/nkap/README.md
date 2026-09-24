@@ -282,7 +282,10 @@ the rendered output:
   consumer key, consumer secret and passkey are `secretKeyRef`s; and no variable whose name
   looks like a credential renders as a literal `value:` in either render, whether or not
   anyone remembered to list it;
-- the MTN-only render carries no M-Pesa variable and no public base URL.
+- the MTN-only render carries no M-Pesa variable and no public base URL;
+- MTN Cameroon's country is rendered blank when no installation claims `cm` (an empty
+  install, or M-Pesa alone), and left alone when one does — `application.yml` defaults it
+  to `cm`, and without the blank the gateway refuses to start.
 
 **What CI does not do: install this chart into a real cluster.** `helm template` proves the
 chart renders correctly; it does not prove the rendered manifests actually schedule, that the

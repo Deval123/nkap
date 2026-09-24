@@ -6,8 +6,31 @@ All notable changes to Nkap are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **M-Pesa is a configured operator.** Safaricom's STK Push, collections only: one Kenya slot,
+  `NKAP_PROVIDER_MPESA_KE_*`, registered as `mpesa-ke`. `POST /payments` routes on the country
+  its installation states, so a Kenyan payment reaches it and a Cameroonian one reaches MTN. A
+  configured M-Pesa installation makes `NKAP_PUBLIC_BASE_URL` mandatory: its callback is the
+  only way it resolves a submission whose answer was lost. Read `docs/security-notes.md` §1
+  before handling its `passkey`: a single request reveals it, and it is not a key in MTN's
+  sense.
+- **The Helm chart configures M-Pesa**, credentials by Secret reference only, and refuses to
+  render an installation the gateway could not read: more than one, or a country other than
+  `ke`. The chart's own first install also works for the first time. A release that lists no
+  MTN installation now starts; before, the gateway's own `cm` default built a Cameroon adapter
+  with no credentials, and the gateway refused to start.
+
 ### Changed
 
+- **A deployment that relied on MTN Cameroon's country defaulting to `cm` loses its MTN adapter
+  on this upgrade, and nothing says so at startup.** Every slot's country now defaults to blank,
+  so a deployment that set `NKAP_PROVIDER_MTN_CM_*` credentials but never set
+  `NKAP_PROVIDER_MTN_CM_COUNTRY` no longer builds an `mtn-cm` adapter: the slot is skipped, the
+  gateway starts, and the first payment for Cameroon answers that no installation is configured.
+  Set `NKAP_PROVIDER_MTN_CM_COUNTRY=cm`. This cannot be a startup failure: a first install with
+  no adapter configured is legitimate, and the Helm chart's own first install depends on it. So
+  this note is the only warning there is.
 - **A deployment that sets a provider environment variable for an installation this gateway
   does not have stops starting after this upgrade.** Remove the variable, or add the slot to
   `application.yml`. Only the declared slots exist: MTN `cm` and `gh`, M-Pesa `ke`. A variable

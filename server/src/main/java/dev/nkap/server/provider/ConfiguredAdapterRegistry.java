@@ -5,6 +5,7 @@ import dev.nkap.provider.ProviderAdapter;
 import dev.nkap.provider.ProviderId;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -20,6 +21,7 @@ public final class ConfiguredAdapterRegistry implements AdapterRegistry {
     private final Map<ProviderId, ProviderAdapter> byId;
     private final Map<ProviderId, Currency> settlementCurrencies;
     private final Map<ProviderId, String> settlementEndpoints;
+    private final Map<String, ProviderId> byCountry;
 
     public ConfiguredAdapterRegistry(List<ProviderAdapter> adapters, List<ProviderRouting> routes) {
         Map<ProviderId, ProviderAdapter> index = new LinkedHashMap<>();
@@ -33,7 +35,14 @@ public final class ConfiguredAdapterRegistry implements AdapterRegistry {
 
         Map<ProviderId, Currency> currencies = new LinkedHashMap<>();
         Map<ProviderId, String> endpoints = new LinkedHashMap<>();
+        Map<String, ProviderId> countries = new LinkedHashMap<>();
         for (ProviderRouting route : routes) {
+            ProviderId countryClash = countries.putIfAbsent(normalised(route.country()), route.provider());
+            if (countryClash != null && !countryClash.equals(route.provider())) {
+                throw new IllegalStateException("two installations, " + countryClash + " and " + route.provider()
+                        + ", both claim country '" + route.country() + "'. POST /payments routes on the country "
+                        + "alone, so it could not tell which one a payment is meant for; configure only one.");
+            }
             Currency clash = currencies.putIfAbsent(route.provider(), route.currency());
             if (clash != null && clash != route.currency()) {
                 throw new IllegalStateException("two routes disagree on the currency for provider " + route.provider());
@@ -45,6 +54,7 @@ public final class ConfiguredAdapterRegistry implements AdapterRegistry {
         }
         this.settlementCurrencies = Map.copyOf(currencies);
         this.settlementEndpoints = Map.copyOf(endpoints);
+        this.byCountry = Map.copyOf(countries);
     }
 
     @Override
@@ -72,7 +82,19 @@ public final class ConfiguredAdapterRegistry implements AdapterRegistry {
     }
 
     @Override
+    public Optional<ProviderId> providerForCountry(String country) {
+        if (country == null) {
+            return Optional.empty();
+        }
+        return Optional.ofNullable(byCountry.get(normalised(country)));
+    }
+
+    @Override
     public Set<ProviderId> configuredProviders() {
         return byId.keySet();
+    }
+
+    private static String normalised(String country) {
+        return country.strip().toLowerCase(Locale.ROOT);
     }
 }

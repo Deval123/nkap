@@ -43,16 +43,16 @@ class MtnConfiguration {
     }
 
     /**
-     * The routing for each installation: the currency it settles in, taken from
-     * configuration so the gateway can turn away a request in another currency before a
-     * payment exists.
+     * The routing for each installation: the country {@code POST /payments} names to reach it,
+     * and the currency it settles in, taken from configuration so the gateway can turn away a
+     * request in another currency before a payment exists.
      */
     @Bean
     List<ProviderRouting> mtnRoutings(MtnProperties properties) {
         return properties.installations().stream()
                 .filter(MtnProperties.Installation::isConfigured)
-                .map(installation -> new ProviderRouting(
-                        providerId(installation), installation.currency(), installation.baseUrl().toString()))
+                .map(installation -> new ProviderRouting(providerId(installation), country(installation),
+                        installation.currency(), installation.baseUrl().toString()))
                 .toList();
     }
 
@@ -76,7 +76,11 @@ class MtnConfiguration {
      * Derived, not configured separately — see {@link MtnProperties.Installation}'s javadoc.
      */
     private static ProviderId providerId(MtnProperties.Installation installation) {
-        return ProviderId.of("mtn-" + installation.country().strip().toLowerCase(Locale.ROOT));
+        return ProviderId.of("mtn-" + country(installation));
+    }
+
+    private static String country(MtnProperties.Installation installation) {
+        return installation.country().strip().toLowerCase(Locale.ROOT);
     }
 
     private static MtnProfile collectionProfile(MtnProperties.Installation installation) {

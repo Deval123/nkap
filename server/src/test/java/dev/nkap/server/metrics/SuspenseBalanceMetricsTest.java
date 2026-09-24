@@ -44,7 +44,7 @@ class SuspenseBalanceMetricsTest {
     @DisplayName("the suspense gauge is non-zero after a statement import posts to suspense, and returns to zero once the entry is resolved")
     void the_gauge_tracks_the_live_suspense_balance() {
         new SuspenseBalanceMetrics()
-                .suspenseBalanceGauges(ledger, List.of(new ProviderRouting(MTN, Currency.EUR, "http://simulator:8081")))
+                .suspenseBalanceGauges(ledger, List.of(new ProviderRouting(MTN, "cm", Currency.EUR, "http://simulator:8081")))
                 .bindTo(registry);
         Gauge gauge = registry.get("nkap.suspense.balance").gauge();
 
@@ -81,7 +81,7 @@ class SuspenseBalanceMetricsTest {
                 .thenThrow(new RuntimeException("the database is unreachable"));
 
         new SuspenseBalanceMetrics()
-                .suspenseBalanceGauges(brokenLedger, List.of(new ProviderRouting(MTN, Currency.EUR, "http://simulator:8081")))
+                .suspenseBalanceGauges(brokenLedger, List.of(new ProviderRouting(MTN, "cm", Currency.EUR, "http://simulator:8081")))
                 .bindTo(registry);
         double value = registry.get("nkap.suspense.balance").gauge().value();
 

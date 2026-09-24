@@ -19,6 +19,7 @@ import dev.nkap.server.payment.PaymentService;
 import dev.nkap.server.provider.AdapterRegistry;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -46,14 +47,6 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/payments")
 class PaymentController {
-
-    /**
-     * Every configured MTN installation is registered as {@code "mtn-" + country} (issue
-     * #82, {@code MtnConfiguration}) — this is the other half of that convention, and the
-     * only place it is written down. A second operator would need a real routing rule here
-     * instead of a string; for one operator, a prefix is the boring, honest choice.
-     */
-    private static final String COUNTRY_PROVIDER_PREFIX = "mtn-";
 
     private final PaymentService payments;
     private final PaymentRepository repository;
@@ -166,19 +159,18 @@ class PaymentController {
      */
     private ProviderId resolveProvider(CreatePaymentRequest request) {
         requireText(request.country(), "country");
-        ProviderId provider;
-        try {
-            provider = ProviderId.of(COUNTRY_PROVIDER_PREFIX + request.country().strip().toLowerCase(Locale.ROOT));
-        } catch (IllegalArgumentException e) {
-            throw invalid("country '" + request.country() + "' is not a valid country code");
-        }
-        if (adapters.find(provider).isEmpty()) {
+        // Each installation states the country it serves (ProviderRouting), so this no longer
+        // rebuilds a provider id from an "mtn-" prefix: with a second operator (issue #215) the
+        // prefix is not something the gateway can know from the country alone.
+        Optional<ProviderId> routed = adapters.providerForCountry(request.country())
+                .filter(id -> adapters.find(id).isPresent());
+        if (routed.isEmpty()) {
             throw new ApiException(HttpStatus.BAD_REQUEST, ProblemTypes.UNCONFIGURED_COUNTRY,
                     "This country is not configured",
                     "No installation is configured for country '" + request.country() + "'. This deployment "
                             + "configures: " + adapters.configuredProviders() + ".");
         }
-        return provider;
+        return routed.get();
     }
 
     /**

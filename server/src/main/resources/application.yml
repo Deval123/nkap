@@ -158,7 +158,11 @@ nkap:
   provider:
     # The provider GET /balance and GET /account-holders/{msisdn} route to — those two
     # routes are not per-country (issue #82's "not in this slice"); POST /payments names
-    # its own country on every request instead. Defaults to the first installation below.
+    # its own country on every request instead. Defaults to the literal mtn-cm, whatever is
+    # configured below, and mtn-cm exists only when NKAP_PROVIDER_MTN_CM_COUNTRY=cm. When
+    # any provider is configured, the gateway refuses to start if this names none of them
+    # (DefaultProviderCheck); with none configured there is nothing to contradict, and it
+    # starts.
     default: ${NKAP_PROVIDER_DEFAULT:mtn-cm}
     mtn:
       # Several country installations in one deployment (issue #82): a list, one entry per

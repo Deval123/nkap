@@ -63,7 +63,7 @@ consumers of a country-agnostic default.
 
 | Property | Default | What happens when it's wrong |
 | --- | --- | --- |
-| `nkap.provider.default` | `mtn-cm` | `GET /balance` and `GET /account-holders/{msisdn}` are not per-country routes (issue #82); this is the installation they route to. If it names an installation that is not actually configured (its country is blank, see below), both routes fail with no adapter found for it. If it names one installation while another is also configured, calls silently land on the one this setting names, not the one a caller might assume from context — nothing checks that this points at the installation an operator actually intended to be the default. |
+| `nkap.provider.default` | `mtn-cm` | `GET /balance` and `GET /account-holders/{msisdn}` are not per-country routes (issue #82); this is the installation they route to. If it names an installation that is not actually configured (its country is blank, see below) while at least one other is, the gateway refuses to start, naming the default and what is configured; `mtn-cm` exists only when MTN Cameroon is configured, so a deployment serving only another country must set this. With no installation configured at all, it starts. If it names one installation while another is also configured, calls silently land on the one this setting names, not the one a caller might assume from context — nothing checks that this points at the installation an operator actually intended to be the default. |
 
 ## The public callback base URL (`nkap.public-base-url`)
 

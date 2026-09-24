@@ -76,6 +76,12 @@ provider:
   # Leave it empty and the gateway's own default applies, which is "mtn-cm" -- so set it if
   # you do not configure MTN Cameroon. Naming an M-Pesa installation here leaves both routes
   # unable to answer: the M-Pesa adapter offers neither a balance nor holder validation.
+  #
+  # It must name a configured installation. When any installation below is configured and
+  # this names none of them -- including the "mtn-cm" fallback in a release without MTN
+  # Cameroon -- the gateway refuses to start. A release with no installation at all still
+  # starts. The check is the gateway's, not this chart's, so every way of deploying it gets
+  # the same answer.
   default: ""
   mtn:
     # One entry per country -- its own portal, its own subscription keys, its own currency.

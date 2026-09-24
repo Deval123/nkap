@@ -22,6 +22,9 @@ final class MpesaSimulatorUnderTest implements AutoCloseable {
 
     private static final Pattern SUBMISSIONS_COUNT = Pattern.compile("\"count\"\\s*:\\s*(\\d+)");
 
+    /** Bound and connected to by address, never by a name that could resolve somewhere else. */
+    private static final String LOOPBACK = "127.0.0.1";
+
     private final ConfigurableApplicationContext context;
     private final URI baseUrl;
     private final SimulatorStartupLog startup;
@@ -36,12 +39,17 @@ final class MpesaSimulatorUnderTest implements AutoCloseable {
         long runCalled = System.nanoTime();
         this.context = app.run(
                 "--server.port=0",
+                // The exact address the harness connects to, not the wildcard Tomcat binds by
+                // default. Bound to [::], the port's 127.0.0.1 could be taken by any other process
+                // binding it with SO_REUSEADDR, and every call below would go there instead
+                // (issue #213, SimulatorAddressTest).
+                "--server.address=" + LOOPBACK,
                 "--server.shutdown=immediate",
                 "--spring.lifecycle.timeout-per-shutdown-phase=3s",
                 "--spring.jackson.serialization.write-durations-as-timestamps=false");
         WebServer webServer = ((ServletWebServerApplicationContext) context).getWebServer();
         this.startup = SimulatorStartupLog.started("simulator-mpesa", webServer, runCalled);
-        this.baseUrl = URI.create("http://localhost:" + webServer.getPort());
+        this.baseUrl = URI.create("http://" + LOOPBACK + ":" + webServer.getPort());
     }
 
     URI baseUrl() {

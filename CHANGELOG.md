@@ -4,6 +4,21 @@ All notable changes to Nkap are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/); versioning follows
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- **A deployment that sets a provider environment variable for an installation this gateway
+  does not have stops starting after this upgrade.** Remove the variable, or add the slot to
+  `application.yml`. Only the declared slots exist: MTN `cm` and `gh`, M-Pesa `ke`. A variable
+  such as `NKAP_PROVIDER_MTN_CI_COUNTRY`, one for an operator with no adapter
+  (`NKAP_PROVIDER_ORANGE_CM_*`), or a lower-case spelling of a declared one, was read by
+  nothing: the gateway started, the installation silently did not exist, and its credentials sat
+  in the process unused. The deployments this breaks were already broken and did not know. The
+  gateway now fails at startup, before touching the database, naming every offending operator
+  and country in one message and never a value. `provider-api` is unchanged. See
+  `docs/security-notes.md` §1 for why this is a security change.
+
 ## [2.0.0] - 2026-09-21
 
 ### Breaking

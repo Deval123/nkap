@@ -73,6 +73,13 @@ provider:
 See `values.yaml`'s own comments for every field, including disbursements (a separate MTN
 product with its own Secret) and more than one country installation (issue #82).
 
+**Only the countries the gateway has a slot for exist: MTN `cm` and `gh`.** An MTN installation
+for any other country renders without complaint, and then the gateway refuses to start, naming
+the country: its variables would be read by nothing, and its credentials would sit in the pod
+unused. This chart deliberately does not check it itself. A chart-side list would be a second
+copy of the gateway's slots, and it would protect only Helm installs; the gateway's own check
+covers every way of deploying it.
+
 ### M-Pesa
 
 M-Pesa (Safaricom's STK Push, collections only) is configured under

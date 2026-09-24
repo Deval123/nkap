@@ -113,6 +113,15 @@ submission and every status query carries a `Password` computed from it:
   all three alike. None of the three is ever printed by Nkap: a missing one fails startup
   naming the property, not the value.
 
+**Credentials for an installation that does not exist fail the gateway at startup.** The
+gateway reads provider variables only for the slots `application.yml` declares. A variable for
+any other country or operator used to be accepted in silence: the deployment believed it served
+that installation, the credentials were live in the process environment, and nothing ever used
+them, watched them, or prompted anyone to rotate them. That is an exposure, not only a
+misconfiguration, and it matters most for the M-Pesa `passkey` above, which a single request
+reveals. The gateway now refuses to start and names each offending operator and country. The
+check reads variable names only; no value is read, logged, or put into its message.
+
 **Provisioning is a host-side command, never a route, in every case above** — API keys,
 webhook secrets, and (see ADR 0010) a refund's destination is never a request field either,
 for the same underlying reason: an HTTP route reachable by whatever holds a merchant's own

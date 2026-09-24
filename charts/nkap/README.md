@@ -73,6 +73,12 @@ provider:
 See `values.yaml`'s own comments for every field, including disbursements (a separate MTN
 product with its own Secret) and more than one country installation (issue #82).
 
+**`provider.default` must name a configured installation.** Left unset, the gateway falls back
+to `mtn-cm`, which exists only if an MTN Cameroon installation is configured. A release that
+configures installations but whose default names none of them fails to start, so a release
+serving only M-Pesa Kenya sets `provider.default: mpesa-ke`. A release with no installation at
+all still starts. As with undeclared countries, this chart leaves the check to the gateway.
+
 **Only the countries the gateway has a slot for exist: MTN `cm` and `gh`.** An MTN installation
 for any other country renders without complaint, and then the gateway refuses to start, naming
 the country: its variables would be read by nothing, and its credentials would sit in the pod

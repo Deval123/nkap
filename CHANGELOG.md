@@ -41,6 +41,13 @@ All notable changes to Nkap are documented here. The format follows
   gateway now fails at startup, before touching the database, naming every offending operator
   and country in one message and never a value. `provider-api` is unchanged. See
   `docs/security-notes.md` §1 for why this is a security change.
+- **A deployment whose `nkap.provider.default` names no configured adapter stops starting after
+  this upgrade.** The one that will bite is a deployment serving only M-Pesa Kenya that never set
+  the default: it falls back to `mtn-cm`, which exists only when MTN Cameroon is configured, so
+  `GET /balance` and `GET /account-holders/{msisdn}` answered `500` on every call and nothing said
+  so at startup. Set `NKAP_PROVIDER_DEFAULT` (Helm: `provider.default`) to a configured provider,
+  `mpesa-ke` in that case. A deployment with no provider configured at all still starts.
+  `provider-api` is unchanged.
 
 ## [2.0.0] - 2026-09-21
 
@@ -347,6 +354,7 @@ worse than one that promises nothing.
   constraint an operator relies on, not as something this project is promising to enforce
   for every migration to come.
 
+[Unreleased]: https://github.com/deval123/nkap/compare/v2.0.0...HEAD
 [2.0.0]: https://github.com/deval123/nkap/compare/v1.2.0...v2.0.0
 [1.2.0]: https://github.com/deval123/nkap/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/deval123/nkap/compare/v1.0.0...v1.1.0

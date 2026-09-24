@@ -180,7 +180,10 @@ above is Cameroon's; a second country is another installation slot with its own 
 prefix (`docs/providers/mtn.md` lists which are configured here and which are merely
 possible). `POST /payments` names its own country on every request; `nkap.provider.default`
 (`mtn-cm`) is only for the two routes that are not per-country, `GET /balance` and
-`GET /account-holders/{msisdn}`. A missing value on a configured installation leaves the
+`GET /account-holders/{msisdn}`. When any provider is configured, the gateway **refuses to
+start** unless the default names one of them. `mtn-cm` exists only if MTN Cameroon is
+configured, so a deployment serving only another country must set `NKAP_PROVIDER_DEFAULT`
+(for M-Pesa Kenya, `mpesa-ke`). A missing value on a configured installation leaves the
 field blank and the context refuses to start — a clear failure at boot rather than the
 first payment failing; a slot whose country is left blank is simply not built.
 

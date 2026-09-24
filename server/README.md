@@ -165,6 +165,14 @@ file:
 | `NKAP_PROVIDER_MTN_CM_API_USER` | *(secret)* |
 | `NKAP_PROVIDER_MTN_CM_API_KEY` | *(secret)* |
 | `NKAP_PROVIDER_MTN_CM_CURRENCY` | `XAF` |
+| `NKAP_PUBLIC_BASE_URL` | `https://gateway.example.com` — optional for MTN, required by M-Pesa |
+| `NKAP_PROVIDER_MPESA_KE_COUNTRY` | `ke` — blank (the default) leaves M-Pesa unconfigured |
+| `NKAP_PROVIDER_MPESA_KE_BASE_URL` | `https://sandbox.safaricom.co.ke` |
+| `NKAP_PROVIDER_MPESA_KE_BUSINESS_SHORT_CODE` | `174379` |
+| `NKAP_PROVIDER_MPESA_KE_PASSKEY` | *(secret)* |
+| `NKAP_PROVIDER_MPESA_KE_CONSUMER_KEY` | *(secret)* |
+| `NKAP_PROVIDER_MPESA_KE_CONSUMER_SECRET` | *(secret)* |
+| `NKAP_PROVIDER_MPESA_KE_CURRENCY` | `KES` |
 
 One installation per country (issue #82), each its own `mtn-<country>` adapter — the table
 above is Cameroon's; a second country is another installation slot with its own env var
@@ -174,6 +182,11 @@ possible). `POST /payments` names its own country on every request; `nkap.provid
 `GET /account-holders/{msisdn}`. A missing value on a configured installation leaves the
 field blank and the context refuses to start — a clear failure at boot rather than the
 first payment failing; a slot whose country is left blank is simply not built.
+
+M-Pesa follows the same shape (issue #215), as `mpesa-<country>`, with one slot, Kenya, and
+its country blank by default; `application.yml` says why there is only one. A configured
+M-Pesa installation also refuses to start without `NKAP_PUBLIC_BASE_URL`: its callback is
+the only way it resolves a submission whose answer was lost.
 
 ## Not in these slices
 

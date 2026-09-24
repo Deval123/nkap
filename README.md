@@ -182,7 +182,7 @@ ORDER BY escalated_at;
 | `core` | Ledger, state machine, idempotency. Pure domain — no web, no Spring, no database. |
 | `provider-api` | The `ProviderAdapter` contract an operator integration implements. |
 | `provider-mtn` | The MTN MoMo adapter. |
-| `provider-mpesa` | The M-Pesa STK Push adapter. Certified by the kit; not yet wired into the server. |
+| `provider-mpesa` | The M-Pesa STK Push adapter. Certified by the kit; configurable in the server, never yet run against Safaricom. |
 | `conformance` | The test kit every adapter must pass to be merged. |
 | `simulator-core` | What the fake operator does: scenarios, its memory of payments, callbacks, the `/_nkap` control plane. |
 | `simulator-mtn` | How the fake operator says it the way MTN does: routes, bodies, statuses, authentication. |
@@ -441,8 +441,9 @@ Push, Collections) passes every rule of the kit against `simulator-mpesa`, and w
 without a Safaricom account. Under [ADR 0014](docs/adr/0014-resolvable-not-queryable.md) its
 lost-submission case is resolved by callback rather than by query, using the callback URL the
 gateway composes per payment ([#194](https://github.com/Deval123/nkap/pull/194),
-[#200](https://github.com/Deval123/nkap/pull/200)). It is not wired into the server's
-configuration yet, so a deployment cannot be pointed at Safaricom.
+[#200](https://github.com/Deval123/nkap/pull/200)). A deployment can now be pointed at
+Safaricom (`nkap.provider.mpesa.*`, one Kenya slot, which requires `nkap.public-base-url`),
+but no payment has been made through it against Safaricom itself.
 
 Nkap runs on one container and one database. Kafka is an optional connector, not a
 requirement — see [ADR 0003](docs/adr/0003-kafka-is-optional.md).

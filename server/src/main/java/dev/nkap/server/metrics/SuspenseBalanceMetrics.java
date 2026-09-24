@@ -4,12 +4,14 @@ import dev.nkap.core.ledger.AccountId;
 import dev.nkap.core.ledger.Ledger;
 import dev.nkap.core.money.Currency;
 import dev.nkap.provider.ProviderId;
+import dev.nkap.server.provider.ConfiguredAdapterRegistry;
 import dev.nkap.server.provider.ProviderRouting;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.binder.MeterBinder;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -54,7 +56,12 @@ class SuspenseBalanceMetrics {
      * context at all.
      */
     @Bean
-    MeterBinder suspenseBalanceGauges(Ledger ledger, List<ProviderRouting> routes) {
+    MeterBinder suspenseBalanceGauges(Ledger ledger, ObjectProvider<List<ProviderRouting>> routes) {
+        // One routing list per operator (issue #215); ConfiguredAdapterRegistry's javadoc says why.
+        return gauges(ledger, ConfiguredAdapterRegistry.joined(routes));
+    }
+
+    static MeterBinder gauges(Ledger ledger, List<ProviderRouting> routes) {
         return registry -> {
             for (ProviderRouting route : routes) {
                 Gauge.builder(GAUGE_NAME, () -> suspenseBalance(ledger, route.provider(), route.currency()))

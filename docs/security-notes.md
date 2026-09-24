@@ -86,6 +86,33 @@ committed value (`nkap.provider.mtn.installations[].*` in
 `docs/configuration-reference.md`); a slot left unset simply is not a configured
 installation rather than a startup failure over credentials it does not have.
 
+**M-Pesa's credentials live in the environment the same way, but its `passkey` is a
+different kind of secret, and the rotation procedure above does not cover it.** An M-Pesa
+installation (`nkap.provider.mpesa.installations[].*`) holds three secrets. The Consumer Key
+and Consumer Secret are exchanged for a one-hour bearer token, which is the part that
+resembles MTN. The `passkey` is not exchanged for anything and is never sent as-is. Every
+submission and every status query carries a `Password` computed from it:
+`base64(shortcode + passkey + timestamp)`. What follows from that:
+
+- **The passkey is recoverable from any single request.** Base64 is an encoding, not a hash.
+  Anyone who sees one `Password` and knows the shortcode, which is not secret, can read the
+  passkey back. `docs/providers/m-pesa.md` confirmed the formula exactly that way, by
+  decoding Safaricom's own example. So a request body sent to Safaricom must be treated as
+  containing the passkey. Nkap does not log one: the adapter's error messages quote only
+  what Safaricom answered, never what was sent. A proxy, a debugging tap or a request log
+  placed between Nkap and Safaricom would record it, in every request.
+- **It is not rotated the way a Nkap API key is.** The zero-downtime procedure above works
+  because Nkap issues and revokes its own API keys, and two stay active during the handover.
+  The passkey is issued by Safaricom, and no endpoint for revoking or reissuing one has been
+  observed. Nkap holds exactly one passkey per installation, so changing
+  `NKAP_PROVIDER_MPESA_KE_PASSKEY` and restarting is a cut-over with no overlap. Whether
+  Safaricom accepts the old and new passkeys side by side during a change is unknown. If a
+  passkey leaks, what can be done about it is Safaricom's to say, not this document's.
+- **A leaked passkey alone is not enough to act as the installation, but it is most of it.**
+  A request also needs a bearer token, and that needs the Consumer Key and Secret. Protect
+  all three alike. None of the three is ever printed by Nkap: a missing one fails startup
+  naming the property, not the value.
+
 **Provisioning is a host-side command, never a route, in every case above** — API keys,
 webhook secrets, and (see ADR 0010) a refund's destination is never a request field either,
 for the same underlying reason: an HTTP route reachable by whatever holds a merchant's own

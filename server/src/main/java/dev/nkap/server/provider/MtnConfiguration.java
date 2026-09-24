@@ -21,10 +21,8 @@ import org.springframework.context.annotation.Configuration;
  *
  * <p>Both {@code @Bean} methods return a {@code List}, not one bean each, because the count
  * is data-driven — {@code nkap.provider.mtn.installations} may hold one entry or twenty.
- * {@link ConfiguredAdapterRegistry} already collects every {@link ProviderAdapter} and
- * {@link ProviderRouting} bean in the context; a bean whose own type is the list Spring
- * autowires elsewhere satisfies that collection injection directly, so nothing there needed
- * to change.
+ * {@link ConfiguredAdapterRegistry} joins these lists with every other operator's (issue
+ * #215), so an operator's configuration contributes its own list and nothing more.
  *
  * <p>Each product is a whole {@link MtnProfile} — its own subscription key and API
  * user/key — sharing only the installation's base URL, target environment, currency and

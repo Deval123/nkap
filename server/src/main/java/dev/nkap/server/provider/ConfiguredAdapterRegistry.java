@@ -9,11 +9,19 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 /**
  * Every {@link ProviderAdapter} bean in the context, indexed by {@link ProviderAdapter#id()},
  * with the routing declared for each provider in configuration.
+ *
+ * <p>Each operator's configuration contributes its installations as one {@code List} bean
+ * ({@code mtnAdapters}, {@code mpesaAdapters}), because how many there are is data. With one
+ * operator, Spring handed that single list straight to a {@code List<ProviderAdapter>}
+ * parameter; with two it cannot choose between them. So the context-facing constructor asks
+ * for every such list and joins them, and adding a third operator touches nothing here.
  */
 @Component
 public final class ConfiguredAdapterRegistry implements AdapterRegistry {
@@ -22,6 +30,12 @@ public final class ConfiguredAdapterRegistry implements AdapterRegistry {
     private final Map<ProviderId, Currency> settlementCurrencies;
     private final Map<ProviderId, String> settlementEndpoints;
     private final Map<String, ProviderId> byCountry;
+
+    @Autowired
+    ConfiguredAdapterRegistry(ObjectProvider<List<ProviderAdapter>> adapters,
+                              ObjectProvider<List<ProviderRouting>> routes) {
+        this(joined(adapters), joined(routes));
+    }
 
     public ConfiguredAdapterRegistry(List<ProviderAdapter> adapters, List<ProviderRouting> routes) {
         Map<ProviderId, ProviderAdapter> index = new LinkedHashMap<>();
@@ -92,6 +106,11 @@ public final class ConfiguredAdapterRegistry implements AdapterRegistry {
     @Override
     public Set<ProviderId> configuredProviders() {
         return byId.keySet();
+    }
+
+    /** Every list bean of this type, in order, as one list. */
+    public static <T> List<T> joined(ObjectProvider<List<T>> lists) {
+        return lists.orderedStream().flatMap(List::stream).toList();
     }
 
     private static String normalised(String country) {

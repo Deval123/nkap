@@ -60,6 +60,14 @@ public class PublicBaseUrl {
     }
 
     /**
+     * Whether a public base URL is set at all — a provider that can only be resolved by its
+     * callback cannot be configured without one ({@code MpesaConfiguration}).
+     */
+    public boolean isConfigured() {
+        return base != null;
+    }
+
+    /**
      * {@code {"callbackUrl": "<base>/callbacks/<providerId>/<reference>"}} for a real
      * submission to {@code providerId} under {@code reference}, or an empty map when no
      * public base URL is configured.

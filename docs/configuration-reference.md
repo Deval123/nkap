@@ -86,7 +86,7 @@ design withstands it, since a callback settles nothing by itself.
 
 | Property | Default | What happens when it's wrong |
 | --- | --- | --- |
-| `nkap.public-base-url` | *(blank; set per deployment)* | Blank (the default) means `providerOptionsFor` returns an empty map, no `X-Callback-Url` is ever sent, and MTN never calls this deployment back at all — not an error, since a payment still resolves through the reconciler, only slower. Set but not an absolute URL (missing scheme or host) fails the application at startup, the same way a malformed MTN installation `base-url` does. Set to a real, reachable URL but naming a host MTN's `providerCallbackHost` was not given at API-user creation, every submission fails with `INVALID_CALLBACK_URL_HOST` (`docs/providers/mtn.md`) — a payment failure caused entirely by a mismatch between this property and an operator-side allow-list nothing here can see. Set to a host that is reachable but not the one actually recorded with MTN, callbacks are silently never delivered, indistinguishable from leaving it unset except that a submission now also carries a header. |
+| `nkap.public-base-url` | *(blank; set per deployment)* | Blank (the default) means `providerOptionsFor` returns an empty map, no `X-Callback-Url` is ever sent, and MTN never calls this deployment back at all — not an error, since a payment still resolves through the reconciler, only slower. Set but not an absolute URL (missing scheme or host) fails the application at startup, the same way a malformed MTN installation `base-url` does. Set to a real, reachable URL but naming a host MTN's `providerCallbackHost` was not given at API-user creation, every submission fails with `INVALID_CALLBACK_URL_HOST` (`docs/providers/mtn.md`) — a payment failure caused entirely by a mismatch between this property and an operator-side allow-list nothing here can see. Set to a host that is reachable but not the one actually recorded with MTN, callbacks are silently never delivered, indistinguishable from leaving it unset except that a submission now also carries a header. Blank while an M-Pesa installation is configured (non-blank `nkap.provider.mpesa.installations[].country`), the application refuses to start, naming this property: M-Pesa resolves a lost submission only by its callback (ADR 0014), so an M-Pesa installation without a callback address would accept payments nothing could resolve. MTN-only deployments are unaffected. |
 
 ## MTN installations (`nkap.provider.mtn.installations[].*`)
 
@@ -106,11 +106,34 @@ country but is missing a credential is caught before the first payment, not duri
 | `nkap.provider.mtn.installations[].api-user` | *(blank; set per deployment)* | Blank fails at startup. Wrong, MTN's OAuth token exchange fails, so no call for that installation ever gets past acquiring a token. |
 | `nkap.provider.mtn.installations[].api-key` | *(blank; set per deployment)* | Same as `api-user`: blank fails at startup, wrong fails the token exchange. |
 | `nkap.provider.mtn.installations[].currency` | *(installation-specific; e.g. `XAF` for the Cameroon slot, `GHS` for the Ghana slot)* | This project enforces one currency per ledger entry and never converts (the four rules that do not bend, `CLAUDE.md`). A wrong-but-valid currency code here is not rejected — every payment through that installation is booked and settled in the wrong currency as a plain fact in the ledger, not an error anyone is warned about. |
-| `nkap.provider.mtn.installations[].country` | *(installation-specific; e.g. `cm`, blank for the second slot)* | Blank: the installation is skipped entirely and `POST /payments` refuses that country with a `400` — a configuration mistake presenting as a client error. Non-blank but colliding with another installation's country (both resolving to the same `ProviderId`), the application refuses to start at all, naming the clash. |
+| `nkap.provider.mtn.installations[].country` | *(installation-specific; e.g. `cm`, blank for the second slot)* | Blank: the installation is skipped entirely and `POST /payments` refuses that country with a `400` — a configuration mistake presenting as a client error. Non-blank but colliding with another installation's country — another MTN slot, or an M-Pesa installation claiming the same country — the application refuses to start at all, naming the clash: `POST /payments` routes on the country alone and has nothing else to choose by. |
 | `nkap.provider.mtn.installations[].request-timeout` | `20s` | Too short treats a live but slightly slow MTN response as absent before it returns; this project's timeout rule turns that into `UNKNOWN`, not a failure, so nothing is corrupted — but it manufactures reconciler work for payments that would have resolved with a slightly longer wait. Too long lets a genuinely hung call to MTN hold on to whatever issued it for that much longer before Nkap gives up on it. |
 | `nkap.provider.mtn.installations[].disbursement.subscription-key` | *(blank; set per deployment)* | These three fields (and the two below) are read together: `application.yml` defaults all three blank, which means the installation offers no `DISBURSE` capability at all — refunds and disbursements are simply unavailable for it, not an error. Setting only one or two of the three is exactly as unconfigured as setting none; nothing points out the missing third one. |
 | `nkap.provider.mtn.installations[].disbursement.api-user` | *(blank; set per deployment)* | See `disbursement.subscription-key` — all three are checked together. |
 | `nkap.provider.mtn.installations[].disbursement.api-key` | *(blank; set per deployment)* | See `disbursement.subscription-key` — all three are checked together. |
+
+## M-Pesa installations (`nkap.provider.mpesa.installations[].*`)
+
+`MpesaProperties` binds this block (issue #215): the same list shape as MTN's, each
+configured slot becoming its own `ProviderAdapter` registered as `mpesa-<country>`, a slot
+with a blank `country` skipped. Collections only, so there is no `disbursement` block.
+`application.yml` declares **one** slot, Kenya, and says beside it why: whether several
+M-Pesa markets sit behind one API is listed as unknown in `docs/providers/m-pesa.md`.
+
+Two rules have no MTN counterpart. A configured slot requires `nkap.public-base-url` (see its
+row above). And every "fails at startup" below is reported by `MpesaConfiguration` naming
+the property, `nkap.provider.mpesa.installations[n].<property>`, never its value.
+
+| Property | Default | What happens when it's wrong |
+| --- | --- | --- |
+| `nkap.provider.mpesa.installations[].base-url` | *(blank; set per deployment)* | Blank on a configured installation fails at startup. Set but not an absolute URL, the application refuses to start, quoting the URL. Pointing at the wrong host, every call fails at the network layer and, under the timeout rule, lands as `UNKNOWN`. |
+| `nkap.provider.mpesa.installations[].business-short-code` | *(blank; set per deployment)* | Blank fails at startup; anything but digits fails at startup too, since it is sent as a JSON number. A wrong shortcode is not caught here: it is sent in every request and hashed into its `Password`, and what Safaricom answers to one has not been observed. |
+| `nkap.provider.mpesa.installations[].passkey` | *(blank; set per deployment)* | Blank fails at startup. Wrong, every `Password` computed from it is wrong. It is never sent as-is and has no revocation endpoint Nkap knows of; see `docs/security-notes.md` before rotating it. |
+| `nkap.provider.mpesa.installations[].consumer-key` | *(blank; set per deployment)* | Blank fails at startup. Wrong, no token can be obtained, so no call for this installation gets further; the token call's non-`200` answer surfaces as the operator being unavailable, and what Safaricom actually answers to wrong credentials has not been observed. |
+| `nkap.provider.mpesa.installations[].consumer-secret` | *(blank; set per deployment)* | Same as `consumer-key`. |
+| `nkap.provider.mpesa.installations[].currency` | `KES` | A payment in any other currency is refused with a `400` before anything is created. A wrong-but-valid code here is not rejected: payments through this installation would be booked in it, as for MTN. |
+| `nkap.provider.mpesa.installations[].country` | *(blank)* | Blank (the default): M-Pesa is not configured and nothing about it is checked. Set, the installation is built, `nkap.public-base-url` becomes mandatory, and a country another installation already claims fails at startup. |
+| `nkap.provider.mpesa.installations[].request-timeout` | `20s` | Same trade-off as MTN's `request-timeout`: too short manufactures `UNKNOWN` payments for the reconciler, too long holds a hung call longer. |
 
 ## The simulator's scenario file (`nkap.scenario.file`)
 
@@ -138,8 +161,8 @@ here.
 
 ## How this table is kept honest
 
-`ConfigurationReferenceTest` reads `ReconcilerProperties`, `OutboxRelayProperties` and
-`MtnProperties` through reflection — walking every record component, including the nested
+`ConfigurationReferenceTest` reads `ReconcilerProperties`, `OutboxRelayProperties`,
+`MtnProperties` and `MpesaProperties` through reflection — walking every record component, including the nested
 `installations[]` list and its own nested `disbursement` block — and asserts that set of
 real property names matches this file's table exactly in both directions: a property with
 no row here fails the test, and a row naming a property nothing in code reads fails it too.
@@ -155,7 +178,7 @@ Two things it deliberately does not do, stated here rather than left to be disco
   `nkap.provider.default` and `nkap.scenario.file`** are not part of any
   `@ConfigurationProperties` record — the first two are read with `@ConditionalOnProperty`,
   the rest with `@Value`. There is no single class to reflect on for these the way there is
-  for the three records above, so the test finds them the way it finds everything not in a
+  for the four records above, so the test finds them the way it finds everything not in a
   record: scanning `server/src/main/java` and, since issue #99, `simulator/src/main/java` as
   plain text for the two annotations, rather than working from a hand-kept list. That scan
   only recognises a property named as a string literal directly inside one of those two

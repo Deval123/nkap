@@ -43,6 +43,17 @@ public interface AdapterRegistry {
     Optional<String> settlementEndpoint(ProviderId id);
 
     /**
+     * The installation {@code POST /payments}'s {@code country} routes to, whichever operator
+     * it belongs to — {@code cm} to {@code mtn-cm}, {@code ke} to {@code mpesa-ke} — matched
+     * case-insensitively. Empty when no configured installation claims that country.
+     *
+     * <p>At most one installation ever claims a country: two that do are refused at startup,
+     * because {@code country} is the only thing a request names, and the gateway picking
+     * between two operators for the same country would be a guess about whose money moves.
+     */
+    Optional<ProviderId> providerForCountry(String country);
+
+    /**
      * Every provider id this deployment has an adapter for. For a caller who named one that
      * is not configured — a request routing by country (issue #82) is the first place that
      * can be a client mistake rather than a server misconfiguration, and the answer should

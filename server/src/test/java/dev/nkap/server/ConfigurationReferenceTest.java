@@ -3,6 +3,7 @@ package dev.nkap.server;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import dev.nkap.server.outbox.OutboxRelayProperties;
+import dev.nkap.server.provider.MpesaProperties;
 import dev.nkap.server.provider.MtnProperties;
 import dev.nkap.server.reconcile.ReconcilerProperties;
 import java.io.IOException;
@@ -100,6 +101,7 @@ class ConfigurationReferenceTest {
         collect(ReconcilerProperties.class, "nkap.reconciler", fromCode);
         collect(OutboxRelayProperties.class, "nkap.webhooks", fromCode);
         collect(MtnProperties.class, "nkap.provider.mtn", fromCode);
+        collect(MpesaProperties.class, "nkap.provider.mpesa", fromCode);
 
         Set<String> documented = documentedProperties();
 

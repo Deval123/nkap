@@ -151,6 +151,9 @@ nkap:
   # payment. Setting it is also an operational commitment: MTN's providerCallbackHost is an
   # allow-list fixed at API-user creation and must name this same host, or every submission
   # fails with INVALID_CALLBACK_URL_HOST (docs/providers/mtn.md).
+  #
+  # Optional for MTN, required by M-Pesa: a configured M-Pesa installation (below) fails
+  # startup without it, because its callback is the only way it resolves a lost submission.
   public-base-url: ${NKAP_PUBLIC_BASE_URL:}
   provider:
     # The provider GET /balance and GET /account-holders/{msisdn} route to — those two
@@ -192,3 +195,32 @@ nkap:
           api-key: ${NKAP_PROVIDER_MTN_GH_API_KEY:}
           currency: ${NKAP_PROVIDER_MTN_GH_CURRENCY:GHS}
           country: ${NKAP_PROVIDER_MTN_GH_COUNTRY:}
+    mpesa:
+      # Safaricom's Daraja STK Push, collections only (issue #215): no disbursement block,
+      # because the adapter does nothing else. Each installation is registered as
+      # mpesa-<country>, so POST /payments's country field routes to it, exactly as for MTN
+      # above. Credentials come from the environment, never from a committed file, and a
+      # slot with a blank country is skipped. Named placeholders per slot, not raw indexed
+      # environment variables, for the reason given at nkap.provider.mtn above.
+      #
+      # One slot, Kenya, on purpose. MTN's two slots assume several countries behind one API.
+      # For M-Pesa that is exactly what nobody has checked: docs/providers/m-pesa.md lists
+      # under Still unknown whether a second API family sits under the same commercial name,
+      # and if one does, "one adapter per operator" (ADR 0009) stops describing what is built.
+      # A second slot here would be this file asserting what that page records as unknown. It
+      # is earned the day someone reads a Safaricom or Vodacom page that settles the question.
+      #
+      # The country defaults to blank, unlike MTN's first slot: configuring this installation
+      # makes nkap.public-base-url mandatory, and a deployment that never asked for M-Pesa
+      # must not start failing over it. Set NKAP_PROVIDER_MPESA_KE_COUNTRY=ke to turn it on.
+      #
+      # The passkey is not a key in MTN's sense; see docs/security-notes.md before rotating it.
+      installations:
+        - base-url: ${NKAP_PROVIDER_MPESA_KE_BASE_URL:}
+          business-short-code: ${NKAP_PROVIDER_MPESA_KE_BUSINESS_SHORT_CODE:}
+          passkey: ${NKAP_PROVIDER_MPESA_KE_PASSKEY:}
+          consumer-key: ${NKAP_PROVIDER_MPESA_KE_CONSUMER_KEY:}
+          consumer-secret: ${NKAP_PROVIDER_MPESA_KE_CONSUMER_SECRET:}
+          currency: ${NKAP_PROVIDER_MPESA_KE_CURRENCY:KES}
+          country: ${NKAP_PROVIDER_MPESA_KE_COUNTRY:}
+          request-timeout: ${NKAP_PROVIDER_MPESA_KE_REQUEST_TIMEOUT:PT20S}

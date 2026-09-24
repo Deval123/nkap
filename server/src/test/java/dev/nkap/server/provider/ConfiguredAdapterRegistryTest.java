@@ -56,7 +56,7 @@ class ConfiguredAdapterRegistryTest {
     void settlement_currency_comes_from_the_configured_routing() {
         ProviderId mtn = ProviderId.of("mtn");
         AdapterRegistry registry = new ConfiguredAdapterRegistry(
-                List.of(adapterFor("mtn")), List.of(new ProviderRouting(mtn, Currency.EUR, "http://simulator:8081")));
+                List.of(adapterFor("mtn")), List.of(new ProviderRouting(mtn, "cm", Currency.EUR, "http://simulator:8081")));
 
         assertThat(registry.settlementCurrency(mtn)).contains(Currency.EUR);
         assertThat(registry.settlementCurrency(ProviderId.of("orange"))).isEmpty();
@@ -67,8 +67,8 @@ class ConfiguredAdapterRegistryTest {
     void conflicting_routes_are_rejected() {
         ProviderId mtn = ProviderId.of("mtn");
         assertThatThrownBy(() -> new ConfiguredAdapterRegistry(List.of(adapterFor("mtn")),
-                List.of(new ProviderRouting(mtn, Currency.EUR, "http://simulator:8081"),
-                        new ProviderRouting(mtn, Currency.XAF, "http://simulator:8081"))))
+                List.of(new ProviderRouting(mtn, "cm", Currency.EUR, "http://simulator:8081"),
+                        new ProviderRouting(mtn, "cm", Currency.XAF, "http://simulator:8081"))))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("mtn");
     }
@@ -78,7 +78,7 @@ class ConfiguredAdapterRegistryTest {
     void settlement_endpoint_comes_from_the_configured_routing() {
         ProviderId mtn = ProviderId.of("mtn");
         AdapterRegistry registry = new ConfiguredAdapterRegistry(
-                List.of(adapterFor("mtn")), List.of(new ProviderRouting(mtn, Currency.EUR, "http://simulator:8081")));
+                List.of(adapterFor("mtn")), List.of(new ProviderRouting(mtn, "cm", Currency.EUR, "http://simulator:8081")));
 
         assertThat(registry.settlementEndpoint(mtn)).contains("http://simulator:8081");
         assertThat(registry.settlementEndpoint(ProviderId.of("orange"))).isEmpty();
@@ -89,9 +89,34 @@ class ConfiguredAdapterRegistryTest {
     void conflicting_endpoints_are_rejected() {
         ProviderId mtn = ProviderId.of("mtn");
         assertThatThrownBy(() -> new ConfiguredAdapterRegistry(List.of(adapterFor("mtn")),
-                List.of(new ProviderRouting(mtn, Currency.EUR, "http://simulator:8081"),
-                        new ProviderRouting(mtn, Currency.EUR, "https://sandbox.momodeveloper.mtn.com"))))
+                List.of(new ProviderRouting(mtn, "cm", Currency.EUR, "http://simulator:8081"),
+                        new ProviderRouting(mtn, "cm", Currency.EUR, "https://sandbox.momodeveloper.mtn.com"))))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("mtn");
+    }
+    @Test
+    @DisplayName("a country routes to the installation that states it, whichever operator that is")
+    void a_country_routes_to_the_installation_that_claims_it() {
+        AdapterRegistry registry = new ConfiguredAdapterRegistry(
+                List.of(adapterFor("mtn-cm"), adapterFor("mpesa-ke")),
+                List.of(new ProviderRouting(ProviderId.of("mtn-cm"), "cm", Currency.XAF, "http://mtn"),
+                        new ProviderRouting(ProviderId.of("mpesa-ke"), "ke", Currency.KES, "http://mpesa")));
+
+        assertThat(registry.providerForCountry("cm")).contains(ProviderId.of("mtn-cm"));
+        assertThat(registry.providerForCountry(" KE ")).contains(ProviderId.of("mpesa-ke"));
+        assertThat(registry.providerForCountry("gh")).isEmpty();
+    }
+
+    @Test
+    @DisplayName("two installations claiming one country is refused at startup: the request names nothing else to choose by")
+    void two_installations_claiming_one_country_are_rejected() {
+        assertThatThrownBy(() -> new ConfiguredAdapterRegistry(
+                List.of(adapterFor("mtn-ke"), adapterFor("mpesa-ke")),
+                List.of(new ProviderRouting(ProviderId.of("mtn-ke"), "ke", Currency.KES, "http://mtn"),
+                        new ProviderRouting(ProviderId.of("mpesa-ke"), "KE", Currency.KES, "http://mpesa"))))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("mtn-ke")
+                .hasMessageContaining("mpesa-ke")
+                .hasMessageContaining("country");
     }
 }

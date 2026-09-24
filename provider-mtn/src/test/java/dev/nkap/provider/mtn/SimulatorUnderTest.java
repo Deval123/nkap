@@ -10,6 +10,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.springframework.boot.Banner;
 import org.springframework.boot.SpringApplication;
+import org.springframework.boot.web.server.WebServer;
 import org.springframework.boot.web.servlet.context.ServletWebServerApplicationContext;
 import org.springframework.context.ConfigurableApplicationContext;
 
@@ -24,6 +25,7 @@ final class SimulatorUnderTest implements AutoCloseable {
 
     private final ConfigurableApplicationContext context;
     private final URI baseUrl;
+    private final SimulatorStartupLog startup;
     private final HttpClient http = HttpClient.newHttpClient();
 
     SimulatorUnderTest() {
@@ -32,12 +34,14 @@ final class SimulatorUnderTest implements AutoCloseable {
         // Command-line args outrank the simulator's application.yml (server.port: 8081).
         // Immediate shutdown: the NO_RESPONSE scenario deliberately leaves a request
         // hanging, and graceful shutdown would then wait out its full timeout.
+        long runCalled = System.nanoTime();
         this.context = app.run(
                 "--server.port=0",
                 "--server.shutdown=immediate",
                 "--spring.lifecycle.timeout-per-shutdown-phase=3s");
-        int port = ((ServletWebServerApplicationContext) context).getWebServer().getPort();
-        this.baseUrl = URI.create("http://localhost:" + port);
+        WebServer webServer = ((ServletWebServerApplicationContext) context).getWebServer();
+        this.startup = SimulatorStartupLog.started("simulator (MTN)", webServer, runCalled);
+        this.baseUrl = URI.create("http://localhost:" + webServer.getPort());
     }
 
     URI baseUrl() {
@@ -75,6 +79,7 @@ final class SimulatorUnderTest implements AutoCloseable {
         } else {
             request.method(method, HttpRequest.BodyPublishers.ofString(body)).header("Content-Type", "application/json");
         }
+        startup.beforeCall(method, path);
         try {
             HttpResponse<String> response = http.send(request.build(), HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() >= 300) {
@@ -82,7 +87,10 @@ final class SimulatorUnderTest implements AutoCloseable {
             }
             return response.body();
         } catch (Exception e) {
-            throw new IllegalStateException("control-plane call failed: " + method + " " + path, e);
+            // An error status is the simulator answering; only a call that got no answer is
+            // worth probing the port for.
+            String onTheWire = e instanceof IllegalStateException ? "" : " -- " + startup.diagnose(e);
+            throw new IllegalStateException("control-plane call failed: " + method + " " + path + onTheWire, e);
         }
     }
 

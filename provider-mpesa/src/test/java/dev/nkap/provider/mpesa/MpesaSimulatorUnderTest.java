@@ -9,6 +9,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.springframework.boot.Banner;
 import org.springframework.boot.SpringApplication;
+import org.springframework.boot.web.server.WebServer;
 import org.springframework.boot.web.servlet.context.ServletWebServerApplicationContext;
 import org.springframework.context.ConfigurableApplicationContext;
 
@@ -23,6 +24,7 @@ final class MpesaSimulatorUnderTest implements AutoCloseable {
 
     private final ConfigurableApplicationContext context;
     private final URI baseUrl;
+    private final SimulatorStartupLog startup;
     private final HttpClient http = HttpClient.newHttpClient();
 
     MpesaSimulatorUnderTest() {
@@ -31,13 +33,15 @@ final class MpesaSimulatorUnderTest implements AutoCloseable {
         // Immediate shutdown: NO_RESPONSE deliberately leaves a request hanging, and graceful
         // shutdown would wait out its full timeout. Durations as ISO-8601 strings, as the
         // deployable's own application.yml sets them.
+        long runCalled = System.nanoTime();
         this.context = app.run(
                 "--server.port=0",
                 "--server.shutdown=immediate",
                 "--spring.lifecycle.timeout-per-shutdown-phase=3s",
                 "--spring.jackson.serialization.write-durations-as-timestamps=false");
-        int port = ((ServletWebServerApplicationContext) context).getWebServer().getPort();
-        this.baseUrl = URI.create("http://localhost:" + port);
+        WebServer webServer = ((ServletWebServerApplicationContext) context).getWebServer();
+        this.startup = SimulatorStartupLog.started("simulator-mpesa", webServer, runCalled);
+        this.baseUrl = URI.create("http://localhost:" + webServer.getPort());
     }
 
     URI baseUrl() {
@@ -72,6 +76,7 @@ final class MpesaSimulatorUnderTest implements AutoCloseable {
         } else {
             request.method(method, HttpRequest.BodyPublishers.ofString(body)).header("Content-Type", "application/json");
         }
+        startup.beforeCall(method, path);
         try {
             HttpResponse<String> response = http.send(request.build(), HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() >= 300) {
@@ -79,7 +84,10 @@ final class MpesaSimulatorUnderTest implements AutoCloseable {
             }
             return response.body();
         } catch (Exception e) {
-            throw new IllegalStateException("control-plane call failed: " + method + " " + path, e);
+            // An error status is the simulator answering; only a call that got no answer is
+            // worth probing the port for.
+            String onTheWire = e instanceof IllegalStateException ? "" : " -- " + startup.diagnose(e);
+            throw new IllegalStateException("control-plane call failed: " + method + " " + path + onTheWire, e);
         }
     }
 

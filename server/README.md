@@ -189,6 +189,13 @@ its country blank by default; `application.yml` says why there is only one. A co
 M-Pesa installation also refuses to start without `NKAP_PUBLIC_BASE_URL`: its callback is
 the only way it resolves a submission whose answer was lost.
 
+**Only the declared slots exist: MTN `cm` and `gh`, M-Pesa `ke`.** A provider variable for any
+other country or operator (`NKAP_PROVIDER_MTN_CI_*`, `NKAP_PROVIDER_ORANGE_CM_*`), or one
+spelled in lower case, **fails startup**. Nothing would read it: the installation would not
+exist, and whatever credentials it carries would sit in the process unused. The failure names
+every offending operator and country at once, and never a value. To serve another country, add
+its slot to `application.yml`; until then, remove the variables.
+
 ## Not in these slices
 
 The transactional outbox (it belongs with the outgoing webhooks, §4), the reconciler,

@@ -114,6 +114,11 @@ provider:
     #       subscriptionKeySecretKey: subscription-key
     #       apiUserSecretKey: api-user
     #       apiKeySecretKey: api-key
+    #
+    # The gateway has MTN slots for cm and gh only (application.yml). An installation here
+    # for any other country renders variables nothing reads, and the gateway refuses to
+    # start, naming the country. That check lives in the gateway, not in this chart, so
+    # every way of deploying it gets the same answer.
     installations: []
   mpesa:
     # Safaricom's M-Pesa STK Push, collections only: there is no disbursement block here.

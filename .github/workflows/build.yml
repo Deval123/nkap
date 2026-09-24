@@ -201,3 +201,107 @@ jobs:
               exit 1
             fi
           done
+
+      # M-Pesa (issue #217). The gateway has one M-Pesa slot, Kenya, and an M-Pesa installation
+      # needs nkap.public-base-url; the chart refuses at render time what the gateway would
+      # either crash on or silently not read. Each case must fail, and name what is wrong.
+      - name: Assert M-Pesa rendering fails, naming what is wrong, for each incomplete or unreadable installation
+        run: |
+          values=charts/nkap/ci/values-mpesa-test.yaml
+          expect_failure() {
+            local expected="$1"; shift
+            if helm template ci-test charts/nkap -f "$values" "$@" >/dev/null 2>/tmp/mpesa.err; then
+              echo "::error::helm template succeeded with $* -- it must fail naming: ${expected}"
+              exit 1
+            fi
+            if ! grep -qF -- "$expected" /tmp/mpesa.err; then
+              echo "::error::helm template failed with $*, but without naming: ${expected}"
+              cat /tmp/mpesa.err
+              exit 1
+            fi
+          }
+          for field in country currency baseUrl businessShortCode existingSecret; do
+            expect_failure "provider.mpesa.installations[0].${field} is required" --set "provider.mpesa.installations[0].${field}="
+          done
+          expect_failure "publicBaseUrl is required once an M-Pesa installation is configured" --set publicBaseUrl=
+          expect_failure "nkap.public-base-url" --set publicBaseUrl=
+          expect_failure "only M-Pesa slot is Kenya" --set 'provider.mpesa.installations[0].country=tz'
+          expect_failure "businessShortCode must be quoted" --set-json 'provider.mpesa.installations[0].businessShortCode=7234567'
+          cat > /tmp/two-mpesa.yaml <<'VALUES'
+          provider:
+            mpesa:
+              installations:
+                - {country: ke, currency: KES, baseUrl: "https://a.invalid", businessShortCode: "1", existingSecret: a}
+                - {country: ke, currency: KES, baseUrl: "https://b.invalid", businessShortCode: "2", existingSecret: b}
+          VALUES
+          expect_failure "at most one is allowed" -f /tmp/two-mpesa.yaml
+          expect_failure "not known to mean anything" -f /tmp/two-mpesa.yaml
+
+      - name: Render with M-Pesa test values (Secret names only, no credential values)
+        run: helm template ci-test charts/nkap -f charts/nkap/ci/values-mpesa-test.yaml > /tmp/rendered-mpesa.yaml
+
+      - name: Assert the M-Pesa render sets the Kenya slot and the public base URL
+        run: |
+          for pair in NKAP_PUBLIC_BASE_URL=https://nkap.example.com \
+                      NKAP_PROVIDER_MPESA_KE_COUNTRY=ke NKAP_PROVIDER_MPESA_KE_CURRENCY=KES \
+                      NKAP_PROVIDER_MPESA_KE_BASE_URL=https://sandbox.safaricom.co.ke \
+                      NKAP_PROVIDER_MPESA_KE_BUSINESS_SHORT_CODE=174379 NKAP_PROVIDER_MPESA_KE_REQUEST_TIMEOUT=PT20S; do
+            var="${pair%%=*}"; expected="${pair#*=}"
+            values="$(awk -v v="- name: ${var}" '{ line=$0; gsub(/^[ \t]+/, "", line); if (line == v) { getline nxt; gsub(/^[ \t]+/, "", nxt); print nxt } }' /tmp/rendered-mpesa.yaml)"
+            if [ -z "$values" ] || grep -qvxF "value: \"${expected}\"" <<< "$values"; then
+              echo "::error::${var} should be \"${expected}\" in every occurrence (found: $(tr '\n' '|' <<< "$values"))"
+              exit 1
+            fi
+          done
+
+      # The one mistake that would not otherwise be visible: a credential rendered as a literal.
+      # Two checks. The named three must be secretKeyRefs, in every occurrence. And, so a
+      # credential added later cannot slip past a list nobody updated, no variable whose name
+      # looks like a credential may be followed by a plain "value:" anywhere in the render.
+      - name: Assert every M-Pesa credential is a Secret reference and no credential renders as a literal
+        run: |
+          for var in NKAP_PROVIDER_MPESA_KE_CONSUMER_KEY NKAP_PROVIDER_MPESA_KE_CONSUMER_SECRET NKAP_PROVIDER_MPESA_KE_PASSKEY NKAP_DB_PASSWORD; do
+            next_lines="$(awk -v v="- name: ${var}" '{ line=$0; gsub(/^[ \t]+/, "", line); if (line == v) { getline nxt; gsub(/^[ \t]+/, "", nxt); print nxt } }' /tmp/rendered-mpesa.yaml)"
+            if [ -z "$next_lines" ]; then
+              echo "::error::${var} was not found in the rendered output at all"
+              exit 1
+            fi
+            if grep -qv '^valueFrom:$' <<< "$next_lines"; then
+              echo "::error::${var} is not sourced from a Secret in every occurrence (found: $(tr '\n' '|' <<< "$next_lines"))"
+              exit 1
+            fi
+          done
+          for rendered in /tmp/rendered-mpesa.yaml /tmp/rendered.yaml; do
+            literals="$(awk '{ line=$0; gsub(/^[ \t]+/, "", line); if (line ~ /^- name: NKAP_[A-Z0-9_]*(KEY|SECRET|PASSKEY|PASSWORD|API_USER)$/) { name=line; getline nxt; gsub(/^[ \t]+/, "", nxt); if (nxt ~ /^value:/) print name } }' "$rendered")"
+            if [ -n "$literals" ]; then
+              echo "::error::credential variables rendered as literal values in ${rendered}: $(tr '\n' ' ' <<< "$literals")"
+              exit 1
+            fi
+          done
+
+      - name: Assert an MTN-only render carries nothing of M-Pesa's and no public base URL
+        run: |
+          if grep -qE 'NKAP_PROVIDER_MPESA_|NKAP_PUBLIC_BASE_URL' /tmp/rendered.yaml; then
+            echo "::error::the MTN-only render (values-test.yaml) gained M-Pesa or public-base-url variables it did not ask for"
+            exit 1
+          fi
+
+      # Without an installation claiming cm, the chart must blank MTN Cameroon's country, or
+      # application.yml's "cm" default builds an MTN adapter with no credentials and the
+      # gateway refuses to start. With one, it must not.
+      - name: Assert MTN Cameroon's country is blanked exactly when no installation claims cm
+        run: |
+          blank_cm() { awk '{ line=$0; gsub(/^[ \t]+/, "", line); if (line == "- name: NKAP_PROVIDER_MTN_CM_COUNTRY") { getline nxt; gsub(/^[ \t]+/, "", nxt); print nxt } }' "$1"; }
+          helm template ci-test charts/nkap --set image.tag=1.0.0 --set database.host=db \
+            --set database.existingSecret=nkap-db --set keyInit.merchantId=acme > /tmp/rendered-empty.yaml
+          for rendered in /tmp/rendered-empty.yaml /tmp/rendered-mpesa.yaml; do
+            values="$(blank_cm "$rendered")"
+            if [ -z "$values" ] || grep -qvxF 'value: ""' <<< "$values"; then
+              echo "::error::${rendered} configures no MTN Cameroon but does not blank NKAP_PROVIDER_MTN_CM_COUNTRY (found: $(tr '\n' '|' <<< "$values"))"
+              exit 1
+            fi
+          done
+          if blank_cm /tmp/rendered.yaml | grep -qxF 'value: ""'; then
+            echo "::error::values-test.yaml configures MTN Cameroon, but the render blanks its country"
+            exit 1
+          fi

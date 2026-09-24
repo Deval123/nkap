@@ -21,6 +21,9 @@ import org.springframework.context.ConfigurableApplicationContext;
  */
 final class EmbeddedSimulator implements AutoCloseable {
 
+    /** Bound and connected to by address, never by a name that could resolve somewhere else. */
+    private static final String LOOPBACK = "127.0.0.1";
+
     private final ConfigurableApplicationContext context;
     private final String baseUri;
     private final HttpClient http = HttpClient.newHttpClient();
@@ -47,6 +50,11 @@ final class EmbeddedSimulator implements AutoCloseable {
         // JVM. The simulator needs no actuator endpoint in a test at all; disable it.
         this.context = app.run(
                 "--server.port=0",
+                // The exact address callers connect to, not the wildcard Tomcat binds by default:
+                // bound to [::], the port's 127.0.0.1 could be taken by another process binding
+                // it with SO_REUSEADDR, and every call would go there instead. The same defect
+                // provider-mtn's and provider-mpesa's harnesses had (issue #213).
+                "--server.address=" + LOOPBACK,
                 "--management.server.port=-1",
                 "--server.shutdown=immediate",
                 "--spring.lifecycle.timeout-per-shutdown-phase=3s",
@@ -54,7 +62,7 @@ final class EmbeddedSimulator implements AutoCloseable {
                         + "org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration,"
                         + "org.springframework.boot.autoconfigure.flyway.FlywayAutoConfiguration");
         int port = ((ServletWebServerApplicationContext) context).getWebServer().getPort();
-        this.baseUri = "http://localhost:" + port;
+        this.baseUri = "http://" + LOOPBACK + ":" + port;
     }
 
     static EmbeddedSimulator start() {

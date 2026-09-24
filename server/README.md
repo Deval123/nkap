@@ -159,6 +159,7 @@ file:
 | `NKAP_DB_URL` | `jdbc:postgresql://db:5432/nkap` |
 | `NKAP_DB_USER` | `nkap` |
 | `NKAP_DB_PASSWORD` | *(secret)* |
+| `NKAP_PROVIDER_MTN_CM_COUNTRY` | `cm` — blank (the default) leaves MTN Cameroon unconfigured |
 | `NKAP_PROVIDER_MTN_CM_BASE_URL` | `https://sandbox.momodeveloper.mtn.com` |
 | `NKAP_PROVIDER_MTN_CM_TARGET_ENVIRONMENT` | `sandbox` |
 | `NKAP_PROVIDER_MTN_CM_SUBSCRIPTION_KEY` | *(secret)* |

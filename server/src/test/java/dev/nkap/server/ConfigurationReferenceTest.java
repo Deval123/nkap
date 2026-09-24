@@ -69,7 +69,7 @@ import org.yaml.snakeyaml.Yaml;
  * single meaningful "default" to check: most are blank on purpose (real credentials are
  * supplied per-deployment, never committed), and the two installation slots
  * {@code application.yml} declares do not even agree with each other (the first defaults
- * {@code country} to {@code cm}, the second to blank) — there is no one literal for the table
+ * {@code currency} to {@code XAF}, the second to {@code GHS}) — there is no one literal for the table
  * to be checked against. {@code requestTimeout} is the one field in that record with an
  * unambiguous default regardless of slot ({@code @DefaultValue("PT20S")}, the only source for
  * it at all in the second installation, which sets no {@code request-timeout} key in

@@ -170,7 +170,12 @@ nkap:
       # the same way an unset nkap.provider.mtn.*.disbursement.* block is not a configured
       # product. A deployment that serves only Cameroon leaves the second slot's env vars
       # unset and gets one adapter, not a startup failure over credentials it does not
-      # have. (A raw indexed environment variable — NKAP_PROVIDER_MTN_INSTALLATIONS_1_API_KEY
+      # have. Every slot's country defaults to blank, Cameroon's included: a declared slot
+      # must not make the gateway fail to start, so a deployment that sets no provider
+      # variable at all starts with no adapter, and one that wants Cameroon says so with
+      # NKAP_PROVIDER_MTN_CM_COUNTRY=cm.
+      #
+      # (A raw indexed environment variable — NKAP_PROVIDER_MTN_INSTALLATIONS_1_API_KEY
       # — was tried and rejected: Spring's relaxed binding cannot reliably tell "api" + "key"
       # from a nested "api.key" without a YAML key already naming the field, and silently
       # fails the whole list element when it guesses wrong. Both slots declared here, with
@@ -182,7 +187,7 @@ nkap:
           api-user: ${NKAP_PROVIDER_MTN_CM_API_USER:}
           api-key: ${NKAP_PROVIDER_MTN_CM_API_KEY:}
           currency: ${NKAP_PROVIDER_MTN_CM_CURRENCY:XAF}
-          country: ${NKAP_PROVIDER_MTN_CM_COUNTRY:cm}
+          country: ${NKAP_PROVIDER_MTN_CM_COUNTRY:}
           request-timeout: ${NKAP_PROVIDER_MTN_CM_REQUEST_TIMEOUT:PT20S}
           disbursement:
             subscription-key: ${NKAP_PROVIDER_MTN_CM_DISBURSEMENT_SUBSCRIPTION_KEY:}

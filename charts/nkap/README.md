@@ -5,7 +5,8 @@ Deploys the Nkap gateway to Kubernetes, from the published image
 the same "you clone to contribute, you pull an image to use" argument that produced
 `nkap-standalone.compose.yaml`, which this chart otherwise mirrors closely: same environment
 variable names, same defaults, same three rules about not inventing a credential. Read that
-file's own header first if you have not; this page only covers what a cluster changes.
+file's own header first if you have not; this page only covers what a cluster changes. One
+exception: this chart can configure M-Pesa (see below), and that compose file cannot yet.
 
 **This chart deploys the gateway only. It does not deploy PostgreSQL.**
 `nkap-standalone.compose.yaml`'s own `db` service is a convenience for a single-node
@@ -18,7 +19,8 @@ whichever one you run.
 ## The credential rule — not negotiable
 
 **This chart does not accept a credential value anywhere in `values.yaml`.** Not the database
-password, not an MTN subscription key, api user or api key, not a webhook signing secret.
+password, not an MTN subscription key, api user or api key, not an M-Pesa consumer key,
+consumer secret or passkey, not a webhook signing secret.
 Every credential is a *reference* — the name of a Kubernetes `Secret` you create yourself, and
 the key inside it — never a value. Rendering **fails**, naming exactly what is missing, if a
 required reference is absent:
@@ -70,6 +72,47 @@ provider:
 
 See `values.yaml`'s own comments for every field, including disbursements (a separate MTN
 product with its own Secret) and more than one country installation (issue #82).
+
+### M-Pesa
+
+M-Pesa (Safaricom's STK Push, collections only) is configured under
+`provider.mpesa.installations`, with its credentials in a Secret of their own:
+
+```bash
+kubectl create secret generic nkap-mpesa-ke \
+  --from-literal=consumer-key=... \
+  --from-literal=consumer-secret=... \
+  --from-literal=passkey=...
+```
+
+```yaml
+publicBaseUrl: "https://nkap.example.com"
+
+provider:
+  mpesa:
+    installations:
+      - country: ke
+        currency: KES
+        baseUrl: "https://sandbox.safaricom.co.ke"
+        businessShortCode: "174379"
+        existingSecret: nkap-mpesa-ke
+```
+
+Three things differ from MTN, and rendering enforces each one:
+
+- **One installation, Kenya.** The gateway has exactly one M-Pesa slot. A second entry, or a
+  country other than `ke`, fails rendering rather than producing variables the gateway would
+  never read. `values.yaml` says why there is one slot.
+- **`publicBaseUrl` is required.** The callback is the only way the gateway resolves an M-Pesa
+  payment whose submission was lost, and the gateway refuses to start an M-Pesa installation
+  without an address to be called back on. Rendering fails first, so you see it at
+  `helm install`, not in a crash-looping pod.
+- **`businessShortCode` must be quoted.** Unquoted, YAML reads it as a number, and Helm renders
+  a seven-digit one as `7.234567e+06`.
+
+The passkey is recoverable from any single request Nkap sends to Safaricom
+(`docs/security-notes.md` §1), and the rotation procedure written for Nkap API keys does not
+apply to it. Keep it out of every values file, which this chart already forces.
 
 ## Installing
 
@@ -232,7 +275,14 @@ the rendered output:
 - every credential-bearing environment variable — the database password, each MTN
   installation's subscription key, api user and api key, and their disbursement
   equivalents — is sourced from `secretKeyRef` in the rendered output, checked line by
-  line, never a plain `value:`.
+  line, never a plain `value:`;
+- with `charts/nkap/ci/values-mpesa-test.yaml`: rendering fails, naming the field, for each
+  missing M-Pesa field, a missing `publicBaseUrl`, a country other than `ke`, an unquoted
+  shortcode and a second installation; the Kenya slot's variables render as expected; the
+  consumer key, consumer secret and passkey are `secretKeyRef`s; and no variable whose name
+  looks like a credential renders as a literal `value:` in either render, whether or not
+  anyone remembered to list it;
+- the MTN-only render carries no M-Pesa variable and no public base URL.
 
 **What CI does not do: install this chart into a real cluster.** `helm template` proves the
 chart renders correctly; it does not prove the rendered manifests actually schedule, that the

@@ -53,11 +53,29 @@ database:
   existingSecret: "" # required: the Secret's name
   existingSecretPasswordKey: password
 
+# The address this deployment is reachable at from the internet, e.g.
+# "https://nkap.example.com" -- rendered as NKAP_PUBLIC_BASE_URL, which is
+# nkap.public-base-url. The gateway composes each payment's callback address from it:
+# <publicBaseUrl>/callbacks/<provider id>/<reference>. Not a credential.
+#
+# Optional for MTN: left empty, MTN never calls back and the reconciler resolves payments
+# by query instead, only slower. Required as soon as an M-Pesa installation is configured
+# below, and rendering fails without it: M-Pesa resolves a payment whose submission was lost
+# only by its callback, so the gateway refuses to start an M-Pesa installation with no
+# address to be called back on. docs/configuration-reference.md has the whole row.
+publicBaseUrl: ""
+
 provider:
   # GET /balance and GET /account-holders/{msisdn} are not per-country routes (issue #82);
-  # this is the installation they route to, by ProviderId ("mtn-" + an installation's own
-  # country below). Only meaningful once at least one installation is configured; see
-  # docs/providers/mtn.md.
+  # this names the one installation they use, by its provider id. POST /payments does not
+  # use it: a payment names its own country, and goes to whichever installation below states
+  # that country.
+  #
+  # A provider id is the operator plus the installation's country, lowercased: an MTN
+  # installation for country cm is "mtn-cm", an M-Pesa installation for ke is "mpesa-ke".
+  # Leave it empty and the gateway's own default applies, which is "mtn-cm" -- so set it if
+  # you do not configure MTN Cameroon. Naming an M-Pesa installation here leaves both routes
+  # unable to answer: the M-Pesa adapter offers neither a balance nor holder validation.
   default: ""
   mtn:
     # One entry per country -- its own portal, its own subscription keys, its own currency.
@@ -84,6 +102,43 @@ provider:
     #       subscriptionKeySecretKey: subscription-key
     #       apiUserSecretKey: api-user
     #       apiKeySecretKey: api-key
+    installations: []
+  mpesa:
+    # Safaricom's M-Pesa STK Push, collections only: there is no disbursement block here.
+    # Empty by default: configuring no M-Pesa installation must never be what stops a first
+    # install, and an empty list renders nothing at all.
+    #
+    # At most ONE entry, and its country must be "ke". Rendering refuses anything else. The
+    # gateway has exactly one M-Pesa slot, Kenya (application.yml, nkap.provider.mpesa), and
+    # an entry for any other country would render environment variables nothing reads.
+    # There is only one slot because docs/providers/m-pesa.md records as unknown whether
+    # another M-Pesa market shares Safaricom's API. Until that is settled, a second entry is
+    # not known to mean anything.
+    #
+    # Configuring it makes publicBaseUrl (above) required.
+    #
+    # Its three credentials -- consumer key, consumer secret and passkey -- are Secret
+    # references only, like every credential in this chart. The passkey needs the most
+    # care: it is recoverable from any single request Nkap sends to Safaricom (it is
+    # base64-encoded into every request's Password, see docs/security-notes.md section 1), so
+    # nothing about it may ever appear in a values file or a rendered manifest. Create the
+    # Secret yourself, e.g.:
+    #   kubectl create secret generic nkap-mpesa-ke \
+    #     --from-literal=consumer-key=... --from-literal=consumer-secret=... \
+    #     --from-literal=passkey=...
+    #
+    # installations:
+    #   - country: ke
+    #     currency: KES
+    #     baseUrl: "https://sandbox.safaricom.co.ke"
+    #     # The shortcode payments are collected to. Not a secret: Safaricom sends it
+    #     # back as a header on every callback (docs/providers/m-pesa.md).
+    #     businessShortCode: "174379"
+    #     requestTimeout: PT20S
+    #     existingSecret: nkap-mpesa-ke
+    #     consumerKeySecretKey: consumer-key
+    #     consumerSecretSecretKey: consumer-secret
+    #     passkeySecretKey: passkey
     installations: []
 
 keyInit:

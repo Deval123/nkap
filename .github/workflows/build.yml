@@ -285,23 +285,3 @@ jobs:
             echo "::error::the MTN-only render (values-test.yaml) gained M-Pesa or public-base-url variables it did not ask for"
             exit 1
           fi
-
-      # Without an installation claiming cm, the chart must blank MTN Cameroon's country, or
-      # application.yml's "cm" default builds an MTN adapter with no credentials and the
-      # gateway refuses to start. With one, it must not.
-      - name: Assert MTN Cameroon's country is blanked exactly when no installation claims cm
-        run: |
-          blank_cm() { awk '{ line=$0; gsub(/^[ \t]+/, "", line); if (line == "- name: NKAP_PROVIDER_MTN_CM_COUNTRY") { getline nxt; gsub(/^[ \t]+/, "", nxt); print nxt } }' "$1"; }
-          helm template ci-test charts/nkap --set image.tag=1.0.0 --set database.host=db \
-            --set database.existingSecret=nkap-db --set keyInit.merchantId=acme > /tmp/rendered-empty.yaml
-          for rendered in /tmp/rendered-empty.yaml /tmp/rendered-mpesa.yaml; do
-            values="$(blank_cm "$rendered")"
-            if [ -z "$values" ] || grep -qvxF 'value: ""' <<< "$values"; then
-              echo "::error::${rendered} configures no MTN Cameroon but does not blank NKAP_PROVIDER_MTN_CM_COUNTRY (found: $(tr '\n' '|' <<< "$values"))"
-              exit 1
-            fi
-          done
-          if blank_cm /tmp/rendered.yaml | grep -qxF 'value: ""'; then
-            echo "::error::values-test.yaml configures MTN Cameroon, but the render blanks its country"
-            exit 1
-          fi

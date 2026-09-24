@@ -88,7 +88,12 @@ provider:
     # country to "cm", and nkap-standalone.compose.yaml blanks it explicitly; this chart did
     # not. With this list empty, the gateway built mtn-cm with no credentials and refused to
     # start. The chart now blanks that country whenever no installation here claims cm
-    # (templates/_helpers.tpl), which makes the sentence true. Every credential
+    # (templates/_helpers.tpl), which makes the sentence true.
+    #
+    # Correction, 2026-09-24, later the same day: that block is gone. application.yml no
+    # longer defaults Cameroon's country to "cm" -- every slot's country now defaults to
+    # blank -- so an empty list here configures no MTN adapter because the gateway itself
+    # configures none, not because this chart works around it. Every credential
     # field below is a Secret reference, never a value -- see "The credential rule" in
     # charts/nkap/README.md. Example, one collections-only installation for Cameroon:
     #

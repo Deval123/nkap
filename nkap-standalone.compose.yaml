@@ -104,12 +104,12 @@ services:
       NKAP_DB_USER: nkap
       NKAP_DB_PASSWORD: ${NKAP_DB_PASSWORD:?set a database password}
       # A one-shot command has no use for the reconciler's scheduler, and no business
-      # touching MTN at all -- but application.yml itself defaults the first installation's
-      # country to "cm" (issue #82 pre-dates issue #86 and this is the only slot that
-      # behaves this way), so leaving it unset still builds an adapter, just one with no
-      # base-url -- and MtnProfile refuses to construct from a null one. Blanking the
-      # country here, regardless of what the gateway service below is configured with,
-      # keeps this command doing only what it says: writing a row for one API key.
+      # touching MTN at all. Blanking the country here, regardless of what the gateway
+      # service below is configured with, keeps this command doing only what it says:
+      # writing a row for one API key. application.yml's own default for it is blank too,
+      # now, but this file states what it wants rather than depending on a default --
+      # depending on the old "cm" default is what once made this command, and every
+      # deployment that did not blank it, fail to start.
       NKAP_PROVIDER_MTN_CM_COUNTRY: ""
       NKAP_RECONCILER_ENABLED: "false"
     command:

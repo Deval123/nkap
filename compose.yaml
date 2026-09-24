@@ -87,13 +87,6 @@ services:
       NKAP_DB_URL: jdbc:postgresql://db:5432/nkap
       NKAP_DB_USER: nkap
       NKAP_DB_PASSWORD: nkap
-      # The provisioning command builds the full context, which wires an MTN adapter bean;
-      # these placeholders keep that construction happy. Nothing here calls the operator.
-      NKAP_PROVIDER_MTN_CM_BASE_URL: http://simulator:8081
-      NKAP_PROVIDER_MTN_CM_TARGET_ENVIRONMENT: sandbox
-      NKAP_PROVIDER_MTN_CM_SUBSCRIPTION_KEY: placeholder-not-a-real-subscription-key
-      NKAP_PROVIDER_MTN_CM_API_USER: placeholder-not-a-real-api-user
-      NKAP_PROVIDER_MTN_CM_API_KEY: placeholder-not-a-real-api-key
       # A one-shot command has no use for the reconciler's scheduler.
       NKAP_RECONCILER_ENABLED: "false"
     command:
@@ -124,13 +117,6 @@ services:
       NKAP_DB_URL: jdbc:postgresql://db:5432/nkap
       NKAP_DB_USER: nkap
       NKAP_DB_PASSWORD: nkap
-      # The provisioning command builds the full context, which wires an MTN adapter bean;
-      # these placeholders keep that construction happy. Nothing here calls the operator.
-      NKAP_PROVIDER_MTN_CM_BASE_URL: http://simulator:8081
-      NKAP_PROVIDER_MTN_CM_TARGET_ENVIRONMENT: sandbox
-      NKAP_PROVIDER_MTN_CM_SUBSCRIPTION_KEY: placeholder-not-a-real-subscription-key
-      NKAP_PROVIDER_MTN_CM_API_USER: placeholder-not-a-real-api-user
-      NKAP_PROVIDER_MTN_CM_API_KEY: placeholder-not-a-real-api-key
       # A one-shot command has no use for the reconciler's or the relay's scheduler.
       NKAP_RECONCILER_ENABLED: "false"
       NKAP_WEBHOOKS_ENABLED: "false"
@@ -166,7 +152,10 @@ services:
       # The MTN profile, pointed at the simulator. PLACEHOLDERS, not secrets — named so
       # nobody mistakes them for something to keep. A real deployment provides real ones
       # through these same environment variables. Cameroon (mtn-cm) is the primary
-      # installation this demo's own payment runs against — see examples/demo.sh.
+      # installation this demo's own payment runs against — see examples/demo.sh. Its
+      # country is set here, not left to a default: application.yml defaults every slot's
+      # country to blank, so an installation exists only where a deployment says so.
+      NKAP_PROVIDER_MTN_CM_COUNTRY: cm
       NKAP_PROVIDER_MTN_CM_BASE_URL: http://simulator:8081
       NKAP_PROVIDER_MTN_CM_TARGET_ENVIRONMENT: sandbox
       NKAP_PROVIDER_MTN_CM_SUBSCRIPTION_KEY: placeholder-not-a-real-subscription-key

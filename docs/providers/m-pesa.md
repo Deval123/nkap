@@ -5,7 +5,8 @@ from a third-party client. Where a third party was the starting point, this file
 says whether the run confirmed it (see *Sources*). There is no M-Pesa adapter in this
 repository, no ADR, and no issue opened from what follows — naming the consequences for
 `provider-api` and for this project's own assumptions is this page's job; deciding them is a
-separate step, for someone else to take.
+separate step, for someone else to take. That was true on 2026-09-18 and stays as written;
+what was decided from it since is in *Since this page was written*, below.
 
 The two other operator pages are [`docs/providers/mtn.md`](mtn.md) and
 [`docs/providers/orange-money.md`](orange-money.md), and the contrast with each is worth
@@ -17,6 +18,32 @@ a developer account for Orange's authoritative API reference. **This page is the
 reaching it over several: almost every statement below was executed against Safaricom's
 sandbox on 2026-09-18 and is reported as observed.** It is the first time this project has
 written a provider page from observation on its first day.
+
+## Since this page was written
+
+*Added 2026-09-24.* The paragraph that opens this page says there is no M-Pesa adapter, no
+ADR, and no issue opened from what follows: naming the consequences was this page's job,
+deciding them was not. That was true on 2026-09-18. Others have since taken the step it left
+for someone else:
+
+- **2026-09-21**: issues were opened from this page's findings, and
+  [ADR 0014](../adr/0014-resolvable-not-queryable.md) decided that a lost submission must be
+  *resolvable*, not necessarily *queryable*. That admits an adapter that resolves by
+  `CALLBACK` alone.
+- **2026-09-22**: the gateway gave every submission a callback URL carrying its own
+  reference, so a callback that names nothing Nkap chose can still be attributed, and the
+  provider reference such a callback carries is no longer discarded. The conformance kit
+  learned to drive an operator's own callback.
+- **2026-09-23**: the kit learned to observe whether a call reached the operator at all, and
+  `provider-mpesa` landed. It declares `CALLBACK` alone and **passes all fourteen of the
+  kit's rules**.
+
+**No real M-Pesa payment has ever been made through any of it.** Everything certified is
+certified against `simulator-mpesa`, and that simulator's success path is modelled, because
+the sandbox payer can never be reached and no success has been observed. *Still unknown*,
+below, is not shortened by any of this. `CHANGELOG.md` and the issues hold the detail.
+Passages below that were written before these dates stay as written, and each one says where
+this section overtakes it.
 
 ## Getting into the sandbox
 
@@ -168,6 +195,11 @@ warning logs `outcome.lastOperatorAnswer()` under the words "operator's last ans
 that is where `500.001.1001` would appear, in place of "no answer". One poll in five on this
 run would have been recorded that way.
 
+*2026-09-24:* the implication was taken up on 2026-09-23. The adapter this paragraph
+addressed now exists, and in it `500.001.1001` raises `ProviderUnavailableException`, as
+recommended (*Since this page was written*, above). The reasoning stays here because it
+is the reason the adapter does that.
+
 ## The callback
 
 **Three samples were taken for the callback URL, and what the validator actually checks is
@@ -230,6 +262,14 @@ the gateway's side since this finding was written, and what has not. Until an M-
 exists to actually use it, the payment still stays `UNKNOWN` until a person reads Safaricom's
 portal; nothing on this page is that adapter.
 
+*2026-09-24:* that last step has moved again. An M-Pesa adapter now exists and uses the
+per-payment address, so against the simulator a lost submission is resolved by its callback
+without a person (*Since this page was written*, above). The finding itself does not move:
+a lost response leaving no `CheckoutRequestID`, a query that refuses Nkap's reference, and a
+re-submission creating a second payment are still how Safaricom behaves, and still the
+reason this page exists.
+Against Safaricom itself, nothing has been resolved this way yet.
+
 **Transaction Status does not soften this.** Safaricom's documented example request, read on
 the portal 2026-09-18:
 
@@ -290,6 +330,11 @@ existence: an operator that calls one registered endpoint with no path of the ga
 choosing — `providerCallbackHost` with no per-submission `X-Callback-Url`, the way MTN's own
 callback would work without issue #116 — still needs it, so both mechanisms exist for now,
 per issue #185's own pull request.
+
+*2026-09-24:* "no M-Pesa adapter in this repository to hand it to" no longer holds. There is
+one now, `provider-mpesa`, and it is the adapter this address was built for: it refuses to
+submit without a callback URL, and resolves a lost submission by that callback alone (*Since
+this page was written*, above).
 
 **The shape works end to end against the real sandbox, run 2026-09-22:** the per-payment
 `CallBackURL` above was accepted at submission and delivered on the exact path supplied,
@@ -378,6 +423,14 @@ Whether an adapter built on it could ever be certified is a separate, still-open
 conformance kit fails an adapter that declares `CALLBACK` without `QUERY` today, by design,
 until it can drive
 an operator's own callback ([issue #199](https://github.com/Deval123/nkap/issues/199)).
+
+*2026-09-24:* this paragraph is out of date for two separate reasons. First, Safaricom *was*
+run against a third time. The run of 2026-09-23 (*A query in flight*, above) is that third
+run. It observed the query, not a callback, so it confirms nothing about this code path.
+What the paragraph actually claims still holds: this path has not been confirmed against
+Safaricom. Second, there is now an M-Pesa adapter, and the kit gap named at the end of the
+paragraph is closed (*Since this page was written*, above). The adapter has still never been
+handed a real payment.
 
 ## `ResultCode` is the contract; `ResultDesc` is not
 

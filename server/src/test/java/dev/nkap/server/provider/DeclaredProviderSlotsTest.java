@@ -100,6 +100,53 @@ class DeclaredProviderSlotsTest {
                 .hasMessageContaining("MTN CI");
     }
 
+    // --- the second door: files named after the variables -----------------------------------
+
+    @Test
+    @DisplayName("a file for an undeclared country fails like a variable does, and the message says it was a file and to remove files")
+    void a_file_for_an_undeclared_country_is_reported_as_a_file() {
+        assertThatThrownBy(() -> DeclaredProviderSlots.requireOnlyDeclared(
+                List.of(), List.of("NKAP_PROVIDER_MTN_CI_API_KEY")))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("MTN CI: a file of NKAP_PROVIDER_MTN_CI_* is in the imported credentials directory")
+                .hasMessageContaining("provider files name installations")
+                .hasMessageContaining("Remove those files")
+                .satisfies(e -> assertThat(e.getMessage()).doesNotContain("Remove those variables"));
+    }
+
+    @Test
+    @DisplayName("the same undeclared pair through both doors is one line naming both, and the fix names both")
+    void one_pair_through_both_doors_is_one_line() {
+        assertThatThrownBy(() -> DeclaredProviderSlots.requireOnlyDeclared(
+                List.of("NKAP_PROVIDER_ORANGE_CM_COUNTRY"), List.of("NKAP_PROVIDER_ORANGE_CM_API_KEY")))
+                .isInstanceOf(IllegalStateException.class)
+                .satisfies(e -> {
+                    String message = e.getMessage();
+                    assertThat(message).contains("NKAP_PROVIDER_ORANGE_CM_* is set, and a file of that family is in the"
+                            + " imported credentials directory");
+                    assertThat(message.split("ORANGE CM", -1)).as("one line for the pair").hasSize(2);
+                    assertThat(message).contains("Remove those variables and files");
+                });
+    }
+
+    @Test
+    @DisplayName("a file for a declared slot named in lower case fails: a file is read only under the variable's exact name")
+    void a_lower_case_file_name_fails() {
+        assertThatThrownBy(() -> DeclaredProviderSlots.requireOnlyDeclared(
+                List.of(), List.of("nkap_provider_mpesa_ke_passkey")))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("MPESA KE")
+                .hasMessageContaining("named in lower or mixed case");
+    }
+
+    @Test
+    @DisplayName("files named exactly after declared slots' variables fail nothing")
+    void declared_file_names_fail_nothing() {
+        assertThatCode(() -> DeclaredProviderSlots.requireOnlyDeclared(List.of("NKAP_PROVIDER_MPESA_KE_COUNTRY"),
+                List.of("NKAP_PROVIDER_MPESA_KE_PASSKEY", "NKAP_PROVIDER_MTN_CM_API_KEY", "NKAP_DB_PASSWORD")))
+                .doesNotThrowAnyException();
+    }
+
     // --- what must not fail ----------------------------------------------------------------
 
     @Test

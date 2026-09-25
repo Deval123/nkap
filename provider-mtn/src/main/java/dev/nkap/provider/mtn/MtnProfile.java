@@ -50,6 +50,29 @@ public record MtnProfile(
         country = requireText(country, "country");
     }
 
+    /**
+     * Every component, in declaration order, with the three credentials replaced by a constant
+     * marker.
+     *
+     * <p>The generated {@code toString()} prints every component, the API key and the
+     * subscription key included. No code is meant to print a profile, but AssertJ prints
+     * the actual object when an assertion on it fails, and this repository's CI logs are
+     * public. The marker never varies with the value: no length, prefix, suffix or hash.
+     */
+    @Override
+    public String toString() {
+        return "MtnProfile[baseUrl=" + baseUrl
+                + ", targetEnvironment=" + targetEnvironment
+                + ", subscriptionKey=" + MASKED
+                + ", apiUser=" + MASKED
+                + ", apiKey=" + MASKED
+                + ", currency=" + currency
+                + ", country=" + country + "]";
+    }
+
+    /** What {@link #toString()} prints in place of a credential. */
+    static final String MASKED = "***";
+
     /** The base URL with a trailing slash removed, so path joining is unambiguous. */
     URI endpoint(String path) {
         String base = baseUrl.toString();

@@ -45,6 +45,31 @@ public record MpesaProfile(
         Objects.requireNonNull(currency, "currency");
     }
 
+    /**
+     * Every component, in declaration order, with the three credentials replaced by a constant
+     * marker.
+     *
+     * <p>The generated {@code toString()} prints every component, the passkey included. No code is
+     * meant to print a profile, but AssertJ prints the actual object when an assertion on it fails,
+     * and this repository's CI logs are public. The passkey is recoverable from any single
+     * request, and no revocation point has been observed (see {@code docs/security-notes.md}),
+     * so a leaked one cannot simply be rotated. The marker never varies with the value: no
+     * length, prefix, suffix or hash. The shortcode is printed because it is not secret;
+     * Safaricom's own documented example carries {@code 174379}.
+     */
+    @Override
+    public String toString() {
+        return "MpesaProfile[baseUrl=" + baseUrl
+                + ", businessShortCode=" + businessShortCode
+                + ", passkey=" + MASKED
+                + ", consumerKey=" + MASKED
+                + ", consumerSecret=" + MASKED
+                + ", currency=" + currency + "]";
+    }
+
+    /** What {@link #toString()} prints in place of a credential. */
+    static final String MASKED = "***";
+
     /** The base URL with a trailing slash removed, so path joining is unambiguous. */
     URI endpoint(String path) {
         String base = baseUrl.toString();

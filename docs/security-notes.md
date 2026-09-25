@@ -116,7 +116,9 @@ submission and every status query carries a `Password` computed from it:
   byte-order mark, or what a UTF-16 file becomes when read as UTF-8. The refusal names the
   field and which end, never the value or the kind of character. Without that refusal the gateway would start, the
   operator would refuse every request, and with the value never printed it would look like an
-  outage.
+  outage. Once the gateway has started, an adapter's profile masks them too: its `toString()`
+  prints a constant marker in place of every credential, so an accidental log line or a failing
+  test assertion cannot print one.
 - **Supplied as a file, the passkey leaves `docker inspect`, not the process.** A file named
   `NKAP_PROVIDER_MPESA_KE_PASSKEY` in the imported credentials directory (`/run/secrets` by
   default) takes the place of the variable. Mounted by compose's `secrets:`, it is no longer

@@ -6,14 +6,20 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.catchThrowable;
 
 import dev.nkap.core.money.Currency;
+import java.lang.reflect.RecordComponent;
 import java.net.URI;
+import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 /**
  * {@link MpesaProfile}'s refusals: a blank field, and a field with whitespace at either end,
- * both fail on construction, naming the field and never the value.
+ * both fail on construction, naming the field and never the value. And its {@code toString()},
+ * which prints no credential either.
  */
 class MpesaProfileTest {
 
@@ -154,5 +160,83 @@ class MpesaProfileTest {
         assertThatThrownBy(() -> with("businessShortCode", "17a379"))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("digits only");
+    }
+
+    // --- toString -------------------------------------------------------------------------
+
+    /** Recognisable fake credentials, so a leak of any one of them is unmistakable. */
+    private static final Map<String, String> SECRETS = Map.of(
+            "passkey", "canary-passkey-bfb279f9aa9bdbcf",
+            "consumerKey", "canary-consumer-key-7Qx2",
+            "consumerSecret", "canary-consumer-secret-Lm9p");
+
+    /** Components toString() prints in clear; every other one must be masked. */
+    private static final Set<String> PRINTED = Set.of("baseUrl", "businessShortCode", "currency");
+
+    private static MpesaProfile withCanaries() {
+        return new MpesaProfile(URI.create("https://sandbox.safaricom.co.ke"), "174379",
+                SECRETS.get("passkey"), SECRETS.get("consumerKey"), SECRETS.get("consumerSecret"), Currency.KES);
+    }
+
+    @Test
+    @DisplayName("toString() prints none of the credentials, so a failing assertion or a stray log line cannot leak one")
+    void to_string_prints_no_credential() {
+        String text = withCanaries().toString();
+        SECRETS.forEach((field, secret) -> assertThat(text).as(field).doesNotContain(secret));
+    }
+
+    @Test
+    @DisplayName("toString() still prints the base URL, the shortcode and the currency, so it stays useful for debugging")
+    void to_string_still_prints_what_is_not_secret() {
+        String text = withCanaries().toString();
+        assertThat(text).contains("baseUrl=https://sandbox.safaricom.co.ke")
+                .contains("businessShortCode=174379")
+                .contains("currency=KES");
+    }
+
+    @Test
+    @DisplayName("every record component is accounted for in toString(): printed in clear or masked by a constant, nothing left out")
+    void every_component_is_printed_or_masked() {
+        MpesaProfile profile = withCanaries();
+        RecordComponent[] components = MpesaProfile.class.getRecordComponents();
+        Map<String, String> printed = printedComponents(profile);
+
+        assertThat(PRINTED.size() + SECRETS.size())
+                .as("components classified here: add a new one to PRINTED or SECRETS")
+                .isEqualTo(components.length);
+        assertThat(printed.keySet()).as("components toString() names, in declaration order")
+                .containsExactly(Arrays.stream(components).map(RecordComponent::getName).toArray(String[]::new));
+        for (RecordComponent component : components) {
+            String name = component.getName();
+            if (PRINTED.contains(name)) {
+                assertThat(printed.get(name)).as(name).isEqualTo(String.valueOf(valueOf(profile, component)));
+            } else {
+                assertThat(SECRETS).as("%s is neither printed nor a known secret", name).containsKey(name);
+                assertThat(printed.get(name)).as(name).isEqualTo(MpesaProfile.MASKED);
+            }
+        }
+    }
+
+    /**
+     * {@code toString()}'s {@code name=value} pairs, in order. Enough for the values these tests
+     * pass in, none of which contains {@code ", "} or {@code "]"}.
+     */
+    private static Map<String, String> printedComponents(Record profile) {
+        String text = profile.toString();
+        String body = text.substring(text.indexOf('[') + 1, text.lastIndexOf(']'));
+        Map<String, String> pairs = new LinkedHashMap<>();
+        for (String pair : body.split(", ")) {
+            int equals = pair.indexOf('=');
+            pairs.put(pair.substring(0, equals), pair.substring(equals + 1));
+        }
+        return pairs;
+    }
+
+    private static Object valueOf(Record profile, RecordComponent component) {
+        try {
+            return component.getAccessor().invoke(profile);
+        } catch (ReflectiveOperationException e) {
+            throw new AssertionError(component.getName(), e);
+        }
     }
 }

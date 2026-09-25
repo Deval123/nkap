@@ -124,10 +124,27 @@ submission and every status query carries a `Password` computed from it:
 - **Supplied as a file, the passkey leaves `docker inspect`, not the process.** A file named
   `NKAP_PROVIDER_MPESA_KE_PASSKEY` in the imported credentials directory (`/run/secrets` by
   default) takes the place of the variable. Mounted by compose's `secrets:`, it is no longer
-  part of the container's configuration that `docker inspect` prints. The gateway still reads
-  it once, at startup, and holds it in memory for as long as it runs, like every other
-  credential. Anything that can read that memory, or the mounted file, can still read the
-  passkey. Replacing the file takes a restart: the same cut-over with no overlap as above.
+  part of the container's configuration that `docker inspect` prints. The gateway reads it at
+  startup, and holds it in memory for as long as it runs, like every other credential.
+  Anything that can read that memory, or the mounted file, can still read the passkey.
+- **Supplied as a file, a rotated passkey takes effect without a restart.** The same holds
+  for the Consumer Key and Secret. When one of the three files changes, the gateway reads it
+  again before its next use: the next request's `Password` uses the new passkey, and a new
+  Consumer Key or Secret drops the bearer token obtained with the old pair. It is still a
+  cut-over with no overlap, as above; what goes is the restart. A value supplied as a variable
+  is not re-read: a process cannot see its own environment change. That includes the Helm
+  chart's, which passes every credential as a variable from a Secret reference.
+- **A rotated value that is unreadable or invalid does not stop payments.** It is checked by
+  the same rule startup applies, so a byte-order mark or a no-break space is refused at use as
+  it is at startup. The rejected value is not used. Payments keep using the last valid
+  credentials, one warning names the installation, the file and which end, never the value,
+  and the gauge `nkap_credentials_stale_seconds` stays above zero until the file is fixed.
+  Alert on it; `docs/prometheus-alerts.yml` has the rule. A restart in that state fails, as it
+  would have at startup. [ADR 0015](adr/0015-credentials-read-at-use.md) records why a payment
+  is served with the last valid value rather than refused, and what that costs: the last valid
+  value stays in the process's memory for as long as it runs. A value that is valid text but
+  wrong, such as another environment's passkey, passes this check as it passes startup's. Only
+  Safaricom refuses it.
 
 **Credentials for an installation that does not exist fail the gateway at startup.** The
 gateway reads provider variables only for the slots `application.yml` declares. A variable for
@@ -143,7 +160,8 @@ imported credentials directory, named exactly like a variable, is read where tha
 would be (`server/README.md`, *Configuration*). What changes is only where the value sits
 before the gateway reads it. A compose `secrets:` file is not shown by `docker inspect`, where
 an `environment:` value is. Nothing changes after that: the value is read once, at startup,
-and held in the process's memory; rotating it still takes a restart. A file for a slot no one
+and held in the process's memory; rotating it still takes a restart. The one exception is the
+three M-Pesa credentials, which are read again when their file changes (above). A file for a slot no one
 declares fails startup exactly as the variable would, and the message says it was a file. A
 name set both as a variable and as a file also fails startup. Refusing it means there is never
 one value that was checked and another that was used. Both checks read names only, never a

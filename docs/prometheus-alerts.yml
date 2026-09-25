@@ -1,4 +1,4 @@
-# Three alerting rules, because thirty metrics and no guidance is a list, not an operations
+# Four alerting rules, because thirty metrics and no guidance is a list, not an operations
 # handover (issue #75). Drop this file into a Prometheus server's rule_files, or paste the
 # rules into an existing rule group — nothing here depends on how Nkap itself is scraped
 # beyond the metric names, which come from GET /actuator/prometheus.
@@ -74,3 +74,22 @@ groups:
             never told what happened to a payment. List them with GET
             /webhooks/events/dead-lettered (admin key), and once whatever broke
             delivery is fixed, replay with POST /webhooks/events/{eventId}/replay.
+
+      # nkap_credentials_stale_seconds exists only for an installation whose M-Pesa
+      # credentials are supplied as files (see CredentialStalenessMetrics and ADR 0015).
+      # A rotated file that is unreadable or invalid does not stop payments: the gateway
+      # keeps the last valid credentials and serves with them. This rule is what makes that
+      # visible. No "for:" because the gauge is already a duration, and the state does not
+      # clear itself: until the file is fixed, the next restart fails.
+      - alert: NkapCredentialsStale
+        expr: nkap_credentials_stale_seconds > 0
+        labels:
+          severity: page
+        annotations:
+          summary: "Nkap is paying with stale credentials for {{ $labels.provider }}"
+          description: >-
+            A credential file for this installation changed and was rejected: it could
+            not be read, or it failed the same check startup applies. Payments still
+            succeed with the last valid credentials, and the rejected value is not used.
+            The gateway log has one warning naming the file and, for an invisible
+            character, which end. Fix the file. A restart before then fails.

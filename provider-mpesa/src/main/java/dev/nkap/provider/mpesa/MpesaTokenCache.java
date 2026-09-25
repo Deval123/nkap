@@ -13,6 +13,7 @@ import java.time.Instant;
 import java.util.Base64;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.function.Supplier;
 
 /**
  * The bearer token for one profile, from {@code GET /oauth/v1/generate?grant_type=client_credentials}
@@ -23,6 +24,14 @@ import java.util.concurrent.CompletionException;
  * <p>{@code expires_in} was observed as {@code 3599}, but whether Safaricom sends it as a JSON
  * number or a string is not recorded, so both are read. Concurrent callers share one in-flight
  * refresh, as {@code provider-mtn}'s token cache does, for the same reason.
+ *
+ * <p>The Consumer Key and Secret are asked for each time a token is wanted, and a token obtained
+ * with a pair that is no longer current is dropped at the next use. A token outlives its
+ * credentials by up to an hour, so without this a rotated pair would change nothing until the old
+ * token expired. One call can still see the old pair's token: a refresh already in flight with it
+ * completes after the drop, and the call after that drops it again (ADR 0015, decision 7). The
+ * comparison is {@link String#equals} and produces no message: neither value is printed, logged,
+ * or put in an exception.
  */
 final class MpesaTokenCache {
 
@@ -31,7 +40,9 @@ final class MpesaTokenCache {
 
     static final String TOKEN_PATH = "/oauth/v1/generate?grant_type=client_credentials";
 
+    /** The base URL the token is fetched from. Its credentials are not used. */
     private final MpesaProfile profile;
+    private final Supplier<MpesaProfile> credentials;
     private final HttpClient http;
     private final Duration requestTimeout;
     private final ObjectMapper json;
@@ -39,11 +50,14 @@ final class MpesaTokenCache {
 
     private final Object lock = new Object();
     private volatile Token current;
+    /** The profile whose Consumer Key and Secret obtained {@link #current}. */
+    private volatile MpesaProfile currentFor;
     private CompletableFuture<Token> inFlight;
 
-    MpesaTokenCache(MpesaProfile profile, HttpClient http, Duration requestTimeout, ObjectMapper json,
-                    Duration refreshMargin) {
+    MpesaTokenCache(MpesaProfile profile, Supplier<MpesaProfile> credentials, HttpClient http,
+                    Duration requestTimeout, ObjectMapper json, Duration refreshMargin) {
         this.profile = profile;
+        this.credentials = credentials;
         this.http = http;
         this.requestTimeout = requestTimeout;
         this.json = json;
@@ -72,11 +86,20 @@ final class MpesaTokenCache {
 
     /** A live bearer token, refreshing first if the current one is missing or near expiry. */
     String bearer() throws ProviderUnavailableException {
+        MpesaProfile now = credentials.get();
+        MpesaProfile held = currentFor;
+        if (held != null && !sameConsumer(held, now)) {
+            invalidate();
+        }
         Token c = current;
         if (c != null && c.isLive(Instant.now(), refreshMargin)) {
             return c.value();
         }
-        return refresh().value();
+        return refresh(now).value();
+    }
+
+    private static boolean sameConsumer(MpesaProfile a, MpesaProfile b) {
+        return a.consumerKey().equals(b.consumerKey()) && a.consumerSecret().equals(b.consumerSecret());
     }
 
     /** Drop the current token so the next {@link #bearer()} fetches a new one. */
@@ -84,7 +107,7 @@ final class MpesaTokenCache {
         current = null;
     }
 
-    private Token refresh() throws ProviderUnavailableException {
+    private Token refresh(MpesaProfile with) throws ProviderUnavailableException {
         CompletableFuture<Token> future;
         synchronized (lock) {
             Token c = current;
@@ -92,11 +115,12 @@ final class MpesaTokenCache {
                 return c;
             }
             if (inFlight == null) {
-                inFlight = CompletableFuture.supplyAsync(this::fetch);
+                inFlight = CompletableFuture.supplyAsync(() -> fetch(with));
                 inFlight.whenComplete((token, error) -> {
                     synchronized (lock) {
                         if (token != null) {
                             current = token;
+                            currentFor = with;
                         }
                         inFlight = null;
                     }
@@ -115,8 +139,8 @@ final class MpesaTokenCache {
         }
     }
 
-    private Token fetch() {
-        String credentials = profile.consumerKey() + ":" + profile.consumerSecret();
+    private Token fetch(MpesaProfile with) {
+        String credentials = with.consumerKey() + ":" + with.consumerSecret();
         HttpRequest request = HttpRequest.newBuilder(profile.endpoint(TOKEN_PATH))
                 .timeout(requestTimeout)
                 .header("Authorization",

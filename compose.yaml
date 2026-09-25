@@ -210,8 +210,9 @@ services:
 
 # Why files rather than the environment block above: a value in `environment:` is part of the
 # container's configuration, and `docker inspect` prints it. A secret is mounted as a file and
-# is not. That is all it changes. The gateway still reads each file once, at startup, and holds
-# the value in memory like any other; replacing a file takes a restart. A variable and a file
+# is not. That is all it changes. The gateway still reads each file below once, at startup, and
+# holds the value in memory like any other; replacing one takes a restart. (M-Pesa's credentials
+# as files are the exception, read again when they change: server/README.md.) A variable and a file
 # of the same name fail startup rather than one quietly winning.
 #
 # The files under examples/compose-secrets/ are PLACEHOLDERS pointing at the simulator, named

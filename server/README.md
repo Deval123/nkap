@@ -208,9 +208,14 @@ Two refusals come with it:
 
 Neither message ever contains a value or a file's contents.
 
-**Credentials are read once, at startup, whichever source they come from. Replacing one, as a
-variable or as a file, takes a restart.** A file changed in place under a running gateway is
-not noticed.
+**Credentials are read once, at startup, whichever source they come from, with one exception.
+Replacing one, as a variable or as a file, takes a restart.** The exception is M-Pesa's passkey,
+Consumer Key and Consumer Secret supplied as files. Those are read again when their file changes,
+so a rotated Secret takes effect without a restart. A rotated value that is unreadable or invalid
+is not used: payments keep the last valid one, one warning names the file, and
+`nkap_credentials_stale_seconds` stays above zero until it is fixed
+([ADR 0015](../docs/adr/0015-credentials-read-at-use.md)). Any other file changed in place under a
+running gateway is not noticed.
 
 One installation per country (issue #82), each its own `mtn-<country>` adapter — the table
 above is Cameroon's; a second country is another installation slot with its own env var

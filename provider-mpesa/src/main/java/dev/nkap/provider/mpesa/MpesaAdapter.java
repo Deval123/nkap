@@ -35,6 +35,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.Base64;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.Supplier;
 
 /**
  * The M-Pesa adapter: Safaricom Daraja's STK Push, Collections only. The second
@@ -60,6 +61,16 @@ import java.util.Set;
  * </ul>
  *
  * <p>No B2C: its authentication differs in kind and nothing about it has been observed.
+ *
+ * <p><strong>The credentials may change while it runs; nothing else may.</strong> Built from a
+ * {@link Supplier} of profiles, it asks for the current one each time it needs a credential: the
+ * passkey when it computes a request's {@code Password}, the Consumer Key and Secret when it
+ * fetches a bearer token. The base URL, the shortcode and the currency are taken from the first
+ * profile the supplier gives, at construction, and never again. The gateway routes on that
+ * currency and base URL from startup, so an adapter that followed a later profile's could talk to
+ * one place while routing described another, and accept a payment routing had refused. Taking
+ * them once makes that impossible here, whatever a supplier returns. The two constructors that
+ * take a profile use one that never changes, exactly as they always have.
  */
 public final class MpesaAdapter implements ProviderAdapter {
 
@@ -84,7 +95,10 @@ public final class MpesaAdapter implements ProviderAdapter {
     private static final String DISTINGUISHES_NOTHING = "500.001.1001";
 
     private final ProviderId id;
+    /** The first profile: the base URL, shortcode and currency, fixed for this adapter's life. */
     private final MpesaProfile profile;
+    /** Where the current credentials come from; asked each time one is used. */
+    private final Supplier<MpesaProfile> profiles;
     private final Duration requestTimeout;
     private final HttpClient http;
     private final ObjectMapper json = new ObjectMapper();
@@ -96,17 +110,53 @@ public final class MpesaAdapter implements ProviderAdapter {
     }
 
     public MpesaAdapter(ProviderId id, MpesaProfile profile, Duration requestTimeout) {
-        this(id, profile, requestTimeout, MpesaTokenCache.DEFAULT_REFRESH_MARGIN, Clock.systemUTC());
+        this(id, fixed(profile), requestTimeout);
+    }
+
+    /**
+     * An adapter whose credentials can change while it runs.
+     *
+     * <p>{@code profiles} is asked for the current profile every time a credential is used, so
+     * it must answer quickly, never return {@code null} and never throw: it is called on the
+     * payment's own path. Only its credentials are used after the first call. The base URL, the
+     * shortcode and the currency come from the first profile it returns, here, and later ones'
+     * are ignored; see the class javadoc for why. A changed Consumer Key or Secret drops the
+     * bearer token obtained with the previous pair. A changed passkey needs nothing: it is
+     * hashed into each request's {@code Password} as the request is built.
+     *
+     * <p>Added beside the two constructors above rather than replacing them, which keeps this a
+     * compatible change. Both are implemented through this one.
+     */
+    public MpesaAdapter(ProviderId id, Supplier<MpesaProfile> profiles, Duration requestTimeout) {
+        this(id, profiles, requestTimeout, MpesaTokenCache.DEFAULT_REFRESH_MARGIN, Clock.systemUTC());
     }
 
     MpesaAdapter(ProviderId id, MpesaProfile profile, Duration requestTimeout, Duration tokenRefreshMargin,
                  Clock clock) {
+        this(id, fixed(profile), requestTimeout, tokenRefreshMargin, clock);
+    }
+
+    MpesaAdapter(ProviderId id, Supplier<MpesaProfile> profiles, Duration requestTimeout,
+                 Duration tokenRefreshMargin, Clock clock) {
         this.id = Objects.requireNonNull(id, "id");
-        this.profile = Objects.requireNonNull(profile, "profile");
+        this.profiles = Objects.requireNonNull(profiles, "profiles");
+        this.profile = Objects.requireNonNull(profiles.get(), "profile");
         this.requestTimeout = Objects.requireNonNull(requestTimeout, "requestTimeout");
         this.clock = Objects.requireNonNull(clock, "clock");
         this.http = HttpClient.newBuilder().connectTimeout(CONNECT_TIMEOUT).build();
-        this.tokens = new MpesaTokenCache(profile, http, requestTimeout, json, tokenRefreshMargin);
+        this.tokens = new MpesaTokenCache(profile, this::credentials, http, requestTimeout, json,
+                tokenRefreshMargin);
+    }
+
+    /** A supplier of the one profile, for the constructors whose credentials never change. */
+    private static Supplier<MpesaProfile> fixed(MpesaProfile profile) {
+        Objects.requireNonNull(profile, "profile");
+        return () -> profile;
+    }
+
+    /** The profile to take credentials from now. Nothing else is read from it. */
+    private MpesaProfile credentials() {
+        return Objects.requireNonNull(profiles.get(), "profiles returned no profile");
     }
 
     @Override
@@ -394,7 +444,7 @@ public final class MpesaAdapter implements ProviderAdapter {
 
     /** {@code base64(BusinessShortCode + Passkey + Timestamp)} — observed, by decoding Safaricom's own example. */
     private String password(String timestamp) {
-        String raw = profile.businessShortCode() + profile.passkey() + timestamp;
+        String raw = profile.businessShortCode() + credentials().passkey() + timestamp;
         return Base64.getEncoder().encodeToString(raw.getBytes(StandardCharsets.UTF_8));
     }
 

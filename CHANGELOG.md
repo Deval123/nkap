@@ -15,8 +15,21 @@ All notable changes to Nkap are documented here. The format follows
   them. Nothing changes for a deployment using variables, with or without the directory. A name
   set both as a variable and as a file fails startup rather than one quietly winning. A file
   for an undeclared slot fails startup exactly as the variable does. Credentials are still read
-  once, at startup: replacing one, from either source, takes a restart. The Helm chart is
-  unchanged.
+  once, at startup: replacing one, from either source, takes a restart, except M-Pesa's three
+  credentials as files (next entry). The Helm chart is unchanged.
+- **A rotated M-Pesa credential file takes effect without a restart.** The passkey, the
+  Consumer Key and the Consumer Secret, supplied as files, are read again when their file
+  changes: the next request uses the new passkey, and a new Consumer Key or Secret replaces the
+  bearer token obtained with the old pair. Nothing to do differently: rotate the file, and the
+  running gateway follows. A rotated value that is unreadable or invalid does not stop
+  payments. It is refused by the same check as at startup, payments keep the last valid
+  credentials, one warning names the file, and the new gauge `nkap_credentials_stale_seconds`
+  stays above zero until it is fixed. `docs/prometheus-alerts.yml` has a rule for it. Only the
+  credentials change: the base URL, shortcode and currency stay as started. A credential set as a
+  variable, and every MTN credential, still takes a restart. That includes the Helm chart, which
+  passes credentials as variables: a chart deployment does not gain this yet. `MpesaAdapter` gains a constructor
+  taking a `Supplier<MpesaProfile>`; its two existing constructors are unchanged. See
+  [ADR 0015](docs/adr/0015-credentials-read-at-use.md).
 
 - **M-Pesa is a configured operator.** Safaricom's STK Push, collections only: one Kenya slot,
   `NKAP_PROVIDER_MPESA_KE_*`, registered as `mpesa-ke`. `POST /payments` routes on the country
@@ -88,6 +101,12 @@ All notable changes to Nkap are documented here. The format follows
   show a newly issued API key or webhook secret once because that is their job; nothing needs
   rotating. The masking closes the paths this code does not control. A test per record fails
   when a component is added without being classified.
+- **A leaked M-Pesa credential supplied as a file can be replaced without a restart**, which
+  makes replacing it quicker. The passkey has no observed revocation point, so replacing it is
+  the only remedy there is (`docs/security-notes.md` §1). A botched rotation does not stop
+  payments and does not go unseen: the last valid credentials stay in use, and a gauge reports
+  it until the file is fixed. The cost is that the last valid credentials stay in the process's
+  memory for as long as it runs, where a heap dump shows them.
 
 ## [2.0.0] - 2026-09-21
 

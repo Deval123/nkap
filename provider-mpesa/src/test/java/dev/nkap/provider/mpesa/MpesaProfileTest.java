@@ -78,10 +78,10 @@ class MpesaProfileTest {
     @Test
     @DisplayName("a no-break space (U+00A0) at either end is refused -- strip() and trim() both leave it, so this proves neither alone was used")
     void a_no_break_space_is_refused_which_neither_strip_nor_trim_would_catch() {
-        assertThat("value ".strip()).as("the premise: strip() leaves U+00A0 in place").isEqualTo("value ");
+        assertThat("value\u00A0".strip()).as("the premise: strip() leaves U+00A0 in place").isEqualTo("value\u00A0");
         for (String field : FIELDS) {
-            assertThat(refusal(field, plain(field) + " ")).startsWith(field + " has trailing whitespace");
-            assertThat(refusal(field, " " + plain(field))).startsWith(field + " has leading whitespace");
+            assertThat(refusal(field, plain(field) + "\u00A0")).startsWith(field + " has trailing whitespace");
+            assertThat(refusal(field, "\u00A0" + plain(field))).startsWith(field + " has leading whitespace");
         }
     }
 
@@ -89,7 +89,7 @@ class MpesaProfileTest {
     @DisplayName("an em space (U+2003) is refused -- strip() removes it and trim() does not, so this proves trim() alone was not used")
     void an_em_space_is_refused_which_trim_would_miss() {
         for (String field : FIELDS) {
-            assertThat(refusal(field, plain(field) + " ")).startsWith(field + " has trailing whitespace");
+            assertThat(refusal(field, plain(field) + "\u2003")).startsWith(field + " has trailing whitespace");
         }
     }
 
@@ -107,7 +107,7 @@ class MpesaProfileTest {
         for (String field : FIELDS) {
             String secret = field.equals("businessShortCode") ? "8271645093" : "Zq7Xk9Vw3Rp2Jm";
             for (String padded : List.of(" " + secret, secret + " ", " " + secret + " ", secret + "\n",
-                    secret + " ", " " + secret)) {
+                    secret + "\u00A0", "\u00A0" + secret)) {
                 String message = refusal(field, padded);
                 for (int n = 2; n <= secret.length(); n++) {
                     assertThat(message).as("%s: a %d-character prefix of the value", field, n)
@@ -115,7 +115,7 @@ class MpesaProfileTest {
                 }
                 assertThat(message).as("the length").doesNotContain(String.valueOf(secret.length()))
                         .doesNotContain(String.valueOf(padded.length()));
-                assertThat(message).as("the character found").doesNotContain(" ").doesNotContain("\n")
+                assertThat(message).as("the character found").doesNotContain("\u00A0").doesNotContain("\n")
                         .doesNotContain("U+").doesNotContain("00A0");
             }
         }

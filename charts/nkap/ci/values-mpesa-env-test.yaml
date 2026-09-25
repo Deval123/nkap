@@ -1,0 +1,24 @@
+# Values for CI's M-Pesa assertions with credentialsAs: env -- the same installation as
+# values-mpesa-test.yaml, its three credentials rendered as environment variables instead of
+# mounted files. Secret names only, no credential values. Not meant to be installed anywhere.
+image:
+  tag: "1.0.0"
+
+database:
+  host: postgresql.default.svc.cluster.local
+  existingSecret: nkap-db
+
+publicBaseUrl: "https://nkap.example.com"
+
+provider:
+  mpesa:
+    installations:
+      - country: ke
+        currency: KES
+        baseUrl: "https://sandbox.safaricom.co.ke"
+        businessShortCode: "174379"
+        existingSecret: nkap-mpesa-ke
+        credentialsAs: env
+
+keyInit:
+  merchantId: acme

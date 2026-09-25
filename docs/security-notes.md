@@ -132,8 +132,9 @@ submission and every status query carries a `Password` computed from it:
   again before its next use: the next request's `Password` uses the new passkey, and a new
   Consumer Key or Secret drops the bearer token obtained with the old pair. It is still a
   cut-over with no overlap, as above; what goes is the restart. A value supplied as a variable
-  is not re-read: a process cannot see its own environment change. That includes the Helm
-  chart's, which passes every credential as a variable from a Secret reference.
+  is not re-read: a process cannot see its own environment change. The Helm chart mounts the
+  three as files by default (`charts/nkap/README.md`, *M-Pesa*); whether a cluster's own Secret
+  update reaches the running pod, and how quickly, is not yet measured.
 - **A rotated value that is unreadable or invalid does not stop payments.** It is checked by
   the same rule startup applies, so a byte-order mark or a no-break space is refused at use as
   it is at startup. The rejected value is not used. Payments keep using the last valid

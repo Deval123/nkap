@@ -71,4 +71,12 @@ spec:
             - "--nkap.apikey.create"
             - {{ printf "--nkap.apikey.merchant=%s" (required "keyInit.merchantId is required when keyInit.enabled is true -- set it to the merchant the first API key belongs to, or set keyInit.enabled to false and provision out-of-band" .Values.keyInit.merchantId) | quote }}
             - {{ printf "--nkap.apikey.label=%s" (.Values.keyInit.label | default "initial") | quote }}
+          {{- with (include "nkap.credentialVolumeMounts" . | trim) }}
+          volumeMounts:
+            {{- . | nindent 12 }}
+          {{- end }}
+      {{- with (include "nkap.credentialVolumes" . | trim) }}
+      volumes:
+        {{- . | nindent 8 }}
+      {{- end }}
 {{- end }}

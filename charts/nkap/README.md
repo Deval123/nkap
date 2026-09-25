@@ -127,6 +127,35 @@ The passkey is recoverable from any single request Nkap sends to Safaricom
 (`docs/security-notes.md` §1), and the rotation procedure written for Nkap API keys does not
 apply to it. Keep it out of every values file, which this chart already forces.
 
+**The three credentials arrive as files by default.** The credential rule is unchanged: they
+still come from the Secret you name, never from values. What changes is how the Secret reaches
+the gateway. There are two forms, chosen per installation by `credentialsAs`:
+
+- **`files`, the default.** The Secret is mounted read-only at `/etc/nkap/credentials`, as three
+  files named `NKAP_PROVIDER_MPESA_KE_CONSUMER_KEY`, `NKAP_PROVIDER_MPESA_KE_CONSUMER_SECRET` and
+  `NKAP_PROVIDER_MPESA_KE_PASSKEY`. Those names are fixed by the gateway, which reads a file named
+  exactly like the variable it replaces. `consumerKeySecretKey`, `consumerSecretSecretKey` and
+  `passkeySecretKey` still choose which key of your Secret feeds each file. The chart sets
+  `NKAP_SECRETS_DIR` to the mount path from the same definition, so the two cannot disagree.
+  Files are the form the gateway re-reads when they change
+  ([ADR 0015](../../docs/adr/0015-credentials-read-at-use.md)), so a replaced passkey can reach it
+  without a restart. **Whether a cluster's own Secret update reaches the running pod, and how
+  quickly, is not yet measured.** Until it is, do not count on it for an incident; restarting
+  the pods after replacing the Secret is the certain path.
+- **`env`.** The three credentials are environment variables, as this chart rendered them
+  before, read once at startup. For a cluster that cannot mount Secrets as volumes, or an
+  operator who prefers variables. Replacing the Secret then takes a restart.
+
+The choice is per installation, not per credential, because the gateway refuses to start when
+one name arrives both as a variable and as a file. In the `files` form the three variables are
+not rendered at all. Any value other than `files` or `env` fails rendering and names the two.
+
+The mount is not the gateway's default directory, `/run/secrets`. In the gateway's image
+`/var/run` is a link to `/run`, and `/var/run/secrets` is where Kubernetes mounts the pod's
+service-account token, which the gateway would otherwise import too. The key-init Job mounts the
+same volume, because it starts the same application context and validates the same
+installation.
+
 ## Installing
 
 ```bash
@@ -292,9 +321,13 @@ the rendered output:
 - with `charts/nkap/ci/values-mpesa-test.yaml`: rendering fails, naming the field, for each
   missing M-Pesa field, a missing `publicBaseUrl`, a country other than `ke`, an unquoted
   shortcode and a second installation; the Kenya slot's variables render as expected; the
-  consumer key, consumer secret and passkey are `secretKeyRef`s; and no variable whose name
-  looks like a credential renders as a literal `value:` in either render, whether or not
-  anyone remembered to list it;
+  consumer key, consumer secret and passkey are mounted as files by default, in both the
+  Deployment and the key-init Job, and are then **not** also rendered as variables (the gateway
+  would refuse to start); the mount path and `NKAP_SECRETS_DIR` agree; with
+  `charts/nkap/ci/values-mpesa-env-test.yaml` (`credentialsAs: env`) the three are
+  `secretKeyRef` variables and no credential volume renders; an unknown `credentialsAs` fails,
+  naming `files` and `env`; and no variable whose name looks like a credential renders as a
+  literal `value:` in any render, whether or not anyone remembered to list it;
 - the MTN-only render carries no M-Pesa variable and no public base URL.
 
 **What CI does not do: install this chart into a real cluster.** `helm template` proves the

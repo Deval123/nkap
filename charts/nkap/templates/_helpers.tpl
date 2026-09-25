@@ -50,6 +50,8 @@ Names are exactly what nkap-standalone.compose.yaml and application.yml already 
 (NKAP_DB_URL, NKAP_PROVIDER_MTN_<COUNTRY>_*) -- see values.yaml's own header for why.
 */}}
 {{- define "nkap.env" -}}
+- name: NKAP_SECRETS_DIR
+  value: {{ include "nkap.credentialsDir" . | quote }}
 - name: NKAP_DB_URL
   value: {{ printf "jdbc:postgresql://%s:%d/%s" (required "database.host is required -- point it at your own PostgreSQL (see charts/nkap/README.md)" .Values.database.host) (.Values.database.port | int) .Values.database.name | quote }}
 - name: NKAP_DB_USER
@@ -146,6 +148,7 @@ names, and the installation would silently not exist. values.yaml says why there
   value: {{ $shortCode | quote }}
 - name: NKAP_PROVIDER_MPESA_KE_REQUEST_TIMEOUT
   value: {{ $installation.requestTimeout | default "PT20S" | quote }}
+{{- if eq (include "nkap.mpesaCredentialsAs" (list $i $installation)) "env" }}
 - name: NKAP_PROVIDER_MPESA_KE_CONSUMER_KEY
   valueFrom:
     secretKeyRef:
@@ -161,5 +164,73 @@ names, and the installation would silently not exist. values.yaml says why there
     secretKeyRef:
       name: {{ $secret }}
       key: {{ $installation.passkeySecretKey | default "passkey" }}
+{{- end }}
+{{- end }}
+{{- end -}}
+
+{{/*
+Where the gateway imports credential files from: NKAP_SECRETS_DIR, rendered by "nkap.env" above,
+and the mount path of every credential volume below, both from this one definition so the two
+can never disagree. Not the gateway's own default, /run/secrets: in the gateway's image /var/run
+is a link to /run, so /run/secrets is where Kubernetes mounts the pod's service-account token
+(/var/run/secrets/kubernetes.io/serviceaccount), and the gateway imports that directory's nested
+files too. A directory of its own holds only what this chart puts there.
+*/}}
+{{- define "nkap.credentialsDir" -}}
+/etc/nkap/credentials
+{{- end -}}
+
+{{/*
+How an M-Pesa installation's three credentials reach the gateway: "files" (the default) or "env".
+Called with (list index installation). Any other value fails, naming the two allowed, rather than
+falling through to one of them.
+*/}}
+{{- define "nkap.mpesaCredentialsAs" -}}
+{{- $i := index . 0 }}
+{{- $installation := index . 1 }}
+{{- $as := $installation.credentialsAs | default "files" }}
+{{- if not (has $as (list "files" "env")) }}
+{{- fail (printf "provider.mpesa.installations[%d].credentialsAs is %q, but it must be \"files\" (the default: the credentials are mounted as files, the form the gateway re-reads) or \"env\" (environment variables, read once at startup)" $i (toString $as)) }}
+{{- end }}
+{{- $as -}}
+{{- end -}}
+
+{{/*
+The credential volumes every workload that runs the gateway's jar needs, beside "nkap.env" and for
+the same reason: the key-init Job starts the same application context, which validates every
+configured installation, so it must see the credentials exactly as the gateway does.
+
+One volume per M-Pesa installation whose credentials are files. Its items map each key of the
+installation's Secret, which values can rename, to a file named after the variable it replaces
+(NKAP_PROVIDER_MPESA_KE_PASSKEY and so on). That file name is fixed by the gateway, not by values:
+the gateway reads a file named exactly like the variable. Those three variables are then not
+rendered in "nkap.env", because the gateway refuses to start when one name is both a variable
+and a file.
+*/}}
+{{- define "nkap.credentialVolumes" -}}
+{{- range $i, $installation := .Values.provider.mpesa.installations | default list }}
+{{- if eq (include "nkap.mpesaCredentialsAs" (list $i $installation)) "files" }}
+- name: mpesa-ke-credentials
+  secret:
+    secretName: {{ required (printf "provider.mpesa.installations[%d].existingSecret is required -- create a Secret holding its consumer key, consumer secret and passkey, and name it here (see charts/nkap/README.md's credential rule)" $i) $installation.existingSecret }}
+    items:
+      - key: {{ $installation.consumerKeySecretKey | default "consumer-key" }}
+        path: NKAP_PROVIDER_MPESA_KE_CONSUMER_KEY
+      - key: {{ $installation.consumerSecretSecretKey | default "consumer-secret" }}
+        path: NKAP_PROVIDER_MPESA_KE_CONSUMER_SECRET
+      - key: {{ $installation.passkeySecretKey | default "passkey" }}
+        path: NKAP_PROVIDER_MPESA_KE_PASSKEY
+{{- end }}
+{{- end }}
+{{- end -}}
+
+{{/* The mounts for "nkap.credentialVolumes", at "nkap.credentialsDir", read-only. */}}
+{{- define "nkap.credentialVolumeMounts" -}}
+{{- range $i, $installation := .Values.provider.mpesa.installations | default list }}
+{{- if eq (include "nkap.mpesaCredentialsAs" (list $i $installation)) "files" }}
+- name: mpesa-ke-credentials
+  mountPath: {{ include "nkap.credentialsDir" $ }}
+  readOnly: true
+{{- end }}
 {{- end }}
 {{- end -}}

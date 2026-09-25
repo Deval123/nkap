@@ -154,14 +154,16 @@ class RereadMpesaProfileTest {
         RereadMpesaProfile kubernetes = rereadUnder(mounted);
         assertThat(kubernetes.get().passkey()).isEqualTo(PASSKEY_1);
 
-        // What the kubelet was measured doing: a new directory, the files' modification time
-        // unchanged, and ..data re-pointed. Same length too, so only the real path differs.
+        // A new directory and ..data re-pointed, as the kubelet does, but with the files'
+        // modification time held and the length kept, so only the real path differs. The kubelet
+        // was first thought to hold the time; it does not (ADR 0015's amendment). The case is kept
+        // because it proves the real path alone is enough.
         assertThat(PASSKEY_2).hasSameSizeAs(PASSKEY_1);
         kubeletWrites(mounted, "..2026_01_01_00_00_05.222", PASSKEY_2, sameTime);
         Path next = mounted.resolve("..data_tmp");
         Files.createSymbolicLink(next, Path.of("..2026_01_01_00_00_05.222"));
         Files.move(next, mounted.resolve("..data"), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
-        assertThat(Files.getLastModifiedTime(mounted.resolve(PASSKEY))).as("the premise: the time did not change")
+        assertThat(Files.getLastModifiedTime(mounted.resolve(PASSKEY))).as("the case built: the time did not change")
                 .isEqualTo(sameTime);
 
         assertThat(kubernetes.get().passkey()).as("the rotated passkey is in use").isEqualTo(PASSKEY_2);

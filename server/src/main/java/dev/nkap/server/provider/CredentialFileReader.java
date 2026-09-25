@@ -150,13 +150,15 @@ final class CredentialFileReader {
      * real path, with every symbolic link resolved, its modification time, and its size. Any of the
      * three differing means the file changed.
      *
-     * <p>Each deployment changes a different one, which is why no one of them is enough. A mounted
-     * Kubernetes Secret is a link through {@code ..data} into a timestamped directory. An update
-     * writes a new directory and re-points {@code ..data}; measured on a cluster, the file's
-     * modification time stayed the same, and only the <strong>real path</strong> changed. A file
-     * bind-mounted by compose, or replaced in place, is not a link: its real path stays the same,
-     * and its <strong>modification time</strong> changes. The <strong>size</strong> catches a value
-     * replaced by one of another length within the same timestamp, and costs nothing.
+     * <p>Each is the direct signal of a different deployment. A mounted Kubernetes Secret is a link
+     * through {@code ..data} into a timestamped directory, and an update writes a new directory and
+     * re-points {@code ..data}: the <strong>real path</strong> changes, and so does the time of the
+     * file it resolves to, which is newly written. Only the link's own time stays the same, and
+     * that is not a time this reads (ADR 0015's amendment corrects a measurement that confused the
+     * two). A file bind-mounted by compose, or replaced in place, is not a link: its real path stays
+     * the same, and its <strong>modification time</strong> changes. The <strong>size</strong>
+     * catches a value replaced by one of another length within the same timestamp, and costs
+     * nothing.
      *
      * <p>Rejected, so they are not proposed again. Hashing the contents would detect everything, but
      * it reads the credential on every call, which is what the gate exists to avoid: ADR 0015's

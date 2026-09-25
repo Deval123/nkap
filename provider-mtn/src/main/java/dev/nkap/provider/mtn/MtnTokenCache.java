@@ -65,8 +65,22 @@ final class MtnTokenCache {
     }
 
     record Token(String value, Instant expiresAt) {
+
+        /** What {@link #toString()} prints in place of the token. */
+        static final String MASKED = "***";
+
         boolean isLive(Instant now, Duration margin) {
             return now.isBefore(expiresAt.minus(margin));
+        }
+
+        /**
+         * The expiry, and a constant marker in place of the token. Until it expires, the token
+         * is enough to call MTN as this installation, and the generated {@code toString()}
+         * would print it to any log line or failing AssertJ assertion that printed the record.
+         */
+        @Override
+        public String toString() {
+            return "Token[value=" + MASKED + ", expiresAt=" + expiresAt + "]";
         }
     }
 

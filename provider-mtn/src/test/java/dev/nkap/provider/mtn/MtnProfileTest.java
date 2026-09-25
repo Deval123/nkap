@@ -6,10 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.catchThrowable;
 
 import dev.nkap.core.money.Currency;
-import java.lang.reflect.RecordComponent;
 import java.net.URI;
-import java.util.Arrays;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -222,46 +219,6 @@ class MtnProfileTest {
     @Test
     @DisplayName("every record component is accounted for in toString(): printed in clear or masked by a constant, nothing left out")
     void every_component_is_printed_or_masked() {
-        MtnProfile profile = withCanaries();
-        RecordComponent[] components = MtnProfile.class.getRecordComponents();
-        Map<String, String> printed = printedComponents(profile);
-
-        assertThat(PRINTED.size() + SECRETS.size())
-                .as("components classified here: add a new one to PRINTED or SECRETS")
-                .isEqualTo(components.length);
-        assertThat(printed.keySet()).as("components toString() names, in declaration order")
-                .containsExactly(Arrays.stream(components).map(RecordComponent::getName).toArray(String[]::new));
-        for (RecordComponent component : components) {
-            String name = component.getName();
-            if (PRINTED.contains(name)) {
-                assertThat(printed.get(name)).as(name).isEqualTo(String.valueOf(valueOf(profile, component)));
-            } else {
-                assertThat(SECRETS).as("%s is neither printed nor a known secret", name).containsKey(name);
-                assertThat(printed.get(name)).as(name).isEqualTo(MtnProfile.MASKED);
-            }
-        }
-    }
-
-    /**
-     * {@code toString()}'s {@code name=value} pairs, in order. Enough for the values these tests
-     * pass in, none of which contains {@code ", "} or {@code "]"}.
-     */
-    private static Map<String, String> printedComponents(Record profile) {
-        String text = profile.toString();
-        String body = text.substring(text.indexOf('[') + 1, text.lastIndexOf(']'));
-        Map<String, String> pairs = new LinkedHashMap<>();
-        for (String pair : body.split(", ")) {
-            int equals = pair.indexOf('=');
-            pairs.put(pair.substring(0, equals), pair.substring(equals + 1));
-        }
-        return pairs;
-    }
-
-    private static Object valueOf(Record profile, RecordComponent component) {
-        try {
-            return component.getAccessor().invoke(profile);
-        } catch (ReflectiveOperationException e) {
-            throw new AssertionError(component.getName(), e);
-        }
+        RecordToString.assertEveryComponentPrintedOrMasked(withCanaries(), PRINTED, SECRETS.keySet(), MtnProfile.MASKED);
     }
 }

@@ -24,4 +24,23 @@ public record WebhookEndpoint(UUID id, String merchantId, String url, String sec
         Objects.requireNonNull(secret, "secret");
         Objects.requireNonNull(createdAt, "createdAt");
     }
+
+    /** What {@link #toString()} prints in place of the secret. */
+    static final String MASKED = "***";
+
+    /**
+     * Every component, with the signing secret replaced by a constant marker. The store keeps
+     * the secret readable because signing needs it; nothing else does. Whoever reads it can forge
+     * a notification to this merchant, so a log line or a failing AssertJ assertion that printed
+     * this record through the generated {@code toString()} would have the same consequence as a
+     * read of the table.
+     */
+    @Override
+    public String toString() {
+        return "WebhookEndpoint[id=" + id
+                + ", merchantId=" + merchantId
+                + ", url=" + url
+                + ", secret=" + MASKED
+                + ", createdAt=" + createdAt + "]";
+    }
 }

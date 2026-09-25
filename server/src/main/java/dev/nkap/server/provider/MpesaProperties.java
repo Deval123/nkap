@@ -23,10 +23,16 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  * {@code String}, which cannot fail to bind, so Spring's binding failures — which quote the
  * value they failed to convert — can only ever quote {@code base-url}, {@code currency} or
  * {@code request-timeout}, none of them secret. The checks that a configured slot is complete
- * are {@link MpesaConfiguration}'s, and they name properties, never values.
+ * are {@link MpesaConfiguration}'s, and they name properties, never values. What the binding
+ * cannot quote, a {@code toString()} could still print: an {@link Installation} that reaches a
+ * log line, an error message or a failing assertion as a whole object. So it masks its
+ * credentials too.
  */
 @ConfigurationProperties("nkap.provider.mpesa")
 public record MpesaProperties(@DefaultValue List<Installation> installations) {
+
+    /** What an {@link Installation}'s {@code toString()} prints in place of a credential. */
+    static final String MASKED = "***";
 
     /**
      * One country installation. {@code country} is the only thing that names it, for the same
@@ -45,6 +51,25 @@ public record MpesaProperties(@DefaultValue List<Installation> installations) {
 
         boolean isConfigured() {
             return country != null && !country.isBlank();
+        }
+
+        /**
+         * Every component, with the passkey, the Consumer Key and the Consumer Secret replaced
+         * by a constant marker, present or not. The generated {@code toString()} would print
+         * all three to any log line, error message or failing AssertJ assertion that printed
+         * this installation. A leaked passkey cannot simply be rotated; see
+         * {@code docs/security-notes.md} §1.
+         */
+        @Override
+        public String toString() {
+            return "Installation[baseUrl=" + baseUrl
+                    + ", businessShortCode=" + businessShortCode
+                    + ", passkey=" + MASKED
+                    + ", consumerKey=" + MASKED
+                    + ", consumerSecret=" + MASKED
+                    + ", currency=" + currency
+                    + ", country=" + country
+                    + ", requestTimeout=" + requestTimeout + "]";
         }
     }
 }

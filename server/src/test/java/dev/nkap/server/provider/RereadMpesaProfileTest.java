@@ -14,6 +14,7 @@ import java.io.IOException;
 import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.FileTime;
 import java.time.Clock;
 import java.time.Duration;
@@ -136,6 +137,54 @@ class RereadMpesaProfileTest {
 
         assertThat(profile.get().passkey()).isEqualTo(PASSKEY_2);
         assertThat(profile.get().consumerKey()).isEqualTo("startup-consumer-key");
+    }
+
+    // --- the Kubernetes layout -------------------------------------------------------------
+
+    @Test
+    @DisplayName("Kubernetes: a Secret update that swaps ..data to a new directory, same modification time and same length, is seen and used")
+    void a_swapped_kubernetes_data_link_is_seen() throws IOException {
+        Path mounted = Files.createDirectory(secrets.resolve("kubernetes"));
+        FileTime sameTime = FileTime.from(Instant.parse("2026-01-01T00:00:00Z"));
+        kubeletWrites(mounted, "..2026_01_01_00_00_00.111", PASSKEY_1, sameTime);
+        Files.createSymbolicLink(mounted.resolve("..data"), Path.of("..2026_01_01_00_00_00.111"));
+        for (String name : List.of(PASSKEY, CONSUMER_KEY, CONSUMER_SECRET)) {
+            Files.createSymbolicLink(mounted.resolve(name), Path.of("..data", name));
+        }
+        RereadMpesaProfile kubernetes = rereadUnder(mounted);
+        assertThat(kubernetes.get().passkey()).isEqualTo(PASSKEY_1);
+
+        // What the kubelet was measured doing: a new directory, the files' modification time
+        // unchanged, and ..data re-pointed. Same length too, so only the real path differs.
+        assertThat(PASSKEY_2).hasSameSizeAs(PASSKEY_1);
+        kubeletWrites(mounted, "..2026_01_01_00_00_05.222", PASSKEY_2, sameTime);
+        Path next = mounted.resolve("..data_tmp");
+        Files.createSymbolicLink(next, Path.of("..2026_01_01_00_00_05.222"));
+        Files.move(next, mounted.resolve("..data"), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+        assertThat(Files.getLastModifiedTime(mounted.resolve(PASSKEY))).as("the premise: the time did not change")
+                .isEqualTo(sameTime);
+
+        assertThat(kubernetes.get().passkey()).as("the rotated passkey is in use").isEqualTo(PASSKEY_2);
+        assertThat(kubernetes.staleFor()).isZero();
+    }
+
+    /** One timestamped directory as the kubelet writes it: the three files, all at {@code time}. */
+    private static void kubeletWrites(Path mounted, String directory, String passkey, FileTime time) throws IOException {
+        Path dir = Files.createDirectory(mounted.resolve(directory));
+        Map<String, String> values = Map.of(PASSKEY, passkey, CONSUMER_KEY, KEY_1, CONSUMER_SECRET, SECRET_1);
+        for (Map.Entry<String, String> file : values.entrySet()) {
+            Path written = Files.writeString(dir.resolve(file.getKey()), file.getValue());
+            Files.setLastModifiedTime(written, time);
+        }
+    }
+
+    private RereadMpesaProfile rereadUnder(Path mounted) {
+        CountingTree tree = new CountingTree(mounted, reads);
+        Map<Credential, CredentialFile> files = new EnumMap<>(Credential.class);
+        files.put(Credential.PASSKEY, new CredentialFile(PASSKEY, mounted.resolve(PASSKEY), tree));
+        files.put(Credential.CONSUMER_KEY, new CredentialFile(CONSUMER_KEY, mounted.resolve(CONSUMER_KEY), tree));
+        files.put(Credential.CONSUMER_SECRET, new CredentialFile(CONSUMER_SECRET, mounted.resolve(CONSUMER_SECRET), tree));
+        return new RereadMpesaProfile(KENYA, startupProfile(), files, clock);
     }
 
     // --- the decision ----------------------------------------------------------------------

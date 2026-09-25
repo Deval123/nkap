@@ -109,10 +109,15 @@ final class CredentialFileReader {
      */
     record CredentialFile(String name, Path path, ConfigTreePropertySource tree) {
 
-        /** When the file last changed, following a mounted Secret's symbolic link; null if it cannot be seen. */
-        FileTime modified() {
+        /**
+         * What the file is now, without reading it: its real path, modification time and size. Null
+         * if it cannot be looked at, gone or unreadable, so a caller on the payment path never sees
+         * a throw from here.
+         */
+        Stamp stamp() {
             try {
-                return Files.getLastModifiedTime(path);
+                Path real = path.toRealPath();
+                return new Stamp(real, Files.getLastModifiedTime(real), Files.size(real));
             } catch (IOException | SecurityException gone) {
                 return null;
             }
@@ -138,6 +143,31 @@ final class CredentialFileReader {
                 throw new UnreadableCredentialException(name);
             }
         }
+    }
+
+    /**
+     * What a credential file is at one moment, compared to decide whether to read it again: its
+     * real path, with every symbolic link resolved, its modification time, and its size. Any of the
+     * three differing means the file changed.
+     *
+     * <p>Each deployment changes a different one, which is why no one of them is enough. A mounted
+     * Kubernetes Secret is a link through {@code ..data} into a timestamped directory. An update
+     * writes a new directory and re-points {@code ..data}; measured on a cluster, the file's
+     * modification time stayed the same, and only the <strong>real path</strong> changed. A file
+     * bind-mounted by compose, or replaced in place, is not a link: its real path stays the same,
+     * and its <strong>modification time</strong> changes. The <strong>size</strong> catches a value
+     * replaced by one of another length within the same timestamp, and costs nothing.
+     *
+     * <p>Rejected, so they are not proposed again. Hashing the contents would detect everything, but
+     * it reads the credential on every call, which is what the gate exists to avoid: ADR 0015's
+     * first cost is a credential living in the heap, and a hash on the payment path makes it worse.
+     * Comparing the directory's modification time is right for Kubernetes and wrong for a file
+     * replaced in place, trading one blind deployment for another.
+     *
+     * <p>No credential is in it, only a location, a time and a size, so it keeps its generated
+     * {@code toString()}: the masking every credential-holding record has does not apply.
+     */
+    record Stamp(Path realPath, FileTime modified, long size) {
     }
 
     /** A credential file that could not be read. Deliberately carries no cause: see {@link CredentialFile#read()}. */

@@ -1,0 +1,19 @@
+server:
+  # Not 8081, which is the MTN simulator's: the two run side by side with no flag.
+  port: 8082
+
+spring:
+  application:
+    name: nkap-simulator-mpesa
+  jackson:
+    # Durations in scenario documents are ISO-8601 strings ("PT2S"), not
+    # fractional seconds. See ADR 0002 and the control plane contract.
+    serialization:
+      write-durations-as-timestamps: false
+
+nkap:
+  scenario:
+    # Read once at startup and applied exactly as if POSTed to /_nkap/scenarios, as the MTN
+    # simulator does (issue #99) -- see ScenarioFileLoader. No file at this path is not an
+    # error. The same path as the MTN image's, so the README's `-v` works for either.
+    file: /etc/nkap/scenario.json

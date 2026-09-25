@@ -18,7 +18,8 @@
 
     Its only source is docs/providers/m-pesa.md. It was written and certified without a
     Safaricom account: the tests run against simulator-mpesa (test scope only), booted on its
-    own, since the simulator image assembles MTN's face alone.
+    own. simulator-mpesa-app is a deployable of that face now; whether these tests should boot
+    it instead of their own class is #214's question, not settled here.
   -->
   <dependencies>
     <dependency>

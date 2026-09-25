@@ -239,7 +239,10 @@ what to publish first.
 **You clone to contribute, you pull an image to use.** Every tagged release publishes
 [`ghcr.io/deval123/nkap-gateway`](https://github.com/deval123/nkap/pkgs/container/nkap-gateway)
 and
-[`ghcr.io/deval123/nkap-simulator`](https://github.com/deval123/nkap/pkgs/container/nkap-simulator) —
+[`ghcr.io/deval123/nkap-simulator`](https://github.com/deval123/nkap/pkgs/container/nkap-simulator)
+(MTN) and
+[`ghcr.io/deval123/nkap-simulator-mpesa`](https://github.com/deval123/nkap/pkgs/container/nkap-simulator-mpesa)
+(M-Pesa, [below](#the-simulator-on-its-own)) —
 public, no login needed to pull, `linux/amd64` and `linux/arm64` — tagged with the exact
 version and with a moving `latest` that always points at the newest release, never at `main`.
 `docker inspect ghcr.io/deval123/nkap-gateway:latest` names the exact commit and version it
@@ -385,6 +388,18 @@ was actually observed against MTN's sandbox from what this project chose to mode
 own behaviour is undocumented or untested; the simulator implements the second column, and a
 mismatch between the two is a bug in the simulator or the doc, not in MTN. Read that file for
 what it imitates before you trust an integration test that only ever ran against this.
+
+**There is an M-Pesa simulator too**, a separate image on port 8082 so the two run side by side:
+
+```bash
+docker run -p 8082:8082 ghcr.io/deval123/nkap-simulator-mpesa
+```
+
+It plays Safaricom Daraja's STK Push, collections only, and is scripted through the same
+`/_nkap` control plane. **Never give it real credentials, and never expose `/_nkap`:** it
+reports the Consumer Key and Secret it was sent, in the clear, to anyone who can reach it.
+[`simulator-mpesa-app/README.md`](simulator-mpesa-app/README.md) says what it plays and what
+it does not.
 
 **Orange Money is read, not implemented.** There is no Orange adapter in this repository, and
 1.0.0 does not plan one. [`docs/providers/orange-money.md`](docs/providers/orange-money.md)

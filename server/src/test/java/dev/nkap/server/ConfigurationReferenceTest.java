@@ -31,8 +31,8 @@ import org.yaml.snakeyaml.Yaml;
  * describing the running application rather than merely hoping to. Three checks, in the same
  * spirit as {@code OpenApiSpecIT} but needing no Spring context at all — everything here is
  * plain reflection over the compiled {@code @ConfigurationProperties} records, a plain text
- * scan of {@code server/src/main/java} and {@code simulator/src/main/java}, and plain text
- * parsing of files already on disk.
+ * scan of {@code server}'s, {@code simulator}'s and {@code simulator-mpesa-app}'s
+ * {@code src/main/java}, and plain text parsing of files already on disk.
  *
  * <h2>What this proves</h2>
  *
@@ -91,6 +91,11 @@ class ConfigurationReferenceTest {
     private static final String RUN_FROM_SERVER = "the server module (mvn -pl server test)";
     private static final String RUN_FROM_SIMULATOR =
             "the server module, with the simulator module checked out beside it";
+    private static final Path SIMULATOR_MPESA_APPLICATION_YML =
+            Path.of("..", "simulator-mpesa-app", "src", "main", "resources", "application.yml");
+    private static final Path SIMULATOR_MPESA_MAIN_JAVA = Path.of("..", "simulator-mpesa-app", "src", "main", "java");
+    private static final String RUN_FROM_SIMULATOR_MPESA =
+            "the server module, with the simulator-mpesa-app module checked out beside it";
 
     @Test
     @DisplayName("every nkap.* property bound by a @ConfigurationProperties record, or read directly with @Value/@ConditionalOnProperty, has exactly one row in docs/configuration-reference.md")
@@ -98,6 +103,7 @@ class ConfigurationReferenceTest {
         Set<String> fromCode = new TreeSet<>();
         fromCode.addAll(scanDirectlyBoundProperties(MAIN_JAVA, RUN_FROM_SERVER).keySet());
         fromCode.addAll(scanDirectlyBoundProperties(SIMULATOR_MAIN_JAVA, RUN_FROM_SIMULATOR).keySet());
+        fromCode.addAll(scanDirectlyBoundProperties(SIMULATOR_MPESA_MAIN_JAVA, RUN_FROM_SIMULATOR_MPESA).keySet());
         collect(ReconcilerProperties.class, "nkap.reconciler", fromCode);
         collect(OutboxRelayProperties.class, "nkap.webhooks", fromCode);
         collect(MtnProperties.class, "nkap.provider.mtn", fromCode);
@@ -148,6 +154,8 @@ class ConfigurationReferenceTest {
         List<String> mismatches = new ArrayList<>();
         checkInlineDefaults(scanDirectlyBoundProperties(MAIN_JAVA, RUN_FROM_SERVER), APPLICATION_YML, mismatches);
         checkInlineDefaults(scanDirectlyBoundProperties(SIMULATOR_MAIN_JAVA, RUN_FROM_SIMULATOR), SIMULATOR_APPLICATION_YML, mismatches);
+        checkInlineDefaults(scanDirectlyBoundProperties(SIMULATOR_MPESA_MAIN_JAVA, RUN_FROM_SIMULATOR_MPESA),
+                SIMULATOR_MPESA_APPLICATION_YML, mismatches);
         assertThat(mismatches).as("inline @Value default, application.yml and the reference do not all agree").isEmpty();
     }
 
@@ -299,7 +307,8 @@ class ConfigurationReferenceTest {
      * tree rather than by naming them in a list that could fall out of date the day a fifth
      * one is added the same way. Called once for {@code server/src/main/java} and once for
      * {@code simulator/src/main/java} (issue #99: the first setting {@code nkap-simulator}
-     * ever read this way), each call's result kept separate rather than merged, because a
+     * ever read this way), and once for {@code simulator-mpesa-app/src/main/java}, whose loader
+     * is a copy of {@code simulator}'s and reads the same setting, each call's result kept separate rather than merged, because a
      * property's inline default can only be checked against the {@code application.yml} of
      * the module it actually came from.
      *

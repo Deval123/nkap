@@ -18,9 +18,10 @@ the database; this file is about `nkap.*` and the two ports, not a restatement o
 
 Every default below is the literal value the module that owns the setting ships in its own
 `application.yml` today — `server/src/main/resources/application.yml` for every setting
-except `nkap.scenario.file`, which is `nkap-simulator`'s own. `ConfigurationReferenceTest`
+except `nkap.scenario.file`, which is the simulators' own (`simulator` and `simulator-mpesa-app`
+each ship it in theirs). `ConfigurationReferenceTest`
 (in `server/src/test/java/dev/nkap/server/`) is what keeps this table from drifting from the
-code, `server`'s and `simulator`'s alike — see **How this table is kept honest** at the end
+code, `server`'s and both simulators' alike — see **How this table is kept honest** at the end
 of this file for exactly what it checks and what it does not.
 
 ## The reconciler (`nkap.reconciler.*`)
@@ -137,10 +138,13 @@ the property, `nkap.provider.mpesa.installations[n].<property>`, never its value
 
 ## The simulator's scenario file (`nkap.scenario.file`)
 
-The one setting in this table that belongs to `nkap-simulator`, not the gateway — every
-other row above is `server`'s own. Read once at startup and applied exactly as if it had
-been `POST`ed to `/_nkap/scenarios`; not a second source of truth (ADR 0002's amendment,
-`ScenarioFileLoader`).
+The one setting in this table that belongs to the simulators, not the gateway — every
+other row above is `server`'s own. Both images read it, MTN's (`nkap-simulator`) and
+M-Pesa's (`nkap-simulator-mpesa`), with the same default and the same behaviour: the M-Pesa
+deployable's `ScenarioFileLoader` is a copy of the MTN one, and says why. Read once at startup
+and applied exactly as if it had been `POST`ed to `/_nkap/scenarios`; not a second source of
+truth (ADR 0002's amendment, `ScenarioFileLoader`). The document is written in the vocabulary of
+the image's own face, the same one its `POST /_nkap/scenarios` accepts.
 
 | Setting | Default | What happens when it's wrong |
 | --- | --- | --- |
@@ -180,12 +184,12 @@ Two things it deliberately does not do, stated here rather than left to be disco
   `@ConfigurationProperties` record — the first two are read with `@ConditionalOnProperty`,
   the rest with `@Value`. There is no single class to reflect on for these the way there is
   for the four records above, so the test finds them the way it finds everything not in a
-  record: scanning `server/src/main/java` and, since issue #99, `simulator/src/main/java` as
-  plain text for the two annotations, rather than working from a hand-kept list. That scan
-  only recognises a property named as a string literal directly inside one of those two
-  annotations — it would miss one built from a runtime string, one read through
-  `Environment` or a `Binder` with no annotation at all, or one in a module neither directory
-  covers (`provider-mtn`, `core`, `provider-api` — none of which reads an `nkap.*` property
+  record: scanning `server/src/main/java`, since issue #99 `simulator/src/main/java`, and
+  `simulator-mpesa-app/src/main/java` as plain text for the two annotations, rather than
+  working from a hand-kept list. That scan only recognises a property named as a string
+  literal directly inside one of those two annotations — it would miss one built from a
+  runtime string, one read through `Environment` or a `Binder` with no annotation at all, or
+  one in a module none of those directories covers (`provider-mtn`, `core`, `provider-api` — none of which reads an `nkap.*` property
   directly today).
 - **Only `installations[].request-timeout`'s default is cross-checked.** The other MTN
   installation fields have no single meaningful default to check against: most are blank on

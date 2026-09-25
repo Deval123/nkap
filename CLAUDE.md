@@ -82,8 +82,9 @@ not in the test.
 | `conformance` | the kit every adapter must pass | `provider-api` |
 | `simulator-core` | the fake operator's behaviour: scenarios, payment memory, callbacks, control plane | — (never a face module, at any scope) |
 | `simulator-mtn` | MTN's face on it: routes, bodies, statuses, authentication | `simulator-core` |
-| `simulator-mpesa` | M-Pesa's face on it (STK Push); not yet in the image | `simulator-core` |
-| `simulator` | the deployable fake operator (Spring Boot application, image) | `simulator-core`, `simulator-mtn` |
+| `simulator-mpesa` | M-Pesa's face on it (STK Push) | `simulator-core` |
+| `simulator` | the deployable fake MTN operator (Spring Boot application, image) | `simulator-core`, `simulator-mtn` |
+| `simulator-mpesa-app` | the deployable fake M-Pesa operator (Spring Boot application, image) | `simulator-core`, `simulator-mpesa` |
 | `server` | REST, webhooks, outbox, schedulers (Spring Boot) | `provider-api` |
 
 An adapter translates; it never decides. State transitions, idempotency and bookkeeping

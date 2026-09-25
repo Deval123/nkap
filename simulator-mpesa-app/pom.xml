@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <parent>
+    <groupId>dev.nkap</groupId>
+    <artifactId>nkap-parent</artifactId>
+    <version>2.1.0-SNAPSHOT</version>
+  </parent>
+  <artifactId>nkap-simulator-mpesa-app</artifactId>
+  <name>Nkap :: Simulator :: M-Pesa deployable</name>
+
+  <!--
+    The M-Pesa deployable, and nothing else: the Spring Boot application that assembles the
+    neutral core with M-Pesa's face, and the image built from it (ghcr.io/deval123/nkap-simulator-mpesa).
+    simulator/ is the same thing with MTN's face.
+
+    A module of its own, not a second face in simulator/: one application context cannot hold
+    both faces. Measured, with both on one classpath: the context fails before any route is
+    mapped, because the core's CallbackDispatcher takes exactly one CallbackBody and each face
+    supplies one (mtnCallbackBody, mpesaCallbackBody). The /_nkap routes both control planes map
+    would collide as well (not reached, so not measured), and a scenario file loader finds two
+    ControlPlane beans (measured). Making the control planes conditional alone would not be
+    enough. One face per application.
+
+    Its artifactId is not nkap-simulator-mpesa because that one is already the face's. The
+    image, which is what people see, takes that name.
+  -->
+  <dependencies>
+    <dependency>
+      <groupId>dev.nkap</groupId>
+      <artifactId>nkap-simulator-core</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>dev.nkap</groupId>
+      <artifactId>nkap-simulator-mpesa</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-web</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-test</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <configuration>
+          <!-- Spring MVC binds @PathVariable / @RequestHeader by parameter name. -->
+          <parameters>true</parameters>
+        </configuration>
+      </plugin>
+      <plugin>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-maven-plugin</artifactId>
+        <version>${spring-boot.version}</version>
+        <executions>
+          <!--
+            The runnable, layered jar the Dockerfile packages. Nothing depends on this module
+            as a library today, unlike simulator/, whose plain jar server/ and provider-mtn
+            use at test scope; the classifier is kept anyway so that a consumer added later
+            (provider-mpesa, say, in place of its own boot class) gets a plain jar that
+            resolves, and so both Dockerfiles copy the same "-boot" name.
+          -->
+          <execution>
+            <id>repackage-boot-jar</id>
+            <goals>
+              <goal>repackage</goal>
+            </goals>
+            <configuration>
+              <classifier>boot</classifier>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+</project>

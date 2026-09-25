@@ -58,6 +58,15 @@ All notable changes to Nkap are documented here. The format follows
   `ke`. The chart's own first install also works for the first time. A release that lists no
   MTN installation now starts; before, the gateway's own `cm` default built a Cameroon adapter
   with no credentials, and the gateway refused to start.
+- **A published M-Pesa simulator image, `ghcr.io/deval123/nkap-simulator-mpesa`**, multi-arch,
+  on port 8082 so it runs beside the MTN simulator's 8081. It plays Safaricom Daraja's STK
+  Push, collections only: the token route, the submission and the status query, and the
+  callback. Scenarios are declared through the same `/_nkap` control plane, or mounted at
+  `/etc/nkap/scenario.json` as for the MTN image. It checks no Consumer Key and no `Password`,
+  since Safaricom's answer to a wrong one was never observed, and plays no B2C. **Its control
+  plane is unauthenticated and `GET /_nkap/received` reports the Consumer Key and Secret it was
+  sent, in the clear**, so it is for tests and sandboxes only: never point anything holding real
+  credentials at it, and never expose `/_nkap`. The image's own description says the same.
 
 ### Changed
 

@@ -135,17 +135,21 @@ passes, in exactly this order:
   anything runs, and never makes an adapter misbehave where money moves. A minor release
   may break it, and its release note must say so.
 - Step 3, in full: the workflow runs the full reactor build, then publishes
-  `ghcr.io/deval123/nkap-gateway` and `ghcr.io/deval123/nkap-simulator` for `linux/amd64`
-  and `linux/arm64`, tagged `X.Y.Z` and the moving `latest` — never on a push to `main`, and
-  never a rolling `X.Y` or `X` tag (until 1.0.0, a minor release could break `provider-api`;
-  a tag that moves across one silently is the wrong default for a payments gateway). It then
+  `ghcr.io/deval123/nkap-gateway`, `ghcr.io/deval123/nkap-simulator` and
+  `ghcr.io/deval123/nkap-simulator-mpesa` for `linux/amd64` and `linux/arm64`, tagged
+  `X.Y.Z` and the moving `latest` — never on a push to `main`, and never a rolling `X.Y` or
+  `X` tag (until 1.0.0, a minor release could break `provider-api`; a tag that moves across
+  one silently is the wrong default for a payments gateway). It then
   pulls what it just published, from a job with no registry credentials, and runs
   `examples/demo.sh` against `nkap-standalone.compose.yaml` — the file a real deployment
-  downloads. A publish nobody can pull, or that only works from a clone, fails the build.
+  downloads — and runs the M-Pesa simulator on its own, since the demo does not use it. A
+  publish nobody can pull, or that only works from a clone, fails the build.
   GHCR packages default to private on their first publish and there is no supported way to
   flip that from the workflow alone (see the workflow's own comment); after the very first
-  tagged release, a maintainer sets both packages to public once, by hand, in their package
-  settings — the pull-and-verify step above is what catches this being forgotten.
+  tagged release, a maintainer sets each package to public once, by hand, in its package
+  settings — including `nkap-simulator-mpesa` at the first release that publishes it, though
+  the other two are long public — the pull-and-verify step above is what catches this being
+  forgotten.
 
 `v1.0.0` was Nkap's first release; its scope was fixed in
 [`docs/roadmap/v1.0.0-mtn-end-to-end.md`](docs/roadmap/v1.0.0-mtn-end-to-end.md), which is a

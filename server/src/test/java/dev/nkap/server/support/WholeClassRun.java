@@ -25,11 +25,20 @@ import org.slf4j.LoggerFactory;
  *       class.</li>
  *   <li>Fewer finished, a partial run: the check is skipped, and one line is logged saying so.
  *       A silent skip would read as a pass.</li>
- *   <li>The whole class ran but a test failed: the check is skipped too, and the line says why. A
- *       failed test may have stopped before recording what the check reads, so the check would
- *       report a gap that is only that failure's echo. The failure itself already fails the
- *       build.</li>
+ *   <li>The whole class ran but a test failed or was aborted: the check is skipped too, and a
+ *       warning says why. Such a test may have stopped before recording what the check reads, so
+ *       the check would report a gap that is only that test's echo.</li>
  * </ul>
+ *
+ * <p><strong>An aborted test switches the check off while the build stays green.</strong> A test
+ * aborted by an assumption ({@code assumeTrue} and the like) records nothing, so the check is
+ * skipped as for a failure. But Surefire and Failsafe report an abort as a skip, not a failure, so
+ * nothing else goes red, and the warning is the only trace that the check did not run. An
+ * assumption in a class that uses this is therefore not free: it can turn the check off unseen.
+ *
+ * <p>A {@code @Disabled} test counts as finished, not failed. The run still counts as whole and
+ * the check runs, so it reports whatever coverage the disabled test would have given. That is
+ * the correct outcome: disabling a test must not hide what it proved.
  *
  * <p>Only {@code @Test} methods are counted. A class with parameterized, repeated or dynamic tests
  * would run more tests than it declares {@code @Test} methods, so it is refused rather than
@@ -93,7 +102,7 @@ public final class WholeClassRun implements TestWatcher, AfterAllCallback {
             return;
         }
         if (failed.get() > 0) {
-            log.info("{}: {} of {} tests failed, so {} was not checked; fix them first.",
+            log.warn("{}: {} of {} tests failed or were aborted, so {} was not checked; fix them first.",
                     testClass.getSimpleName(), failed.get(), declared, checkName);
             return;
         }

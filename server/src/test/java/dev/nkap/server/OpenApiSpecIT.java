@@ -26,7 +26,6 @@ import java.util.Set;
 import java.util.TreeSet;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentSkipListSet;
-import org.assertj.core.api.SoftAssertions;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -277,35 +276,7 @@ class OpenApiSpecIT extends PostgresSpringBootIT {
      * {@link #PROVED_ELSEWHERE}, each direction reported on its own.
      */
     static void everyDocumentedStatusIsProduced() {
-        assertCoverage(documentedStatuses(spec), OBSERVED, PROVED_ELSEWHERE);
-    }
-
-    static void assertCoverage(Set<String> documented, Set<String> observed, Map<String, String> provedElsewhere) {
-        Set<String> notStatusCodes = new TreeSet<>();
-        Set<String> unproduced = new TreeSet<>();
-        for (String triple : documented) {
-            String status = triple.substring(triple.lastIndexOf(' ') + 1);
-            if (!status.chars().allMatch(Character::isDigit)) {
-                notStatusCodes.add(triple);
-            } else if (!observed.contains(triple) && !provedElsewhere.containsKey(triple)) {
-                unproduced.add(triple);
-            }
-        }
-        Set<String> stale = new TreeSet<>(provedElsewhere.keySet());
-        stale.removeAll(documented);
-
-        SoftAssertions softly = new SoftAssertions();
-        softly.assertThat(unproduced)
-                .as("documented in docs/openapi.yaml, but no test in OpenApiSpecIT produces it and PROVED_ELSEWHERE"
-                        + " names no class that does")
-                .isEmpty();
-        softly.assertThat(stale)
-                .as("named in PROVED_ELSEWHERE, but docs/openapi.yaml no longer documents it: a stale exception")
-                .isEmpty();
-        softly.assertThat(notStatusCodes)
-                .as("documented under a response key that is not a status code, which no single test can produce")
-                .isEmpty();
-        softly.assertAll();
+        StatusCoverage.assertCoverage(documentedStatuses(spec), OBSERVED, PROVED_ELSEWHERE);
     }
 
     private JsonNode body(ResponseEntity<String> response) {

@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -101,7 +102,26 @@ class WholeClassRunTest {
         try (LogCapture log = new LogCapture(WholeClassRun.class)) {
             run.afterAll(context);
             assertThat(log.events()).singleElement().extracting(ILoggingEvent::getFormattedMessage).asString()
-                    .contains("1 of 3 tests failed, so the fixture's coverage was not checked");
+                    .contains("1 of 3 tests failed or were aborted, so the fixture's coverage was not checked");
+        }
+        assertThat(checks).hasValue(0);
+    }
+
+    @Test
+    @DisplayName("an aborted test skips the check with a warning: the build stays green, so the warning is the only trace")
+    void an_aborted_test_skips_the_check_with_a_warning() {
+        ExtensionContext context = contextFor(ThreeTests.class);
+        run.testSuccessful(context);
+        run.testSuccessful(context);
+        run.testAborted(context, new org.opentest4j.TestAbortedException("an assumption"));
+
+        try (LogCapture log = new LogCapture(WholeClassRun.class)) {
+            run.afterAll(context);
+            assertThat(log.events()).singleElement().satisfies(event -> {
+                assertThat(event.getLevel()).isEqualTo(Level.WARN);
+                assertThat(event.getFormattedMessage())
+                        .contains("1 of 3 tests failed or were aborted, so the fixture's coverage was not checked");
+            });
         }
         assertThat(checks).hasValue(0);
     }

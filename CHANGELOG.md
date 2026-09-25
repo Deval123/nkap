@@ -78,6 +78,17 @@ All notable changes to Nkap are documented here. The format follows
   save credential files as UTF-8 without a byte-order mark; the gateway does not strip it. A padded MTN country (`" cm"`) keeps working as before: the profile now
   carries the same stripped country its provider id already used. `provider-api` is unchanged.
 
+### Security
+
+- **No object that holds a credential prints it.** The bound configuration, the adapter
+  profile, the bearer token, a merchant's webhook signing secret and a newly issued API key
+  each print a constant marker in place of every credential, so a log line, an error message
+  quoting a bound object, or a failing test assertion cannot print one. No code path in the
+  gateway printed one before this change, apart from the two provisioning commands, which
+  show a newly issued API key or webhook secret once because that is their job; nothing needs
+  rotating. The masking closes the paths this code does not control. A test per record fails
+  when a component is added without being classified.
+
 ## [2.0.0] - 2026-09-21
 
 ### Breaking

@@ -142,10 +142,12 @@ the gateway. There are two forms, chosen per installation by `credentialsAs`:
   without a restart. **Measured on a cluster, up to the operator:** CI installs this chart on
   `kind` and patches the Secret, and the next submissions carry a `Password` from the new passkey
   and a token fetched with the new Consumer Key, with no restart and the staleness gauge at zero
-  (`.github/workflows/credential-rotation.yml`). The Secret took about a minute to reach the pod
-  there, within the kubelet's own delay, not the gateway's. **That Safaricom accepts the new
-  passkey is not measured**: nothing in that job talks to it. For an incident, restarting the pods
-  after replacing the Secret remains the path that does not depend on the kubelet's timing.
+  (`.github/workflows/credential-rotation.yml`). The Secret took 55 to 87 seconds to reach the
+  pod there. A pod with no gateway in it saw the file change as late, so the delay is not the
+  gateway's; why it varies is not known ([ADR 0015](../../docs/adr/0015-credentials-read-at-use.md)'s
+  amendment). **That Safaricom accepts the new passkey is not measured**: nothing in that job
+  talks to it. For an incident, restarting the pods after replacing the Secret remains the path
+  that does not depend on how long the update takes to arrive.
 - **`env`.** The three credentials are environment variables, as this chart rendered them
   before, read once at startup. For a cluster that cannot mount Secrets as volumes, or an
   operator who prefers variables. Replacing the Secret then takes a restart.

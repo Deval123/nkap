@@ -32,10 +32,10 @@ CLUSTER="${CLUSTER:-nkap-rotation}"
 RELEASE=rotation
 GATEWAY="rotation-nkap"
 HERE=.github/kind/credential-rotation
-# How long a patched Secret may take to reach the pod. The kubelet's delay can reach its sync
-# period plus its Secret cache TTL, a minute each by default; runs on kind took 55 to 87s, and the
-# measurement in #240 recorded about 2s on another. Five minutes fails a hung rotation loudly
-# without making a slow kubelet a flake.
+# How long a patched Secret may take to reach the pod. Every delay observed so far was 55 to 87s;
+# five minutes covers all of them, with margin for a slower cluster, and still fails a hung
+# rotation loudly. Why the delay varies is not known: an earlier measurement on the same Kubernetes
+# version found about 2s, and nothing explains the difference (ADR 0015's amendment).
 ROTATION_TIMEOUT="${ROTATION_TIMEOUT:-300}"
 GATEWAY_PORT=18080
 MANAGEMENT_PORT=19464

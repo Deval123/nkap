@@ -26,7 +26,8 @@ import org.springframework.web.server.ResponseStatusException;
  *
  * <p>Neither request is validated beyond what is needed to act on it. Safaricom refused one
  * {@code CallBackURL} with {@code 400.002.02} and accepted others, and the page cannot say
- * which rule the refusal applied; nor is {@code Password} checked against a passkey. A test
+ * which rule the refusal applied; nor is {@code Password} checked against a passkey. It is
+ * recorded, unchecked, in {@link MpesaReceived}, on arrival and before anything is refused. A test
  * that wants a refusal declares one. Collections only: no B2C.
  */
 @RestController
@@ -35,12 +36,14 @@ class StkPushController {
     private final Submissions<MpesaScenario, MpesaResult> submissions;
     private final MpesaScenarioEngine engine;
     private final MpesaTokens tokens;
+    private final MpesaReceived received;
 
     StkPushController(Submissions<MpesaScenario, MpesaResult> submissions, MpesaScenarioEngine engine,
-                      MpesaTokens tokens) {
+                      MpesaTokens tokens, MpesaReceived received) {
         this.submissions = submissions;
         this.engine = engine;
         this.tokens = tokens;
+        this.received = received;
     }
 
     /**
@@ -57,6 +60,7 @@ class StkPushController {
     public Object processRequest(
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @RequestBody(required = false) Map<String, Object> body) {
+        received.submissionArrived(body);
         tokens.require(authorization);
 
         Map<String, String> callbackData = new LinkedHashMap<>();

@@ -207,6 +207,15 @@ public abstract class ControlPlane<D extends ControlPlane.Declared<R>, R extends
         store.clear();
         callbacks.clear();
         submissions.reset();
+        forgetFaceState();
+    }
+
+    /**
+     * Forgets whatever state a face keeps of its own, beside what the core keeps, as part of
+     * {@code DELETE /_nkap/state}. Nothing, unless a face overrides it. A face that records what
+     * it received clears the record here, so a test never reads a previous test's requests.
+     */
+    protected void forgetFaceState() {
     }
 
     /**

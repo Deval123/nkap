@@ -54,6 +54,16 @@ import org.slf4j.LoggerFactory;
  * {@code CredentialStalenessMetrics} exports it as a gauge a deployer can alert on. Recovery logs
  * nothing: the gauge returning to zero is the signal. Do not add a second warning for it.
  *
+ * <p><strong>It never throws.</strong> {@code MpesaAdapter} calls it on the payment's own path,
+ * so a throw here would fail the payment, which is exactly what the decision above refuses. The
+ * expected failures are each handled where they arise: a file that cannot be looked at, a file
+ * that cannot be read, a value {@link MpesaProfile} refuses. {@link #get()} does not rely on
+ * those three staying true. Any other {@link RuntimeException} is treated as a rejection too.
+ * That has a cost: a programming error is masked as stale credentials instead of surfacing as a
+ * failure. It is the better of the two outcomes: the installation keeps a known-good value, one
+ * warning names the exception's type (never its message, which is not known to be free of a
+ * credential), and the gauge says it is stale, rather than a payment failing.
+ *
  * <p>At startup there is no last valid profile, so a bad value still stops the gateway, as it
  * always has. That asymmetry is the decision, not an accident of where the code sits.
  */
@@ -107,13 +117,13 @@ final class RereadMpesaProfile implements Supplier<MpesaProfile> {
         if (files.isEmpty()) {
             return held;
         }
-        Map<Credential, FileTime> now = new HashMap<>();
-        files.forEach((credential, file) -> now.put(credential, file.modified()));
-        if (now.equals(seen)) {
-            return held;
-        }
-        seen = now;
         try {
+            Map<Credential, FileTime> now = new HashMap<>();
+            files.forEach((credential, file) -> now.put(credential, file.modified()));
+            if (now.equals(seen)) {
+                return held;
+            }
+            seen = now;
             held = new MpesaProfile(held.baseUrl(), held.businessShortCode(),
                     current(Credential.PASSKEY, held.passkey()),
                     current(Credential.CONSUMER_KEY, held.consumerKey()),
@@ -124,6 +134,10 @@ final class RereadMpesaProfile implements Supplier<MpesaProfile> {
             reject(unreadable.file() + " could not be read");
         } catch (IllegalArgumentException invalid) {
             reject(named(invalid.getMessage()));
+        } catch (RuntimeException unexpected) {
+            // Not one of the failures above: a defect, not a bad file. Named by its type only;
+            // its message is not known to be free of a credential.
+            reject("the credential files could not be checked (" + unexpected.getClass().getName() + ")");
         }
         return held;
     }
@@ -151,7 +165,7 @@ final class RereadMpesaProfile implements Supplier<MpesaProfile> {
         staleSince = clock.instant();
         String reason = why.endsWith(".") ? why.substring(0, why.length() - 1) : why;
         log.warn("M-Pesa installation {}: the credentials on disk were rejected, and payments keep using the last"
-                + " valid ones. {}. Fix the file; the gauge nkap.credentials.stale.seconds stays above zero until"
+                + " valid ones. {}. Fix the file; the gauge nkap_credentials_stale_seconds stays above zero until"
                 + " then, and a restart in this state fails.", id, reason);
     }
 

@@ -56,7 +56,12 @@ made.
    look, no file is read. Files that changed together are accepted or rejected together.
 
 7. **A changed Consumer Key or Secret drops the bearer token obtained with the old pair.** A
-   passkey needs nothing: it is hashed into each `Password` as the request is built.
+   passkey needs nothing: it is hashed into each `Password` as the request is built. The
+   rotation takes effect at the next token use, with one bounded exception, named here because
+   it weakens the defence slightly. A refresh already in flight with the old pair can complete
+   after the drop and serve one more call with its token before the difference is seen. The call
+   after that sees it and drops the token again. Closing that window would take a lock on the
+   payment path, which is worse.
 
 8. **The change is additive.** `MpesaAdapter` gains a public constructor taking a
    `Supplier<MpesaProfile>`. Its two existing public constructors keep their shape and behaviour,

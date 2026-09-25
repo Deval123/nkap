@@ -25,9 +25,11 @@ import java.util.function.Supplier;
  * number or a string is not recorded, so both are read. Concurrent callers share one in-flight
  * refresh, as {@code provider-mtn}'s token cache does, for the same reason.
  *
- * <p>The Consumer Key and Secret are asked for each time a token is wanted, and a token is kept
- * only while they are the pair it was obtained with. A token outlives its credentials by up to
- * an hour, so without this a rotated pair would change nothing until the old token expired. The
+ * <p>The Consumer Key and Secret are asked for each time a token is wanted, and a token obtained
+ * with a pair that is no longer current is dropped at the next use. A token outlives its
+ * credentials by up to an hour, so without this a rotated pair would change nothing until the old
+ * token expired. One call can still see the old pair's token: a refresh already in flight with it
+ * completes after the drop, and the call after that drops it again (ADR 0015, decision 7). The
  * comparison is {@link String#equals} and produces no message: neither value is printed, logged,
  * or put in an exception.
  */

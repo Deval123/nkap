@@ -240,6 +240,29 @@ class RereadMpesaProfileTest {
     }
 
     @Test
+    @DisplayName("an unexpected failure while looking at the files is a rejection, not a thrown payment: the last valid value serves, one warning, the gauge leaves zero")
+    void an_unexpected_failure_is_a_rejection() {
+        // A file with no path: looking at it throws NullPointerException, which none of the
+        // expected failure paths (an I/O error, a vanished file, an invalid value) produces.
+        CredentialFile broken = new CredentialFile(PASSKEY, null, new CountingTree(secrets, reads));
+        RereadMpesaProfile withBrokenFile = new RereadMpesaProfile(KENYA, startupProfile(),
+                Map.of(Credential.PASSKEY, broken), clock);
+
+        try (LogCapture log = new LogCapture(RereadMpesaProfile.class)) {
+            assertThat(withBrokenFile.get().passkey()).as("the startup passkey still serves").isEqualTo(PASSKEY_1);
+            clock.advance(Duration.ofSeconds(12));
+            assertThat(withBrokenFile.get().passkey()).isEqualTo(PASSKEY_1);
+
+            assertThat(withBrokenFile.staleFor()).isEqualTo(Duration.ofSeconds(12));
+            assertThat(warnings(log)).singleElement()
+                    .extracting(ILoggingEvent::getFormattedMessage).asString()
+                    .contains("mpesa-ke")
+                    .contains("nkap_credentials_stale_seconds");
+            assertNoCredentialIn(warnings(log));
+        }
+    }
+
+    @Test
     @DisplayName("an installation with no credential file never reads anything and is never stale")
     void no_files_means_nothing_to_reread() {
         RereadMpesaProfile fixed = new RereadMpesaProfile(KENYA, startupProfile(), Map.of(), clock);

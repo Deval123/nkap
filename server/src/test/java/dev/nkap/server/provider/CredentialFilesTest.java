@@ -18,6 +18,8 @@ import java.util.Map;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.boot.test.context.ConfigDataApplicationContextInitializer;
 import org.springframework.boot.test.context.assertj.AssertableApplicationContext;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
@@ -103,6 +105,36 @@ class CredentialFilesTest {
             assertThat(kenya.currency()).isEqualTo(Currency.KES);
             assertThat(kenya.requestTimeout()).isEqualTo(Duration.ofSeconds(20));
             assertThat(kenya.country()).isEqualTo("ke");
+        });
+    }
+
+    /**
+     * {@code echo value > NKAP_PROVIDER_MPESA_KE_PASSKEY} writes a trailing newline, and that is
+     * how a person creates these files. Measured against a real jar before this test was written:
+     * one trailing {@code \n}, or {@code \r\n}, is removed, and the operator receives the value
+     * without it. This keeps that true for whoever regenerates the example files with a script.
+     *
+     * <p>Only one. The same measurement found that two trailing newlines are not trimmed at all,
+     * and a trailing space is not either: both reach the operator as part of the value.
+     */
+    @ParameterizedTest(name = "ending in {0}")
+    @ValueSource(strings = {"\n", "\r\n"})
+    @DisplayName("a credential file ending in one newline configures the installation exactly as the same file without it")
+    void one_trailing_newline_configures_the_installation_exactly_as_none(String newline) throws IOException {
+        file("NKAP_PROVIDER_MPESA_KE_PASSKEY", PASSKEY_IN_FILE);
+        MpesaProperties.Installation[] withoutNewline = new MpesaProperties.Installation[1];
+        runner(kenyaWithoutPasskey(), secrets).run(context -> {
+            assertThat(context).hasNotFailed();
+            withoutNewline[0] = context.getBean(MpesaProperties.class).installations().get(0);
+        });
+
+        file("NKAP_PROVIDER_MPESA_KE_PASSKEY", PASSKEY_IN_FILE + newline);
+        runner(kenyaWithoutPasskey(), secrets).run(context -> {
+            assertThat(context).hasNotFailed();
+            assertThat(context.getBean(AdapterRegistry.class).find(ProviderId.of("mpesa-ke"))).isPresent();
+            MpesaProperties.Installation withNewline = context.getBean(MpesaProperties.class).installations().get(0);
+            assertThat(withNewline.passkey()).isEqualTo(PASSKEY_IN_FILE);
+            assertThat(withNewline).isEqualTo(withoutNewline[0]);
         });
     }
 

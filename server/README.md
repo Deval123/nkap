@@ -181,6 +181,12 @@ config tree (`NKAP_SECRETS_DIR` moves it). A file there named exactly like a var
 its contents are the value. Only the exact, upper-case name is read. No directory at all is
 fine: a deployment that uses variables alone starts exactly as before.
 
+A single trailing newline is removed, so `echo value > NKAP_PROVIDER_MTN_CM_API_KEY` works:
+`\n` or `\r\n`, measured at the operator. **Nothing else is trimmed.** A trailing space, or a
+second trailing newline, becomes part of the credential. The gateway starts normally, the
+operator receives the wrong credential on the first request, and no log shows the extra
+characters. Write one value, then at most one newline.
+
 `compose.yaml` does this for every MTN credential. Its `secrets:` block mounts each one from
 `examples/compose-secrets/` (placeholders pointing at the simulator) into `/run/secrets`, so
 `docker inspect` on the gateway shows a mount path and not the value. Outside compose, mount the

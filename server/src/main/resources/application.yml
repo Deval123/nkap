@@ -14,6 +14,11 @@ spring:
     # Read once, at startup, like the variables: replacing a file takes a restart. One name as
     # both a variable and a file fails startup (CredentialSourceGuard), and so does a file for a
     # slot declared nowhere below (ProviderSlotGuard). Only the exact, upper-case name is read.
+    #
+    # One trailing newline is removed: \n or \r\n, what `echo value > FILE` writes. Measured
+    # against a real jar, on what a stub operator received. Nothing else is trimmed — a trailing space, or two
+    # trailing newlines, reach the operator as part of the credential. examples/compose-secrets/
+    # holds both shapes on purpose, and CredentialFilesTest keeps the one-newline answer true.
     import: optional:configtree:${NKAP_SECRETS_DIR:/run/secrets}/
   datasource:
     # The database connection comes from the environment, like the operator credentials.

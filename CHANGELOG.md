@@ -8,6 +8,16 @@ All notable changes to Nkap are documented here. The format follows
 
 ### Added
 
+- **Credentials may come from files named after the variables they replace.** The gateway
+  imports `/run/secrets` (`NKAP_SECRETS_DIR` moves it). A file there named exactly like a
+  variable, such as `NKAP_PROVIDER_MTN_CM_API_KEY`, is read where that variable would be.
+  `compose.yaml` now mounts its MTN placeholders this way, so `docker inspect` no longer prints
+  them. Nothing changes for a deployment using variables, with or without the directory. A name
+  set both as a variable and as a file fails startup rather than one quietly winning. A file
+  for an undeclared slot fails startup exactly as the variable does. Credentials are still read
+  once, at startup: replacing one, from either source, takes a restart. The Helm chart is
+  unchanged.
+
 - **M-Pesa is a configured operator.** Safaricom's STK Push, collections only: one Kenya slot,
   `NKAP_PROVIDER_MPESA_KE_*`, registered as `mpesa-ke`. `POST /payments` routes on the country
   its installation states, so a Kenyan payment reaches it and a Cameroonian one reaches MTN. A

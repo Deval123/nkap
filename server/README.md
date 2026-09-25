@@ -151,8 +151,8 @@ without parsing prose.
 
 ## Configuration
 
-Credentials and the database connection come from the **environment**, never a committed
-file:
+Credentials and the database connection come from the **environment**, or from files named
+after its variables (below), never a committed file:
 
 | Variable | Example |
 | --- | --- |
@@ -174,6 +174,38 @@ file:
 | `NKAP_PROVIDER_MPESA_KE_CONSUMER_KEY` | *(secret)* |
 | `NKAP_PROVIDER_MPESA_KE_CONSUMER_SECRET` | *(secret)* |
 | `NKAP_PROVIDER_MPESA_KE_CURRENCY` | `KES` |
+
+**Any of these variables may be a file instead.** The gateway imports `/run/secrets` as a
+config tree (`NKAP_SECRETS_DIR` moves it). A file there named exactly like a variable, such as
+`NKAP_PROVIDER_MTN_CM_API_KEY` or `NKAP_DB_PASSWORD`, is read where that variable would be, and
+its contents are the value. Only the exact, upper-case name is read. No directory at all is
+fine: a deployment that uses variables alone starts exactly as before.
+
+A single trailing newline is removed, so `echo value > NKAP_PROVIDER_MTN_CM_API_KEY` works:
+`\n` or `\r\n`, measured at the operator. **Nothing else is trimmed.** A trailing space, or a
+second trailing newline, becomes part of the credential. The gateway starts normally, the
+operator receives the wrong credential on the first request, and no log shows the extra
+characters. Write one value, then at most one newline.
+
+`compose.yaml` does this for every MTN credential. Its `secrets:` block mounts each one from
+`examples/compose-secrets/` (placeholders pointing at the simulator) into `/run/secrets`, so
+`docker inspect` on the gateway shows a mount path and not the value. Outside compose, mount the
+files there yourself. For a hand-written Kubernetes manifest, that is a Secret mounted as a
+volume at `/run/secrets`, with each key named after its variable. The Helm chart does not do
+this: it passes credentials as variables by `secretKeyRef`, which already keeps their values
+out of the Pod spec.
+
+Two refusals come with it:
+- **A name set both as a variable and as a file fails startup.** The message names the variable
+  and tells you to remove one of the two; the gateway does not pick one.
+- **A file for a slot that `application.yml` does not declare fails startup**, exactly as the
+  variable would, and the message says it was a file.
+
+Neither message ever contains a value or a file's contents.
+
+**Credentials are read once, at startup, whichever source they come from. Replacing one, as a
+variable or as a file, takes a restart.** A file changed in place under a running gateway is
+not noticed.
 
 One installation per country (issue #82), each its own `mtn-<country>` adapter — the table
 above is Cameroon's; a second country is another installation slot with its own env var

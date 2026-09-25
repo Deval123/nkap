@@ -150,13 +150,14 @@ been `POST`ed to `/_nkap/scenarios`; not a second source of truth (ADR 0002's am
 
 Everything else Spring Boot reads is Spring Boot's own documentation to consult. These
 four are the ones every compose file in this repository actually sets, so they earn a row
-here.
+here, with a fifth that `application.yml` sets for every deployment.
 
 | Setting | Default | What happens when it's wrong |
 | --- | --- | --- |
 | `server.port` | `8080` | An occupied or invalid port fails the gateway at startup — it refuses to bind rather than silently serving on a different port. |
 | `spring.datasource.url` | `jdbc:postgresql://localhost:5432/nkap` (env: `NKAP_DB_URL`) | Unreachable, and the gateway fails at startup on its first connection attempt rather than serving traffic against no database. Reachable but pointed at the wrong database, the gateway starts and runs Flyway migrations against — and then reads and writes — whichever database this actually names, silently, with no indication it is not the one intended. |
 | `spring.datasource.username` / `spring.datasource.password` | `nkap` / `nkap` (env: `NKAP_DB_USER` / `NKAP_DB_PASSWORD`) | Wrong credentials fail the gateway at startup the same way an unreachable URL does — PostgreSQL refuses the connection before Flyway or anything else runs. |
+| `spring.config.import` | `optional:configtree:/run/secrets/` (env: `NKAP_SECRETS_DIR` moves the directory) | Each file in the directory, named exactly like an environment variable, stands in for that variable (`server/README.md`, *Configuration*). If it points at the wrong directory, the files are silently not read, because the import is optional so that a deployment using variables alone can start. A required credential of a configured installation then fails startup as blank. A file that was meant to set a slot's country leaves that installation unconfigured instead. |
 | `management.server.port` | `9464` | This is the port `application.yml`'s own comment already explains at length: publishing it — unlike the API's own port, which is meant to be public — hands anyone who can reach it payments-by-state, reconciler passes and escalations, operator latency, the suspense balance in a real currency, and, since issue #113, the list of escalated payments by reference and merchant — the first row-level rather than aggregate data this port carries. No compose file in this repository maps it to the host; it must stay that way behind a proxy, on an internal network only. |
 
 ## How this table is kept honest

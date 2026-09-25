@@ -4,6 +4,22 @@ server:
 spring:
   application:
     name: nkap-server
+  config:
+    # A second source for the same names as the environment variables below: a file in this
+    # directory named exactly like a variable (NKAP_PROVIDER_MPESA_KE_PASSKEY, NKAP_DB_PASSWORD)
+    # feeds the same placeholder the variable would. /run/secrets is where compose's `secrets:`
+    # puts them; NKAP_SECRETS_DIR moves it. `optional:` because a deployment that uses variables
+    # alone has no such directory, and must start exactly as before.
+    #
+    # Read once, at startup, like the variables: replacing a file takes a restart. One name as
+    # both a variable and a file fails startup (CredentialSourceGuard), and so does a file for a
+    # slot declared nowhere below (ProviderSlotGuard). Only the exact, upper-case name is read.
+    #
+    # One trailing newline is removed: \n or \r\n, what `echo value > FILE` writes. Measured
+    # against a real jar, on what a stub operator received. Nothing else is trimmed — a trailing space, or two
+    # trailing newlines, reach the operator as part of the credential. examples/compose-secrets/
+    # holds both shapes on purpose, and CredentialFilesTest keeps the one-newline answer true.
+    import: optional:configtree:${NKAP_SECRETS_DIR:/run/secrets}/
   datasource:
     # The database connection comes from the environment, like the operator credentials.
     # The compose file (§6) will pin the server and its PostgreSQL together.
@@ -184,6 +200,16 @@ nkap:
       # from a nested "api.key" without a YAML key already naming the field, and silently
       # fails the whole list element when it guesses wrong. Both slots declared here, with
       # named placeholders, sidesteps that guesswork entirely.)
+      #
+      # (Its sibling, also measured against a real jar and also rejected: credential files named
+      # after the bound property, nkap.provider.mpesa.installations[0].passkey, through the
+      # config tree imported above. Such a file does bind, brackets and index intact — but Spring
+      # does not merge list elements across property sources. It takes the whole list from the
+      # highest-ranked source holding any element of it, and the config tree outranks this file.
+      # So one credential file replaced this list with a single element carrying that one
+      # property: the country went blank, the installation was skipped, and the gateway started
+      # cleanly without it. Files are therefore named after the variables instead, and feed the
+      # placeholders here field by field, leaving this list built from one source.)
       installations:
         - base-url: ${NKAP_PROVIDER_MTN_CM_BASE_URL:}
           target-environment: ${NKAP_PROVIDER_MTN_CM_TARGET_ENVIRONMENT:}

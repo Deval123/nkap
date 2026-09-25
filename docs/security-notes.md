@@ -215,7 +215,7 @@ not a second copy:
 
 ## 3. What Nkap does not protect, by name
 
-Two things, deliberately out of this slice, each with the reason it was left out rather
+Three things, deliberately out of scope, each with the reason it was left out rather
 than a silence a reader has to interpret for themselves:
 
 - **Rate limiting.** A reverse proxy does this better, and it is its job — caller
@@ -226,6 +226,14 @@ than a silence a reader has to interpret for themselves:
 - **An audit trail of which key did what.** The payment history already answers what
   happened and why; who asked starts to matter once a merchant holds several keys, which is
   not yet the common case this project is built for.
+- **The simulator must never be given real credentials.** Its control plane, `/_nkap`, is
+  unauthenticated because it is a test tool, and its M-Pesa face records what it received so a
+  test can see a rotated credential arrive: the Consumer Key and Secret in the clear, and each
+  submission's `Password`, from which the passkey can be read back (§1). `GET /_nkap/received`
+  serves them to anyone who can reach it. That is acceptable for a simulator, since the gateway
+  sends the same values to whatever its `base-url` names. It follows that a deployment holding
+  real credentials must never point at a simulator, or it hands them to whoever can reach
+  `/_nkap`.
 
 ## 4. What an operator must do that Nkap cannot
 

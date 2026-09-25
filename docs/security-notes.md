@@ -137,9 +137,11 @@ submission and every status query carries a `Password` computed from it:
   three as files by default (`charts/nkap/README.md`, *M-Pesa*). Measured end to end on `kind`,
   by a CI job that installs the chart and patches the Secret: the next submissions carried a
   `Password` from the new passkey and a token fetched with the new Consumer Key, with no restart
-  (ADR 0015's amendment). The Secret took about a minute to reach the pod there; that is those
-  clusters' number. That Safaricom accepts the new passkey is not measured: nothing in that job
-  talks to it.
+  (ADR 0015's amendment). How long a patched Secret takes to reach the pod is not known: it was
+  observed between about 2 and 87 seconds across runs, no upper bound is established, and the
+  variance is unexplained. **So a rotation that must take effect by a deadline, such as replacing
+  a compromised passkey, is a restart, not a wait.** That Safaricom accepts the new passkey is
+  not measured: nothing in that job talks to it.
 - **A rotated value that is unreadable or invalid does not stop payments.** It is checked by
   the same rule startup applies, so a byte-order mark or a no-break space is refused at use as
   it is at startup. The rejected value is not used. Payments keep using the last valid

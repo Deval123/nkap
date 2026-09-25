@@ -67,6 +67,8 @@ import org.yaml.snakeyaml.Yaml;
  * declares neither feature, {@code nkap.provider.default} is context-wide, and this context's
  * default has to declare both to produce its {@code 200}s. A status that cannot be produced
  * here is proved in a context that can produce it, never left undocumented or unproved.
+ * Per-status coverage is a convention maintained by review, not a mechanism: nothing fails
+ * when a documented status has no test producing it (issue #230).
  *
  * <p>Parsed with SnakeYAML, already on the classpath via {@code spring-boot-starter} — see
  * {@code nkap-standalone.compose.yaml}'s own reasoning (issue #86) for why that beats adding

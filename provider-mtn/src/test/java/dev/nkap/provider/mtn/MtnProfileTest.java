@@ -128,6 +128,28 @@ class MtnProfileTest {
     }
 
     @Test
+    @DisplayName("a leading byte-order mark (U+FEFF) is refused -- neither isWhitespace nor isSpaceChar reports it, so this pins the format-character clause")
+    void a_byte_order_mark_is_refused() {
+        assertThat(Character.isWhitespace(0xFEFF) || Character.isSpaceChar(0xFEFF))
+                .as("the premise: U+FEFF is neither whitespace nor a space separator").isFalse();
+        for (String field : FIELDS) {
+            assertThat(refusal(field, "\uFEFF" + "value"))
+                    .startsWith(field + " has leading whitespace or an invisible character");
+        }
+    }
+
+    @Test
+    @DisplayName("a leading replacement character (U+FFFD) and a trailing NUL are refused -- what a UTF-16 file read as UTF-8 begins and ends with")
+    void a_replacement_character_and_a_nul_are_refused() {
+        for (String field : FIELDS) {
+            assertThat(refusal(field, "\uFFFD" + "value"))
+                    .startsWith(field + " has leading whitespace or an invisible character");
+            assertThat(refusal(field, "value" + "\u0000"))
+                    .startsWith(field + " has trailing whitespace or an invisible character");
+        }
+    }
+
+    @Test
     @DisplayName("an interior space is accepted: the rule is about the edges, not about whitespace")
     void an_interior_space_is_accepted() {
         for (String field : FIELDS) {
@@ -141,7 +163,8 @@ class MtnProfileTest {
         String secret = "Zq7Xk9Vw3Rp2Jm";
         for (String field : FIELDS) {
             for (String padded : List.of(" " + secret, secret + " ", " " + secret + " ", secret + "\n",
-                    secret + "\u00A0", "\u00A0" + secret)) {
+                    secret + "\u00A0", "\u00A0" + secret, "\uFEFF" + secret, "\uFFFD" + secret,
+                    secret + "\u0000")) {
                 String message = refusal(field, padded);
                 for (int n = 2; n <= secret.length(); n++) {
                     assertThat(message).as("%s: a %d-character prefix of the value", field, n)
@@ -150,7 +173,11 @@ class MtnProfileTest {
                 assertThat(message).as("the length").doesNotContain(String.valueOf(secret.length()))
                         .doesNotContain(String.valueOf(padded.length()));
                 assertThat(message).as("the character found").doesNotContain("\u00A0").doesNotContain("\n")
-                        .doesNotContain("U+").doesNotContain("00A0");
+                        .doesNotContain("U+").doesNotContain("00A0")
+                        .doesNotContain("\uFEFF").doesNotContain("\uFFFD").doesNotContain("\u0000");
+                assertThat(message.toLowerCase()).as("the kind of character found")
+                        .doesNotContain("byte-order").doesNotContain("bom").doesNotContain("replacement")
+                        .doesNotContain("control").doesNotContain("format").doesNotContain("no-break");
             }
         }
     }

@@ -8,6 +8,8 @@ import static org.assertj.core.api.Assertions.catchThrowable;
 import dev.nkap.core.money.Currency;
 import java.net.URI;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -180,5 +182,43 @@ class MtnProfileTest {
                         .doesNotContain("control").doesNotContain("format").doesNotContain("no-break");
             }
         }
+    }
+
+    // --- toString -------------------------------------------------------------------------
+
+    /** Recognisable fake credentials, so a leak of any one of them is unmistakable. */
+    private static final Map<String, String> SECRETS = Map.of(
+            "subscriptionKey", "canary-subscription-key-3e8d",
+            "apiUser", "canary-api-user-0c41",
+            "apiKey", "canary-api-key-9a7f");
+
+    /** Components toString() prints in clear; every other one must be masked. */
+    private static final Set<String> PRINTED = Set.of("baseUrl", "targetEnvironment", "currency", "country");
+
+    private static MtnProfile withCanaries() {
+        return new MtnProfile(URI.create("https://sandbox.momodeveloper.mtn.com"), "sandbox",
+                SECRETS.get("subscriptionKey"), SECRETS.get("apiUser"), SECRETS.get("apiKey"), Currency.EUR, "rw");
+    }
+
+    @Test
+    @DisplayName("toString() prints none of the credentials, so a failing assertion or a stray log line cannot leak one")
+    void to_string_prints_no_credential() {
+        String text = withCanaries().toString();
+        SECRETS.forEach((field, secret) -> assertThat(text).as(field).doesNotContain(secret));
+    }
+
+    @Test
+    @DisplayName("toString() still prints the base URL, the target environment and the country, so it stays useful for debugging")
+    void to_string_still_prints_what_is_not_secret() {
+        String text = withCanaries().toString();
+        assertThat(text).contains("baseUrl=https://sandbox.momodeveloper.mtn.com")
+                .contains("targetEnvironment=sandbox")
+                .contains("country=rw");
+    }
+
+    @Test
+    @DisplayName("every record component is accounted for in toString(): printed in clear or masked by a constant, nothing left out")
+    void every_component_is_printed_or_masked() {
+        RecordToString.assertEveryComponentPrintedOrMasked(withCanaries(), PRINTED, SECRETS.keySet(), MtnProfile.MASKED);
     }
 }

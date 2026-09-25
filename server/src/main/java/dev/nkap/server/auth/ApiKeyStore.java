@@ -66,5 +66,19 @@ public interface ApiKeyStore {
 
     /** A freshly minted key: the caller it authenticates, and the token, shown this once and never again. */
     record Provisioned(ApiCredential credential, String token) {
+
+        /** What {@link #toString()} prints in place of the token. */
+        static final String MASKED = "***";
+
+        /**
+         * The credential, which holds no secret, and a constant marker in place of the token.
+         * The token is the API key itself, shown to its caller once; the generated
+         * {@code toString()} would also show it to any log line or failing AssertJ assertion
+         * that printed this record.
+         */
+        @Override
+        public String toString() {
+            return "Provisioned[credential=" + credential + ", token=" + MASKED + "]";
+        }
     }
 }

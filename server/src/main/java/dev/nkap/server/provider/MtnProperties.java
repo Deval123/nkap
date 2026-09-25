@@ -30,6 +30,12 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
 public record MtnProperties(List<Installation> installations) {
 
     /**
+     * What an {@link Installation}'s and a {@link Disbursement}'s {@code toString()} print in
+     * place of a credential.
+     */
+    static final String MASKED = "***";
+
+    /**
      * One country installation.
      *
      * <p>{@code country} is deliberately the only thing that names this installation.
@@ -58,6 +64,26 @@ public record MtnProperties(List<Installation> installations) {
         boolean isConfigured() {
             return !country.isBlank();
         }
+
+        /**
+         * Every component, with the Collections credentials replaced by a constant marker,
+         * present or not, and the {@link Disbursement} printed by its own {@code toString()},
+         * which masks its credentials the same way. The generated {@code toString()} would print
+         * them all to any log line, error message or failing AssertJ assertion that printed this
+         * installation.
+         */
+        @Override
+        public String toString() {
+            return "Installation[baseUrl=" + baseUrl
+                    + ", targetEnvironment=" + targetEnvironment
+                    + ", subscriptionKey=" + MASKED
+                    + ", apiUser=" + MASKED
+                    + ", apiKey=" + MASKED
+                    + ", currency=" + currency
+                    + ", country=" + country
+                    + ", requestTimeout=" + requestTimeout
+                    + ", disbursement=" + disbursement + "]";
+        }
     }
 
     /** The Disbursements product's own credentials. Blank when the installation does not disburse. */
@@ -68,6 +94,16 @@ public record MtnProperties(List<Installation> installations) {
 
         boolean isConfigured() {
             return !subscriptionKey.isBlank() && !apiUser.isBlank() && !apiKey.isBlank();
+        }
+
+        /**
+         * A constant marker for each credential, present or not: every component here is one.
+         * Whether disbursement is configured is deliberately not printed either; it would say
+         * whether each value is blank.
+         */
+        @Override
+        public String toString() {
+            return "Disbursement[subscriptionKey=" + MASKED + ", apiUser=" + MASKED + ", apiKey=" + MASKED + "]";
         }
     }
 }

@@ -530,6 +530,8 @@ table is the ones an integration hits early, with what to actually do about each
 | `request-in-progress` | 409 | An earlier request with this key has not finished | Retry once it has |
 | `unconfigured-country` | 400 | `country` names no installation this deployment configures | The message names what is configured; fix the request |
 | `unserved-currency` | 400 | This installation settles a different currency than requested | Check `docs/providers/mtn.md` for what a given `country` actually settles in |
+| `operation-not-served` | 400 | `GET /balance` or `GET /account-holders/{msisdn}` named an `operation` the default provider does not serve | The message names the ones it does |
+| `feature-not-offered` | 501 | The default provider does not offer that read at all — M-Pesa offers neither | Not retryable; the deployment, not the request, would have to change |
 | `payment-not-found` | 404 | No such reference, or it belongs to another merchant | Same answer either way, on purpose — see step 1 |
 | `original-not-refundable` | 400 | The collection is not `SUCCEEDED` (`UNKNOWN` included) | Wait for it to resolve; never refund a guess |
 | `cannot-refund-a-disbursement` | 400 | The reference names a `DISBURSE`, not a collection | Only a collection can be refunded |

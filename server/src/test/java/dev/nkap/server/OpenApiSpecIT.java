@@ -61,6 +61,15 @@ import org.yaml.snakeyaml.Yaml;
  *       one and not the other fails loudly instead of the two quietly drifting apart.</li>
  * </ol>
  *
+ * <p>One exception to "against the same running application": the {@code 501} that
+ * {@code GET /balance} and {@code GET /account-holders/{msisdn}} document is proved in
+ * {@code FeatureNotOfferedApiIT}, with the same two checks. It needs a default provider that
+ * declares neither feature, {@code nkap.provider.default} is context-wide, and this context's
+ * default has to declare both to produce its {@code 200}s. A status that cannot be produced
+ * here is proved in a context that can produce it, never left undocumented or unproved.
+ * Per-status coverage is a convention maintained by review, not a mechanism: nothing fails
+ * when a documented status has no test producing it (issue #230).
+ *
  * <p>Parsed with SnakeYAML, already on the classpath via {@code spring-boot-starter} — see
  * {@code nkap-standalone.compose.yaml}'s own reasoning (issue #86) for why that beats adding
  * a dependency for this alone.
@@ -393,6 +402,8 @@ class OpenApiSpecIT extends PostgresSpringBootIT {
     }
 
     // --- GET /balance -----------------------------------------------------------------
+
+    // 501 is proved in FeatureNotOfferedApiIT -- see the class javadoc for why not here.
 
     private ResponseEntity<String> getBalance(String key, String operation, String currency) {
         HttpHeaders headers = new HttpHeaders();

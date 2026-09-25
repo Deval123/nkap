@@ -3,6 +3,7 @@ package dev.nkap.server.web;
 import dev.nkap.core.money.Currency;
 import dev.nkap.core.money.Money;
 import dev.nkap.provider.Capability;
+import dev.nkap.provider.ProviderAdapter;
 import dev.nkap.provider.ProviderId;
 import dev.nkap.provider.ProviderUnavailableException;
 import dev.nkap.server.auth.ApiCredential;
@@ -29,6 +30,12 @@ import org.springframework.web.bind.annotation.RestController;
  * not a {@code 500}: {@link ProviderUnavailableException} is mapped to {@code 503} centrally
  * in {@link ApiExceptionHandler}, the read-side equivalent of a submission that does not
  * answer being a {@code 202} rather than an error.
+ *
+ * <p>What this installation cannot serve is refused before the adapter is called, never left
+ * for the adapter to refuse by throwing (see {@link DeclaredCapabilities}): a default provider
+ * that does not declare {@code BALANCE} is {@code 501}, an {@code operation} it does not
+ * declare is {@code 400}, and so is a {@code currency} it does not settle — the same answer
+ * {@code POST /payments} gives, since it is the same fact about the same installation.
  */
 @RestController
 class BalanceController {
@@ -47,8 +54,11 @@ class BalanceController {
         requireAdmin(caller);
         Capability.Operation op = operation(operation);
         Currency ccy = currency(currency);
+        ProviderAdapter adapter = DeclaredCapabilities.require(
+                adapters, defaultProvider, "GET /balance", Capability.Feature.BALANCE, op);
+        PaymentController.rejectUnservedCurrency(adapters, defaultProvider, ccy, "The operator was not asked.");
 
-        Money balance = adapters.require(defaultProvider).balance(op, ccy);
+        Money balance = adapter.balance(op, ccy);
 
         return new BalanceResponse(defaultProvider.toString(), op.name(), balance.amount(), balance.currency().name());
     }

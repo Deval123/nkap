@@ -249,10 +249,16 @@ modification time alone, it passed. What #244 described, a rotated credential ne
 not happen on either cluster. The gate that compares the real path, time and size stays: the real
 path is the more direct signal of a Kubernetes update and costs nothing, and the Kubernetes-layout
 test still guards the case it builds by hand. But it closed no defect these clusters showed, and the
-passages above that say the time does not change are corrected to say so. "About 2 seconds" is
-not borne out either: on the clusters measured since, a patched Secret reached the pod after 55
-to 87 seconds. That is consistent with the kubelet's sync period plus its Secret cache lifetime, a
-minute each by default, though that explanation is not measured.
+passages above that say the time does not change are corrected to say so.
+
+**How long a Secret update takes to reach the pod is not known.** Two measurements of the same
+quantity disagree by roughly thirty times. The first found about 2 seconds, on Kubernetes
+`v1.35.0`. Every run since took 55 to 87 seconds, on `v1.35.0` as well as `v1.37.0`: 64 and 55
+seconds on `v1.35.0` alone. Nothing here explains the difference. Neither number is Kubernetes'.
+Anyone who needs one for their own cluster should measure it there.
+`.github/scripts/kind-credential-rotation.sh` prints it for the `kind` cluster it creates. On any
+other cluster, the same measurement is a pod mounting the Secret, a patch, and a poll of the file
+until its content changes.
 
 **Measured end to end, on a cluster.** `.github/workflows/credential-rotation.yml` runs
 `.github/scripts/kind-credential-rotation.sh`: a `kind` cluster, PostgreSQL, the M-Pesa simulator

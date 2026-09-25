@@ -174,7 +174,8 @@ and the mount path of every credential volume below, both from this one definiti
 can never disagree. Not the gateway's own default, /run/secrets: in the gateway's image /var/run
 is a link to /run, so /run/secrets is where Kubernetes mounts the pod's service-account token
 (/var/run/secrets/kubernetes.io/serviceaccount), and the gateway imports that directory's nested
-files too. A directory of its own holds only what this chart puts there.
+files too. A directory of its own holds only what this chart puts there. CI's helm job fails if
+this is ever at or under /run or /var/run.
 */}}
 {{- define "nkap.credentialsDir" -}}
 /etc/nkap/credentials

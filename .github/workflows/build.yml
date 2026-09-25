@@ -317,6 +317,17 @@ jobs:
               echo "::error::${template}: the credential mount (${mount}) and NKAP_SECRETS_DIR (${dir}) disagree"
               exit 1
             fi
+            # Not only agreeing: a directory of its own. In the gateway's image /var/run links
+            # to /run, and Kubernetes mounts the pod's service-account token under
+            # /var/run/secrets/kubernetes.io/serviceaccount. The import reads nested files, so a
+            # secrets directory at or under either path would import the token as properties.
+            secrets_dir="${dir#value: \"}"; secrets_dir="${secrets_dir%\"}"
+            case "$secrets_dir" in
+              /run|/run/*|/var/run|/var/run/*)
+                echo "::error::${template}: NKAP_SECRETS_DIR is ${secrets_dir}, at or under /run or /var/run. In the gateway's image /var/run links to /run, where Kubernetes mounts the pod's service-account token (/var/run/secrets/kubernetes.io/serviceaccount); the gateway's import reads nested files and would load that token as properties. Keep nkap.credentialsDir a directory of its own."
+                exit 1
+                ;;
+            esac
           done
 
       - name: Assert credentialsAs env renders the three variables and no credential volume

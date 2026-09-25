@@ -117,6 +117,20 @@ All notable changes to Nkap are documented here. The format follows
   payments and does not go unseen: the last valid credentials stay in use, and a gauge reports
   it until the file is fixed. The cost is that the last valid credentials stay in the process's
   memory for as long as it runs, where a heap dump shows them.
+- **In Kubernetes, the default credentials directory would also import the pod's
+  service-account token; the chart imports a directory of its own.** This release adds an
+  import of `/run/secrets` (`NKAP_SECRETS_DIR` moves it). No released version imports any
+  directory, so no earlier release is affected. *Measured:* in the gateway's image `/var/run` is
+  a link to `/run`, and the import reads a directory's nested files. Given a directory laid out
+  like Kubernetes' service-account volume, it produces the properties
+  `kubernetes.io.serviceaccount.token`, `.ca.crt` and `.namespace`. *Not measured:* that a pod
+  mounts the token there. That is where Kubernetes documents it,
+  `/var/run/secrets/kubernetes.io/serviceaccount`, but no cluster was run for this. So a
+  Kubernetes deployment of this release that keeps the default directory would have its
+  service-account token read into the gateway's configuration as properties. The Helm chart
+  sets `NKAP_SECRETS_DIR` to `/etc/nkap/credentials`, and CI fails if it is ever at or under
+  `/run` or `/var/run`. A deployment by other means should set `NKAP_SECRETS_DIR` to a
+  directory of its own.
 
 ## [2.0.0] - 2026-09-21
 

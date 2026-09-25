@@ -168,6 +168,17 @@ name set both as a variable and as a file also fails startup. Refusing it means 
 one value that was checked and another that was used. Both checks read names only, never a
 file's contents.
 
+**In Kubernetes, give the import a directory of its own.** The default, `/run/secrets`, is
+also where the pod's service-account token would be. *Measured:* in the gateway's image
+`/var/run` is a link to `/run`, and the import reads nested files. Given a directory laid out
+like Kubernetes' service-account volume, it produces the properties
+`kubernetes.io.serviceaccount.token`, `.ca.crt` and `.namespace`. *Not measured:* that a pod
+mounts the token at `/var/run/secrets/kubernetes.io/serviceaccount`. That is where Kubernetes
+documents it, but no cluster was run for this. The import would then read the token into the
+gateway's configuration as properties. No released version has the import at all. The Helm
+chart sets `NKAP_SECRETS_DIR` to `/etc/nkap/credentials`, and CI keeps it off `/run` and
+`/var/run`. A deployment by other means should set it to a directory of its own.
+
 **Provisioning is a host-side command, never a route, in every case above** — API keys,
 webhook secrets, and (see ADR 0010) a refund's destination is never a request field either,
 for the same underlying reason: an HTTP route reachable by whatever holds a merchant's own

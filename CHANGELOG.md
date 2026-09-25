@@ -19,7 +19,10 @@ All notable changes to Nkap are documented here. The format follows
   credentials as files (next entry). The Helm chart is unchanged.
 - **A rotated M-Pesa credential file takes effect without a restart.** The passkey, the
   Consumer Key and the Consumer Secret, supplied as files, are read again when their file
-  changes: the next request uses the new passkey, and a new Consumer Key or Secret replaces the
+  changes: a different real path, modification time or size. That covers a file replaced in
+  place, whose time changes, and a Kubernetes Secret update, which re-points a link to a new
+  directory and was measured to leave the time alone. The next request uses the new passkey, and
+  a new Consumer Key or Secret replaces the
   bearer token obtained with the old pair. Nothing to do differently: rotate the file, and the
   running gateway follows. A rotated value that is unreadable or invalid does not stop
   payments. It is refused by the same check as at startup, payments keep the last valid
@@ -35,9 +38,11 @@ All notable changes to Nkap are documented here. The format follows
   form the gateway re-reads (previous entry). The three credential variables are no longer
   rendered in that form, since the gateway refuses a name supplied both ways. The chart sets
   `NKAP_SECRETS_DIR` to the mount path. Nothing to change in your values: the Secret, its keys
-  and the `*SecretKey` overrides are read as before. Whether a cluster's own Secret update
-  reaches the running pod, and how quickly, is not measured yet, so replacing the Secret and
-  restarting the pods is still the certain path. `credentialsAs: env` on the installation
+  and the `*SecretKey` overrides are read as before. Measured on one `kind` cluster, Kubernetes
+  `v1.35.0`: a patched Secret reached the pod after about 2 seconds, in a new directory, with the
+  file's modification time unchanged, which the gateway now detects by its real path (previous
+  entry). That is one cluster's number from one run. The whole path, from a patched Secret to the
+  new passkey reaching Safaricom, is not measured yet. `credentialsAs: env` on the installation
   renders the three variables as before, read once at startup, for a cluster that cannot mount
   Secrets as volumes. Any other value fails rendering.
 
@@ -115,8 +120,10 @@ All notable changes to Nkap are documented here. The format follows
   makes replacing it quicker. The passkey has no observed revocation point, so replacing it is
   the only remedy there is (`docs/security-notes.md` §1). A botched rotation does not stop
   payments and does not go unseen: the last valid credentials stay in use, and a gauge reports
-  it until the file is fixed. The cost is that the last valid credentials stay in the process's
-  memory for as long as it runs, where a heap dump shows them.
+  it until the file is fixed. A Kubernetes Secret mounted by the chart is detected when it
+  changes, although its modification time does not; the whole path in a cluster, to Safaricom
+  accepting the new passkey, is not measured yet. The cost is that the last valid credentials
+  stay in the process's memory for as long as it runs, where a heap dump shows them.
 - **In Kubernetes, the default credentials directory would also import the pod's
   service-account token; the chart imports a directory of its own.** This release adds an
   import of `/run/secrets` (`NKAP_SECRETS_DIR` moves it). No released version imports any

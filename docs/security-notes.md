@@ -128,13 +128,17 @@ submission and every status query carries a `Password` computed from it:
   startup, and holds it in memory for as long as it runs, like every other credential.
   Anything that can read that memory, or the mounted file, can still read the passkey.
 - **Supplied as a file, a rotated passkey takes effect without a restart.** The same holds
-  for the Consumer Key and Secret. When one of the three files changes, the gateway reads it
-  again before its next use: the next request's `Password` uses the new passkey, and a new
+  for the Consumer Key and Secret. When one of the three files changes, meaning a different
+  real path, modification time or size, the gateway reads it again before its next use: the
+  next request's `Password` uses the new passkey, and a new
   Consumer Key or Secret drops the bearer token obtained with the old pair. It is still a
   cut-over with no overlap, as above; what goes is the restart. A value supplied as a variable
   is not re-read: a process cannot see its own environment change. The Helm chart mounts the
-  three as files by default (`charts/nkap/README.md`, *M-Pesa*); whether a cluster's own Secret
-  update reaches the running pod, and how quickly, is not yet measured.
+  three as files by default (`charts/nkap/README.md`, *M-Pesa*). Measured on one `kind`
+  cluster, Kubernetes `v1.35.0`: a patched Secret reached the pod after about 2 seconds, in a new
+  directory and with the file's modification time unchanged. The gateway detects it by the real
+  path, which is why the time alone is not what it compares (ADR 0015). That is one cluster's
+  number. The whole path, to Safaricom accepting the new passkey, is not measured yet.
 - **A rotated value that is unreadable or invalid does not stop payments.** It is checked by
   the same rule startup applies, so a byte-order mark or a no-break space is refused at use as
   it is at startup. The rejected value is not used. Payments keep using the last valid

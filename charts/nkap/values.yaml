@@ -169,8 +169,9 @@ provider:
     # replace (NKAP_PROVIDER_MPESA_KE_PASSKEY and so on; the gateway fixes those names, and the
     # *SecretKey fields above only choose which key of your Secret feeds each). Files are the
     # form the gateway re-reads when they change (ADR 0015), so a replaced passkey can reach it
-    # without a restart. Whether a cluster's own Secret update reaches the running pod, and how
-    # quickly, is not yet measured. The default is files so that a deployment gets that form
+    # without a restart. On one kind cluster (Kubernetes v1.35.0) a patched Secret reached the
+    # pod after about 2 seconds; the whole path, to Safaricom accepting the new passkey, is not
+    # measured yet. The default is files so that a deployment gets that form
     # without reading a release note: the passkey has no observed revocation point, and
     # replacing it quickly is the only remedy there is.
     #

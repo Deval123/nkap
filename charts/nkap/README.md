@@ -139,9 +139,11 @@ the gateway. There are two forms, chosen per installation by `credentialsAs`:
   `NKAP_SECRETS_DIR` to the mount path from the same definition, so the two cannot disagree.
   Files are the form the gateway re-reads when they change
   ([ADR 0015](../../docs/adr/0015-credentials-read-at-use.md)), so a replaced passkey can reach it
-  without a restart. **Whether a cluster's own Secret update reaches the running pod, and how
-  quickly, is not yet measured.** Until it is, do not count on it for an incident; restarting
-  the pods after replacing the Secret is the certain path.
+  without a restart. Measured on one `kind` cluster, Kubernetes `v1.35.0`: a patched Secret
+  reached the pod after about 2 seconds, and the gateway detects the change by the file's real
+  path, since the update leaves its modification time alone. **The whole path, to Safaricom
+  accepting the new passkey, is not yet measured.** Until it is, do not count on it for an
+  incident; restarting the pods after replacing the Secret is the certain path.
 - **`env`.** The three credentials are environment variables, as this chart rendered them
   before, read once at startup. For a cluster that cannot mount Secrets as volumes, or an
   operator who prefers variables. Replacing the Secret then takes a restart.

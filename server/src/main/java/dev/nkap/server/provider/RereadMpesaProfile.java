@@ -3,8 +3,8 @@ package dev.nkap.server.provider;
 import dev.nkap.provider.ProviderId;
 import dev.nkap.provider.mpesa.MpesaProfile;
 import dev.nkap.server.provider.CredentialFileReader.CredentialFile;
+import dev.nkap.server.provider.CredentialFileReader.Stamp;
 import dev.nkap.server.provider.CredentialFileReader.UnreadableCredentialException;
-import java.nio.file.attribute.FileTime;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -35,9 +35,11 @@ import org.slf4j.LoggerFactory;
  *
  * <p>Each call:
  * <ol>
- *   <li>compares each credential file's modification time with the last one seen. If none changed,
- *       it returns the held profile without reading anything. This bounds how many copies of a
- *       credential the heap accumulates;</li>
+ *   <li>compares each credential file's {@link CredentialFileReader.Stamp}, its real path,
+ *       modification time and size, with the last one seen. If none changed, it returns the held
+ *       profile without reading anything. This bounds how many copies of a credential the heap
+ *       accumulates. The real path is what a Kubernetes Secret update changes; the time alone
+ *       does not;</li>
  *   <li>otherwise reads the files and builds a profile from them and the startup fields. The
  *       validation is {@link MpesaProfile}'s own constructor, the same one startup ran, so a value
  *       refused at startup is refused here too;</li>
@@ -91,8 +93,12 @@ final class RereadMpesaProfile implements Supplier<MpesaProfile> {
     private final Clock clock;
 
     private MpesaProfile held;
-    /** The modification times last seen, null until the first look. A missing file maps to null. */
-    private Map<Credential, FileTime> seen;
+    /**
+     * Each file's {@link Stamp} last seen, null until the first look. A file that cannot be looked
+     * at maps to null, which equals itself, so a vanished file is rejected once and not again on
+     * every call, and differs from any real stamp, so its return is seen.
+     */
+    private Map<Credential, Stamp> seen;
     /** When the files were first found rejected; null while the held profile is what they say. */
     private volatile Instant staleSince;
 
@@ -118,8 +124,8 @@ final class RereadMpesaProfile implements Supplier<MpesaProfile> {
             return held;
         }
         try {
-            Map<Credential, FileTime> now = new HashMap<>();
-            files.forEach((credential, file) -> now.put(credential, file.modified()));
+            Map<Credential, Stamp> now = new HashMap<>();
+            files.forEach((credential, file) -> now.put(credential, file.stamp()));
             if (now.equals(seen)) {
                 return held;
             }

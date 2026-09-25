@@ -139,11 +139,13 @@ the gateway. There are two forms, chosen per installation by `credentialsAs`:
   `NKAP_SECRETS_DIR` to the mount path from the same definition, so the two cannot disagree.
   Files are the form the gateway re-reads when they change
   ([ADR 0015](../../docs/adr/0015-credentials-read-at-use.md)), so a replaced passkey can reach it
-  without a restart. Measured on one `kind` cluster, Kubernetes `v1.35.0`: a patched Secret
-  reached the pod after about 2 seconds, and the gateway detects the change by the file's real
-  path, since the update leaves its modification time alone. **The whole path, to Safaricom
-  accepting the new passkey, is not yet measured.** Until it is, do not count on it for an
-  incident; restarting the pods after replacing the Secret is the certain path.
+  without a restart. **Measured on a cluster, up to the operator:** CI installs this chart on
+  `kind` and patches the Secret, and the next submissions carry a `Password` from the new passkey
+  and a token fetched with the new Consumer Key, with no restart and the staleness gauge at zero
+  (`.github/workflows/credential-rotation.yml`). The Secret took about a minute to reach the pod
+  there, within the kubelet's own delay, not the gateway's. **That Safaricom accepts the new
+  passkey is not measured**: nothing in that job talks to it. For an incident, restarting the pods
+  after replacing the Secret remains the path that does not depend on the kubelet's timing.
 - **`env`.** The three credentials are environment variables, as this chart rendered them
   before, read once at startup. For a cluster that cannot mount Secrets as volumes, or an
   operator who prefers variables. Replacing the Secret then takes a restart.
@@ -332,12 +334,19 @@ the rendered output:
   literal `value:` in any render, whether or not anyone remembered to list it;
 - the MTN-only render carries no M-Pesa variable and no public base URL.
 
-**What CI does not do: install this chart into a real cluster.** `helm template` proves the
-chart renders correctly; it does not prove the rendered manifests actually schedule, that the
-`key-init` hook actually completes before `NOTES.txt`'s instructions make sense, that the
-probes actually pass against a real container, or that a rolling upgrade behaves the way the
-question above describes. `release.yml`'s `verify-pull` job is the honest version of this
+**What one CI job does: install this chart into a real cluster, for M-Pesa.**
+`.github/workflows/credential-rotation.yml` installs it on `kind`, from images built from the
+checkout, with a PostgreSQL and the M-Pesa simulator beside it, following this page's own
+install steps. It proves that the rendered manifests schedule, that `key-init` completes and
+prints a key, that the probes pass, and that a patched M-Pesa Secret reaches the operator
+without a restart. It runs on `main`, by hand, and on pull requests touching the chart or the
+credential code. It does not install an MTN release, and it does not upgrade one.
+
+**What CI does not do beyond that.** `helm template` proves the chart renders correctly. For
+every configuration but that one, it does not prove that the rendered manifests actually
+schedule, that the `key-init` hook actually completes before `NOTES.txt`'s instructions make
+sense, or that the probes actually pass against a real container; and for none, that a rolling
+upgrade behaves the way the question above describes. `release.yml`'s `verify-pull` job is the honest version of this
 argument for the compose path — pulling the real published images with no credentials and
-running the real demo against them — and a `kind`-cluster equivalent for this chart is real,
-undone work, not a nicety. Until it exists, treat this chart as unit-tested, not
-integration-tested.
+running the real demo against them. The `kind` job above is that argument for one M-Pesa
+configuration; for the rest, treat this chart as unit-tested, not integration-tested.

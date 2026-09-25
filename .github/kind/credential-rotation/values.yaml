@@ -1,0 +1,33 @@
+# The gateway's chart values for the credential-rotation job, and nothing else. Written from
+# charts/nkap/README.md's own install instructions. No credential here, as the chart requires:
+# the Secrets nkap-db and nkap-mpesa-ke are created by the job, with generated test values.
+#
+# credentialsAs is left to its default, `files`: the mounted Secret is the form under test.
+image:
+  # Built from the checkout and loaded into the cluster; never a published image.
+  repository: nkap-gateway
+  tag: kind
+  pullPolicy: Never
+
+database:
+  host: postgresql
+  existingSecret: nkap-db
+
+# Where the simulator's callbacks reach the gateway, inside the cluster. The job does not depend
+# on a callback arriving; the chart and the gateway require the address to exist.
+publicBaseUrl: "http://rotation-nkap:8080"
+
+provider:
+  # The chart README: a release serving only M-Pesa Kenya sets this, or the gateway falls back to
+  # mtn-cm, which is not configured, and refuses to start.
+  default: mpesa-ke
+  mpesa:
+    installations:
+      - country: ke
+        currency: KES
+        baseUrl: "http://simulator-mpesa:8082"
+        businessShortCode: "174379"
+        existingSecret: nkap-mpesa-ke
+
+keyInit:
+  merchantId: rotation-check

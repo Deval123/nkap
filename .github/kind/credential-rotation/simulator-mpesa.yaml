@@ -1,0 +1,40 @@
+# The M-Pesa simulator for the credential-rotation job, built from the checkout and loaded into
+# the cluster (imagePullPolicy: Never, so a missing load fails instead of pulling a published
+# image that is not the branch under test). Its Service name is what the installation's baseUrl
+# names in values.yaml. It records what the gateway sent it at GET /_nkap/received, which is the
+# whole measurement; it checks nothing.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: simulator-mpesa
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: simulator-mpesa
+  template:
+    metadata:
+      labels:
+        app: simulator-mpesa
+    spec:
+      containers:
+        - name: simulator-mpesa
+          image: nkap-simulator-mpesa:kind
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8082
+          readinessProbe:
+            httpGet:
+              path: /_nkap/scenarios
+              port: 8082
+            periodSeconds: 2
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: simulator-mpesa
+spec:
+  selector:
+    app: simulator-mpesa
+  ports:
+    - port: 8082

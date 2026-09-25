@@ -458,6 +458,53 @@ Left open deliberately rather than guessed. Each is worth a pull request adding 
   holding the subdomain's existence constant, or the reverse — see *The callback* above.
 - **What a successful payment's callback carries** (`CallbackMetadata`, receipt number, payer
   MSISDN) — everything above is the timeout path, because the sandbox payer never answers.
+
+  **Narrowed, not closed: Safaricom's own two artefacts disagree about `CallbackMetadata`,
+  and one of them cannot work.** This is not an observation of traffic. It was read on
+  2026-09-25 from Safaricom's published source and documentation, not from a third party
+  (see *Sources*). `safaricom/mpesa-php-sdk`, `src/TransactionCallbacks.php`, is the one
+  file GitHub's code search returns for `CallbackMetadata` across Safaricom's organisation.
+  Its `processSTKPushRequestCallback()` reads an STK Push callback **by position**, and
+  expects **six** items:
+
+  ```php
+  $amount             = $callbackData->stkCallback->Body->CallbackMetadata->Item[0]->Value;
+  $mpesaReceiptNumber = $callbackData->Body->stkCallback->CallbackMetadata->Item[1]->Value;
+  $balance            = $callbackData->stkCallback->Body->CallbackMetadata->Item[2]->Value;
+  $b2CUtilityAccountAvailableFunds = $callbackData->Body->stkCallback->CallbackMetadata->Item[3]->Value;
+  $transactionDate    = $callbackData->Body->stkCallback->CallbackMetadata->Item[4]->Value;
+  $phoneNumber        = $callbackData->Body->stkCallback->CallbackMetadata->Item[5]->Value;
+  ```
+
+  Three things are true of that code at once, and each can be checked by opening the file:
+
+  - **Two of the six paths are inverted.** `amount` and `balance` say `stkCallback->Body`
+    where the other four say `Body->stkCallback`, so they cannot resolve against the payload
+    the same function reads four lines earlier. Safaricom's own SDK cannot read the amount
+    out of an STK Push callback.
+  - **Six items, where the documentation shows four.** The *M-Pesa Express Simulate* page on
+    `developer.safaricom.co.ke` gives a successful callback with four items: `Amount`,
+    `MpesaReceiptNumber`, `TransactionDate`, `PhoneNumber`. It lists `Balance` among the
+    additional parameters and marks it optional, as it marks every item. Read by the SDK's
+    indices, that example's `TransactionDate` lands in `balance`, its `PhoneNumber` lands in
+    `b2CUtilityAccountAvailableFunds`, and indices 4 and 5 do not exist.
+  - **`b2CUtilityAccountAvailableFunds` did not come from an STK Push payload.** The same
+    file's **B2B** handler, `processB2BRequestCallback()`, reads a field of that exact name
+    at `ResultParameter[3]`: the same index, in a different envelope. The field's name
+    misleads too. It begins with `b2C` but sits in the B2B handler, and the B2C handler's
+    index 3 is `debitPartyAffectedAccountBalance`.
+
+  **What this settles, and what it does not.** It says nothing about what production sends.
+  It is a fact about published code, and it records only what one sample assumed in 2017, the
+  date in the file's own header. The entry above stays open. It settles one thing all the
+  same: **an adapter must read `CallbackMetadata` items by `Name`, never by index.** The two
+  artefacts Safaricom publishes do not agree on the order or the count, so position is not a
+  contract.
+
+  Nothing in this repository reads `CallbackMetadata` today. `MpesaAdapter.parseCallback`
+  reads `Body.stkCallback`, `CheckoutRequestID`, `ResultCode` and `ResultDesc`, and no
+  metadata item at all, because no successful callback has ever been observed. When one is,
+  this paragraph says how to read it.
 - **Whether the in-flight window looks the same for a payer who can be reached.** What a
   genuinely in-flight query answers is no longer unknown: `HTTP 200`, `ResultCode 4999`, "The
   transaction is still under processing". This was seen in one run, on 2026-09-23 (*A query in
@@ -522,3 +569,14 @@ for a citation:
   the name "M-Pesa Open API", confirm which markets it covers, or come from Safaricom or
   Vodacom themselves — `openapiportal.m-pesa.com`, the portal that name is guessed from, is a
   JavaScript application that returned no readable content to check either claim against.
+
+One more statement comes from neither the portal's sandbox pages nor a run. It is the
+paragraph on `CallbackMetadata` under *Still unknown*. It is about Safaricom's published code
+and documentation, not about M-Pesa's behaviour, and both sources are Safaricom's own:
+
+- `safaricom/mpesa-php-sdk`, `src/TransactionCallbacks.php`, functions
+  `processSTKPushRequestCallback()` and `processB2BRequestCallback()`, read 2026-09-25 on
+  `master`, last changed in commit `8b02409` (2018-07-04):
+  <https://github.com/safaricom/mpesa-php-sdk/blob/master/src/TransactionCallbacks.php>.
+- *M-Pesa Express Simulate*, the successful-callback sample and its parameter table, read
+  2026-09-25: <https://developer.safaricom.co.ke/apis/MpesaExpressSimulate>.

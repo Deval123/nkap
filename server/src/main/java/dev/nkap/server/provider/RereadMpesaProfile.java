@@ -38,8 +38,8 @@ import org.slf4j.LoggerFactory;
  *   <li>compares each credential file's {@link CredentialFileReader.Stamp}, its real path,
  *       modification time and size, with the last one seen. If none changed, it returns the held
  *       profile without reading anything. This bounds how many copies of a credential the heap
- *       accumulates. The real path is what a Kubernetes Secret update changes; the time alone
- *       does not;</li>
+ *       accumulates. A Kubernetes Secret update changes the real path, and the resolved file's
+ *       time with it;</li>
  *   <li>otherwise reads the files and builds a profile from them and the startup fields. The
  *       validation is {@link MpesaProfile}'s own constructor, the same one startup ran, so a value
  *       refused at startup is refused here too;</li>

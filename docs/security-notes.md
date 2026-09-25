@@ -134,11 +134,14 @@ submission and every status query carries a `Password` computed from it:
   Consumer Key or Secret drops the bearer token obtained with the old pair. It is still a
   cut-over with no overlap, as above; what goes is the restart. A value supplied as a variable
   is not re-read: a process cannot see its own environment change. The Helm chart mounts the
-  three as files by default (`charts/nkap/README.md`, *M-Pesa*). Measured on one `kind`
-  cluster, Kubernetes `v1.35.0`: a patched Secret reached the pod after about 2 seconds, in a new
-  directory and with the file's modification time unchanged. The gateway detects it by the real
-  path, which is why the time alone is not what it compares (ADR 0015). That is one cluster's
-  number. The whole path, to Safaricom accepting the new passkey, is not measured yet.
+  three as files by default (`charts/nkap/README.md`, *M-Pesa*). Measured end to end on `kind`,
+  by a CI job that installs the chart and patches the Secret: the next submissions carried a
+  `Password` from the new passkey and a token fetched with the new Consumer Key, with no restart
+  (ADR 0015's amendment). How long a patched Secret takes to reach the pod is not known: it was
+  observed between about 2 and 87 seconds across runs, no upper bound is established, and the
+  variance is unexplained. **So a rotation that must take effect by a deadline, such as replacing
+  a compromised passkey, is a restart, not a wait.** That Safaricom accepts the new passkey is
+  not measured: nothing in that job talks to it.
 - **A rotated value that is unreadable or invalid does not stop payments.** It is checked by
   the same rule startup applies, so a byte-order mark or a no-break space is refused at use as
   it is at startup. The rejected value is not used. Payments keep using the last valid

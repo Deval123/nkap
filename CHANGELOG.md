@@ -21,7 +21,7 @@ All notable changes to Nkap are documented here. The format follows
   Consumer Key and the Consumer Secret, supplied as files, are read again when their file
   changes: a different real path, modification time or size. That covers a file replaced in
   place, whose time changes, and a Kubernetes Secret update, which re-points a link to a new
-  directory and was measured to leave the time alone. The next request uses the new passkey, and
+  directory: a new real path and a new time. The next request uses the new passkey, and
   a new Consumer Key or Secret replaces the
   bearer token obtained with the old pair. Nothing to do differently: rotate the file, and the
   running gateway follows. A rotated value that is unreadable or invalid does not stop
@@ -38,11 +38,11 @@ All notable changes to Nkap are documented here. The format follows
   form the gateway re-reads (previous entry). The three credential variables are no longer
   rendered in that form, since the gateway refuses a name supplied both ways. The chart sets
   `NKAP_SECRETS_DIR` to the mount path. Nothing to change in your values: the Secret, its keys
-  and the `*SecretKey` overrides are read as before. Measured on one `kind` cluster, Kubernetes
-  `v1.35.0`: a patched Secret reached the pod after about 2 seconds, in a new directory, with the
-  file's modification time unchanged, which the gateway now detects by its real path (previous
-  entry). That is one cluster's number from one run. The whole path, from a patched Secret to the
-  new passkey reaching Safaricom, is not measured yet. `credentialsAs: env` on the installation
+  and the `*SecretKey` overrides are read as before. Measured end to end on `kind` (Kubernetes
+  `v1.37.0`), by a CI job that installs this chart: a patched Secret changed the `Password` and
+  the Consumer Key the next submissions carried, with no restart, and the staleness gauge stayed
+  at zero. The Secret took 55 to 87 seconds to reach the pod on the clusters measured; that is
+  theirs, not a general number. Nothing measured talks to Safaricom. `credentialsAs: env` on the installation
   renders the three variables as before, read once at startup, for a cluster that cannot mount
   Secrets as volumes. Any other value fails rendering.
 
@@ -130,8 +130,8 @@ All notable changes to Nkap are documented here. The format follows
   the only remedy there is (`docs/security-notes.md` §1). A botched rotation does not stop
   payments and does not go unseen: the last valid credentials stay in use, and a gauge reports
   it until the file is fixed. A Kubernetes Secret mounted by the chart is detected when it
-  changes, although its modification time does not; the whole path in a cluster, to Safaricom
-  accepting the new passkey, is not measured yet. The cost is that the last valid credentials
+  changes, measured on a cluster up to the operator's side; that Safaricom accepts the new
+  passkey is not measured. The cost is that the last valid credentials
   stay in the process's memory for as long as it runs, where a heap dump shows them.
 - **In Kubernetes, the default credentials directory would also import the pod's
   service-account token; the chart imports a directory of its own.** This release adds an

@@ -127,8 +127,9 @@ jobs:
   # A chart CI never renders is a chart nobody has checked since the day it was written --
   # the same "something not exercised by CI stops being true" reasoning as `demo` and
   # `integration-guide` above, applied to charts/nkap. This does not install into a real
-  # cluster; charts/nkap/README.md's own "What CI checks, and what it does not" section says
-  # so and names exactly what that leaves unproven, rather than letting the gap go unsaid.
+  # cluster; credential-rotation.yml does, for one M-Pesa configuration, and only on the pull
+  # requests that touch what it proves. charts/nkap/README.md's own "What CI checks, and what
+  # it does not" section names exactly what the two leave unproven.
   helm:
     runs-on: ubuntu-latest
     steps:

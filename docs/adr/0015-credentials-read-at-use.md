@@ -55,8 +55,9 @@ made.
 6. **The re-read is gated on each file's modification time.**¹ No file changed since the last
    look, no file is read. Files that changed together are accepted or rejected together.
 
-   ¹ No longer accurate: the gate compares each file's real path, modification time and size,
-   because a Kubernetes Secret update was measured to leave the time unchanged. See *Amendment, 2026-09-25* at the foot of this ADR.
+   ¹ No longer accurate: the gate compares each file's real path, modification time and size.
+   The reason first given, that a Kubernetes Secret update leaves the time unchanged, was itself
+   a mismeasurement. See *Amendment, 2026-09-25* at the foot of this ADR.
 
 7. **A changed Consumer Key or Secret drops the bearer token obtained with the old pair.** A
    passkey needs nothing: it is hashed into each `Password` as the request is built. The
@@ -157,12 +158,14 @@ Also:
   symbolic link to a new directory, and the modification time is read through the link, so the
   new file's time is what is compared. No cluster was run for this ADR.
 
-  ³ Measured since, and false: the modification time did not change, so the gate never fired. See *Amendment, 2026-09-25* at the foot of this ADR.
+  ³ Measured since, and true after all: the time read through the link changes. It was first
+  reported false, from a measurement of the link's own time. See *Amendment, 2026-09-25* at the
+  foot of this ADR.
 - **A limit of the gate:**⁴ a file rewritten within the file system's timestamp resolution,
   keeping the same modification time, is not seen until its next change.
 
-  ⁴ The wrong worry: the problem was not a timestamp too coarse, but that the timestamp is not
-  what a Kubernetes update changes. See *Amendment, 2026-09-25* at the foot of this ADR.
+  ⁴ Still the limit it names, now narrowed by the size and the real path the gate also
+  compares. See *Amendment, 2026-09-25* at the foot of this ADR.
 - **The gauge counts from detection**, not from the file's own change. A scrape looks at the
   files through the same gate, so detection is no later than the next scrape or payment,
   whichever comes first.
@@ -196,7 +199,9 @@ as a possibility and not implemented.
 
 ## Amendment, 2026-09-25 — issue #244
 
-Four passages above are no longer accurate, each marked inline where it is read. The decision
+Four passages above are no longer accurate, each marked inline where it is read. The measurement
+this amendment first reported was itself wrong, and is corrected at its end rather than erased, so
+the record shows how. The decision
 itself stands: credentials read at use, the last valid one kept when a candidate is refused, the
 stale use made visible. What changed is how the gateway sees that a file changed, and what is
 known about Kubernetes.
@@ -232,6 +237,45 @@ as files by default (`charts/nkap/README.md`, *M-Pesa*), so they reach the gatew
 re-reads. Without that, there is nothing to detect. Without this gate, the files were detected by
 nothing. Only together do they deliver what this ADR decided.
 
-**Still not measured.** The end-to-end path has not been run: a Secret patched in a cluster, the
-gauge staying at zero, and the new passkey reaching Safaricom on the next request. The 2 seconds is
-one cluster's number, from one run, and not a general one.
+**Corrected the same day: the modification time does change.** The measurement above ran
+`stat -c %Y` on the mounted file's path. That path is a symbolic link, and `stat` without `-L`
+reports the link's own time, which a Secret update indeed leaves alone. The gateway never read
+that time: `Files.getLastModifiedTime` follows links, so it reads the time of the file the link
+resolves to, and that file is newly written by every update. Measured with both on `kind`,
+Kubernetes `v1.35.0` and `v1.37.0`: the link's time stayed the same, the resolved file's time
+changed (`1790372232` to `1790372300` on `v1.35.0`). The gate before #244's fix therefore did see
+a Secret update, and the end-to-end job below confirmed it: run with the stamp reverted to the
+modification time alone, it passed. What #244 described, a rotated credential never re-read, did
+not happen on either cluster. The gate that compares the real path, time and size stays: the real
+path is the more direct signal of a Kubernetes update and costs nothing, and the Kubernetes-layout
+test still guards the case it builds by hand. But it closed no defect these clusters showed, and the
+passages above that say the time does not change are corrected to say so.
+
+**How long a Secret update takes to reach the pod is not known.** Two measurements of the same
+quantity disagree by roughly thirty times. The first found about 2 seconds, on Kubernetes
+`v1.35.0`. Every run since took 55 to 87 seconds, on `v1.35.0` as well as `v1.37.0`: 64 and 55
+seconds on `v1.35.0` alone. Nothing here explains the difference. Neither number is Kubernetes'.
+Anyone who needs one for their own cluster should measure it there.
+`.github/scripts/kind-credential-rotation.sh` prints it for the `kind` cluster it creates. On any
+other cluster, the same measurement is a pod mounting the Secret, a patch, and a poll of the file
+until its content changes.
+
+**Measured end to end, on a cluster.** `.github/workflows/credential-rotation.yml` runs
+`.github/scripts/kind-credential-rotation.sh`: a `kind` cluster, PostgreSQL, the M-Pesa simulator
+and the gateway installed from `charts/nkap` with the default `credentialsAs: files`, all built
+from the checkout. It submits a payment, reads what the simulator received, and checks that the
+`Password` is computed from the first passkey. It patches the Secret with a new passkey, Consumer
+Key and Consumer Secret at once, submits until a `Password` is computed from the new passkey, then
+submits once more and checks that the last token request carried the new Consumer Key and Secret.
+That further submission is what keeps the in-flight refresh described under decision 7 from
+making it flaky. `nkap_credentials_stale_seconds` is read and must be zero throughout, and the
+gateway must not have restarted. With the gate made blind, a stamp that never changes, it fails:
+"300s after the patch and 141 submission(s), the gateway still sends a Password that is not
+computed from the new passkey".
+
+What it proves: on the cluster it runs on, a patched Secret changes the `Password` and the
+Consumer Key the operator receives, without a restart, and the gauge stays at zero. **What it
+still does not:** nothing here talks to Safaricom. That Safaricom accepts a `Password` computed
+from a rotated passkey, or a token from a rotated Consumer Key, is not measured, and is not
+something a simulator that checks neither can measure. The delay it prints is the cluster's that
+ran it, not a general one.

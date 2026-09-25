@@ -19,8 +19,9 @@
     records as observed is reproduced as observed, and everything else is labelled
     modelled where it is written.
 
-    Not assembled into the simulator image yet: the core runs one face per application
-    context today. The face's own tests boot it on its own.
+    Assembled into its own deployable and image by simulator-mpesa-app, not into simulator/
+    beside MTN's: one application context holds one face. The face's own tests boot it on
+    their own, to test the face rather than the assembly.
   -->
   <dependencies>
     <dependency>

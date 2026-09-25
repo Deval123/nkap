@@ -30,6 +30,7 @@
     <module>simulator-mtn</module>
     <module>simulator-mpesa</module>
     <module>simulator</module>
+    <module>simulator-mpesa-app</module>
     <module>server</module>
   </modules>
 

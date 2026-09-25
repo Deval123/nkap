@@ -115,7 +115,8 @@ class CredentialFilesTest {
      * without it. This keeps that true for whoever regenerates the example files with a script.
      *
      * <p>Only one. The same measurement found that two trailing newlines are not trimmed at all,
-     * and a trailing space is not either: both reach the operator as part of the value.
+     * and a trailing space is not either: both stay in the value, which the operator's profile
+     * then refuses at startup as edge whitespace.
      */
     @ParameterizedTest(name = "ending in {0}")
     @ValueSource(strings = {"\n", "\r\n"})

@@ -353,8 +353,9 @@ public abstract class ProviderAdapterConformanceTest {
     }
 
     /**
-     * {@code CapabilityCoverageTest}'s sibling idea, copied here: a new {@link Resolution}
-     * member with no branch added to {@link #a_call_that_does_not_answer_is_never_a_failure}
+     * The same idea as {@link #feature_declaration_and_support_agree}'s first assertion,
+     * applied to {@link Resolution}: a new {@link Resolution} member with no branch added to
+     * {@link #a_call_that_does_not_answer_is_never_a_failure}
      * would otherwise fall into that method's {@code else} and fail there anyway — but only
      * for an adapter that actually declares it. This fails for the addition itself, on this
      * one line, whether or not any adapter has declared the new member yet.

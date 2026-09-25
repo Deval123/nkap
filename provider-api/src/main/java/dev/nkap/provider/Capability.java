@@ -30,12 +30,17 @@ public sealed interface Capability {
 
     /**
      * Something the gateway asks an adapter to do outright — no intent, no reference, and
-     * every member has a method on {@link ProviderAdapter} to call for it
-     * ({@link CapabilityCoverageTest} asserts this). Statement reconciliation was
-     * deliberately left off this list: it reads a file from disk, and the operator is
-     * never asked for one — see {@code docs/positioning.md}'s *what is not in scope*
-     * section for why, and for what it would take to add it back as a member with its
-     * own contract method rather than a name alone (issue #74).
+     * every member has a method on {@link ProviderAdapter} to call for it. The conformance
+     * kit holds that: {@code ProviderAdapterConformanceTest.feature_declaration_and_support_agree}
+     * asserts that its own map of per-feature checks, one contract call each, names every
+     * member of this enum before it exercises any of them, so a member added without a check
+     * fails on that assertion in every adapter's conformance run. Named as text, not linked:
+     * {@code conformance} depends on this module, not the other way round.
+     *
+     * <p>Statement reconciliation was deliberately left off this list: it reads a file from
+     * disk, and the operator is never asked for one — see {@code docs/positioning.md}'s
+     * *what is not in scope* section for why, and for what it would take to add it back as a
+     * member with its own contract method rather than a name alone (issue #74).
      */
     enum Feature implements Capability {
         /** Report the balance of the account Nkap holds at the provider. */

@@ -136,8 +136,9 @@ and stops being asked to identify a payment it cannot identify. That is worth ha
 adapter.
 
 **Why the declaration is a method rather than a `Capability.Feature`.** A `Feature` is something
-the gateway asks an adapter to do, and every member has a method to call for it
-(`CapabilityCoverageTest`). How an adapter resolves is not something anyone calls; it is a fact
+the gateway asks an adapter to do, and every member has a method to call for it (the
+conformance kit's `feature_declaration_and_support_agree` fails when a member has no check
+calling one). How an adapter resolves is not something anyone calls; it is a fact
 about the adapter. Putting it in `Capability` would make the two enums mean two things again,
 which `Capability`'s own javadoc spent a slice separating.
 

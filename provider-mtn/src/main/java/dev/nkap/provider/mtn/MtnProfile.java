@@ -59,10 +59,58 @@ public record MtnProfile(
         return URI.create(base + path);
     }
 
+    /**
+     * A present value, with nothing invisible at either end.
+     *
+     * <p>An invisible character at the edge is refused, not stripped. It would be sent to the
+     * operator exactly as configured, be refused there on every request, and show in no log,
+     * because no message here prints a value. Stripping it silently would rewrite a credential
+     * on the deployer's behalf, and nothing here can know it is not part of the value. So the
+     * gateway refuses to start. The message names the field and which end is affected, and
+     * never the value, its length, the character found or its kind.
+     *
+     * <p>Refused at either end, measured on Java 21 rather than assumed:
+     * <ul>
+     *   <li>{@link Character#isWhitespace}, which is what {@link String#strip()} removes;</li>
+     *   <li>{@link Character#isSpaceChar}, which adds the no-break spaces (U+00A0, U+2007,
+     *       U+202F) that {@code strip()} leaves in place, the likeliest result of pasting from
+     *       a web portal. {@link String#trim()} would miss more still: it knows nothing above
+     *       U+0020;</li>
+     *   <li>format characters, among them U+FEFF, the byte-order mark. Neither of the two above
+     *       reports it, and a credential file saved as UTF-8 with a byte-order mark keeps it at
+     *       the start of the value once read;</li>
+     *   <li>control characters, and U+FFFD, the replacement character. A UTF-16 file read as
+     *       UTF-8 begins with U+FFFD, where its byte-order mark could not be decoded, and ends
+     *       with U+0000; neither is whitespace, and U+FFFD at all means decoding failed.</li>
+     * </ul>
+     * Only the ends are checked. An interior space is a legitimate character as far as this
+     * check knows.
+     *
+     * <p>Duplicated in {@code MpesaProfile} on purpose. Lifting it into {@code provider-api}
+     * or {@code core} would make it public API of a published module, which only a major release
+     * could change. It would also suggest every adapter must validate its credentials this exact
+     * way, which is the adapter author's decision. Revisit if a third operator arrives.
+     */
     private static String requireText(String value, String field) {
         if (value == null || value.isBlank()) {
             throw new IllegalArgumentException(field + " must not be blank");
         }
+        boolean leading = isInvisible(value.codePointAt(0));
+        boolean trailing = isInvisible(value.codePointBefore(value.length()));
+        if (leading || trailing) {
+            String where = leading && trailing ? "leading and trailing" : leading ? "leading" : "trailing";
+            throw new IllegalArgumentException(field + " has " + where + " whitespace or an invisible character;"
+                    + " remove it. It is refused rather than stripped: the value is used exactly as configured,"
+                    + " and nothing here can know that character is not part of it.");
+        }
         return value;
+    }
+
+    private static boolean isInvisible(int codePoint) {
+        return Character.isWhitespace(codePoint)
+                || Character.isSpaceChar(codePoint)
+                || Character.getType(codePoint) == Character.FORMAT
+                || Character.isISOControl(codePoint)
+                || codePoint == 0xFFFD;
     }
 }

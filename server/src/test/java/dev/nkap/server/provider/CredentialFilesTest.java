@@ -10,6 +10,7 @@ import dev.nkap.server.support.LogCapture;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -115,7 +116,8 @@ class CredentialFilesTest {
      * without it. This keeps that true for whoever regenerates the example files with a script.
      *
      * <p>Only one. The same measurement found that two trailing newlines are not trimmed at all,
-     * and a trailing space is not either: both reach the operator as part of the value.
+     * and a trailing space is not either: both stay in the value, which the operator's profile
+     * then refuses at startup as edge whitespace.
      */
     @ParameterizedTest(name = "ending in {0}")
     @ValueSource(strings = {"\n", "\r\n"})
@@ -214,6 +216,68 @@ class CredentialFilesTest {
                 assertThat(everythingSaid(context, root))
                         .doesNotContain(STRAY_KEY_IN_FILE)
                         .doesNotContain(STRAY_KEY_IN_FILE.substring(0, 16));
+            });
+        }
+    }
+
+    /**
+     * A credential file saved as UTF-8 with a byte-order mark, ending in {@code \r\n}. Measured
+     * through this same path before the refusal existed: the config tree removed the {@code \r\n}
+     * and kept the byte-order mark, and the gateway started with a passkey beginning with U+FEFF.
+     * It is neither whitespace nor a space separator; this pins the format-character clause.
+     */
+    @Test
+    @DisplayName("a credential file saved as UTF-8 with a byte-order mark fails startup naming the field, the leading end only, and no value")
+    void a_utf8_file_with_a_byte_order_mark_is_refused() throws IOException {
+        byte[] value = PASSKEY_IN_FILE.getBytes(StandardCharsets.UTF_8);
+        byte[] file = new byte[3 + value.length + 2];
+        file[0] = (byte) 0xEF;
+        file[1] = (byte) 0xBB;
+        file[2] = (byte) 0xBF;
+        System.arraycopy(value, 0, file, 3, value.length);
+        file[file.length - 2] = '\r';
+        file[file.length - 1] = '\n';
+        Files.write(secrets.resolve("NKAP_PROVIDER_MPESA_KE_PASSKEY"), file);
+
+        try (LogCapture root = new LogCapture("ROOT")) {
+            runner(kenyaWithoutPasskey(), secrets).run(context -> {
+                assertThat(context).hasFailed();
+                assertThat(rootCauseMessage(context))
+                        .startsWith("passkey has leading whitespace or an invisible character")
+                        .doesNotContain("leading and trailing");
+                assertThat(everythingSaid(context, root))
+                        .doesNotContain(PASSKEY_IN_FILE)
+                        .doesNotContain(PASSKEY_IN_FILE.substring(0, 16));
+            });
+        }
+    }
+
+    /**
+     * A credential file saved as UTF-16LE with its byte-order mark, read as UTF-8 by the config
+     * tree. Measured: the two byte-order-mark bytes decode as U+FFFD, every character is followed
+     * by U+0000, and the value ends in U+0000. Neither end is whitespace. This pins the
+     * replacement-character clause at the start and the control-character clause at the end.
+     */
+    @Test
+    @DisplayName("a credential file saved as UTF-16LE fails startup naming the field at both ends, and no value")
+    void a_utf16_file_read_as_utf8_is_refused() throws IOException {
+        byte[] value = (PASSKEY_IN_FILE + "\r\n").getBytes(StandardCharsets.UTF_16LE);
+        byte[] file = new byte[2 + value.length];
+        file[0] = (byte) 0xFF;
+        file[1] = (byte) 0xFE;
+        System.arraycopy(value, 0, file, 2, value.length);
+        Files.write(secrets.resolve("NKAP_PROVIDER_MPESA_KE_PASSKEY"), file);
+
+        try (LogCapture root = new LogCapture("ROOT")) {
+            runner(kenyaWithoutPasskey(), secrets).run(context -> {
+                assertThat(context).hasFailed();
+                assertThat(rootCauseMessage(context))
+                        .startsWith("passkey has leading and trailing whitespace or an invisible character");
+                String said = everythingSaid(context, root);
+                assertThat(said).doesNotContain(PASSKEY_IN_FILE.substring(0, 16));
+                assertThat(said.replace("\u0000", ""))
+                        .as("nor the value with its UTF-16 NULs removed")
+                        .doesNotContain(PASSKEY_IN_FILE.substring(0, 16));
             });
         }
     }

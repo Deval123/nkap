@@ -17,7 +17,8 @@ spring:
     #
     # One trailing newline is removed: \n or \r\n, what `echo value > FILE` writes. Measured
     # against a real jar, on what a stub operator received. Nothing else is trimmed — a trailing space, or two
-    # trailing newlines, reach the operator as part of the credential. examples/compose-secrets/
+    # trailing newlines, stay in the value, and MtnProfile or MpesaProfile then refuses it at
+    # startup, naming the field. examples/compose-secrets/
     # holds both shapes on purpose, and CredentialFilesTest keeps the one-newline answer true.
     import: optional:configtree:${NKAP_SECRETS_DIR:/run/secrets}/
   datasource:

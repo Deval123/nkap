@@ -68,6 +68,15 @@ All notable changes to Nkap are documented here. The format follows
   already gave. All three are refused before the operator is called, the rule a payment's
   operation already followed (ADR 0013). `docs/openapi.yaml` documents them, and no longer says
   `currency` is sent to the operator unvalidated: it never was. `provider-api` is unchanged.
+- **A deployment whose operator credential starts or ends with whitespace or an invisible
+  character stops starting after this upgrade.** Such a deployment was already broken: the
+  credential was sent as configured, and the operator refused every request. Nothing in any log
+  said why, because the character is invisible and the value is never printed. Now `MtnProfile`
+  and `MpesaProfile` refuse it at startup, naming the field and which end, never the value,
+  whether it came from a variable or a file. This covers a no-break space pasted from a web
+  portal, a byte-order mark, and a credential file saved as UTF-16. Remove the character, and
+  save credential files as UTF-8 without a byte-order mark; the gateway does not strip it. A padded MTN country (`" cm"`) keeps working as before: the profile now
+  carries the same stripped country its provider id already used. `provider-api` is unchanged.
 
 ## [2.0.0] - 2026-09-21
 

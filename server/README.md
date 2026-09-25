@@ -183,9 +183,11 @@ fine: a deployment that uses variables alone starts exactly as before.
 
 A single trailing newline is removed, so `echo value > NKAP_PROVIDER_MTN_CM_API_KEY` works:
 `\n` or `\r\n`, measured at the operator. **Nothing else is trimmed.** A trailing space, or a
-second trailing newline, becomes part of the credential. The gateway starts normally, the
-operator receives the wrong credential on the first request, and no log shows the extra
-characters. Write one value, then at most one newline.
+second trailing newline, stays in the value, and the gateway then refuses to start (below).
+Write one value, then at most one newline.
+
+**A credential with whitespace at either end fails startup**, from a variable or a file alike,
+naming the field and never the value. Remove the whitespace; the gateway does not strip it for you.
 
 `compose.yaml` does this for every MTN credential. Its `secrets:` block mounts each one from
 `examples/compose-secrets/` (placeholders pointing at the simulator) into `/run/secrets`, so

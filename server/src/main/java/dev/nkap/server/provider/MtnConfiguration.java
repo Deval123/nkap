@@ -89,7 +89,7 @@ class MtnConfiguration {
                 installation.apiUser(),
                 installation.apiKey(),
                 installation.currency(),
-                installation.country());
+                country(installation));
     }
 
     private static MtnProfile disbursementProfile(MtnProperties.Installation installation) {
@@ -103,6 +103,6 @@ class MtnConfiguration {
                 d.apiUser(),
                 d.apiKey(),
                 installation.currency(),
-                installation.country());
+                country(installation));
     }
 }

@@ -48,6 +48,16 @@ All notable changes to Nkap are documented here. The format follows
   so at startup. Set `NKAP_PROVIDER_DEFAULT` (Helm: `provider.default`) to a configured provider,
   `mpesa-ke` in that case. A deployment with no provider configured at all still starts.
   `provider-api` is unchanged.
+- **`GET /balance` and `GET /account-holders/{msisdn}` answer what the default provider cannot
+  serve with a documented, typed refusal instead of an untyped `500`.** A caller that received
+  a generic `500` in these three cases now receives: `501 feature-not-offered` when the default
+  provider does not offer the route at all (an M-Pesa-only deployment offers neither);
+  `400 operation-not-served` when it does not serve the `operation` named (`DISBURSE` against an
+  MTN installation configured for Collections only); and, on `GET /balance`, `400
+  unserved-currency` when `currency` is not the one it settles in — the answer `POST /payments`
+  already gave. All three are refused before the operator is called, the rule a payment's
+  operation already followed (ADR 0013). `docs/openapi.yaml` documents them, and no longer says
+  `currency` is sent to the operator unvalidated: it never was. `provider-api` is unchanged.
 
 ## [2.0.0] - 2026-09-21
 

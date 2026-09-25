@@ -187,6 +187,13 @@ configured, so a deployment serving only another country must set `NKAP_PROVIDER
 field blank and the context refuses to start — a clear failure at boot rather than the
 first payment failing; a slot whose country is left blank is simply not built.
 
+The default must also offer what those two routes read, and nothing checks that at startup. A
+default provider that does not declare a balance, or holder validation, answers that route with
+`501 feature-not-offered`, and the operator is never asked. **An M-Pesa-only deployment is the
+case to expect: M-Pesa declares neither**, so both routes answer `501` there. An `operation`
+the default does not serve (`DISBURSE` on an MTN installation without Disbursements) is `400
+operation-not-served`, and a `currency` it does not settle is `400 unserved-currency`.
+
 M-Pesa follows the same shape (issue #215), as `mpesa-<country>`, with one slot, Kenya, and
 its country blank by default; `application.yml` says why there is only one. A configured
 M-Pesa installation also refuses to start without `NKAP_PUBLIC_BASE_URL`: its callback is

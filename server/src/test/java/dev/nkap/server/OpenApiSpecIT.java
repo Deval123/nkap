@@ -12,6 +12,7 @@ import dev.nkap.server.outbox.OutboxRelayStore;
 import dev.nkap.server.statement.ReconciliationReport;
 import dev.nkap.server.statement.StatementImport;
 import dev.nkap.server.support.PostgresSpringBootIT;
+import dev.nkap.server.support.WholeClassRun;
 import dev.nkap.server.webhook.WebhookEndpointStore;
 import java.io.IOException;
 import java.io.InputStream;
@@ -24,11 +25,13 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentSkipListSet;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.RegisterExtension;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.http.HttpEntity;
@@ -67,8 +70,26 @@ import org.yaml.snakeyaml.Yaml;
  * declares neither feature, {@code nkap.provider.default} is context-wide, and this context's
  * default has to declare both to produce its {@code 200}s. A status that cannot be produced
  * here is proved in a context that can produce it, never left undocumented or unproved.
- * Per-status coverage is a convention maintained by review, not a mechanism: nothing fails
- * when a documented status has no test producing it (issue #230).
+ *
+ * <p><strong>Per-status coverage is checked in both directions, as paths are.</strong> A test
+ * that produces a status the spec does not document fails in {@link #assertStatusDocumented},
+ * the one place every per-status test reaches. That method also records the
+ * {@code (method, path, status)} it saw. After the class, {@link #everyDocumentedStatusIsProduced}
+ * requires the documented set, every numeric key under {@code paths.<path>.<method>.responses},
+ * to equal what was recorded plus {@link #PROVED_ELSEWHERE}. It reports separately a documented
+ * status no test here produces and an entry in {@link #PROVED_ELSEWHERE} the spec no longer
+ * documents; a stale exception is its own defect. {@link #PROVED_ELSEWHERE} names, for each
+ * status this context cannot produce, the class that proves it, so an exception has to be
+ * written down where a reader looks for it. A response key that is not a status code, such as
+ * {@code default}, fails the check: no single test can produce it, so it cannot be proved here.
+ *
+ * <p>The check needs the whole class. {@link WholeClassRun} counts the tests that ran against
+ * the {@code @Test} methods declared. On a partial run, such as one test run from an IDE, the
+ * check is skipped and one line is logged saying so. It is also skipped, and says so, when a test
+ * failed, since a failed test may not have recorded its status. What this covers is statuses
+ * documented in {@code docs/openapi.yaml} for paths this application maps. It does not prove a
+ * response body right beyond the schema's {@code required} fields, and it does not cover a status
+ * reachable only in another context, apart from those {@link #PROVED_ELSEWHERE} names.
  *
  * <p>Parsed with SnakeYAML, already on the classpath via {@code spring-boot-starter} — see
  * {@code nkap-standalone.compose.yaml}'s own reasoning (issue #86) for why that beats adding
@@ -79,6 +100,22 @@ class OpenApiSpecIT extends PostgresSpringBootIT {
 
     private static final EmbeddedSimulator SIMULATOR = EmbeddedSimulator.start();
     private static Map<String, Object> spec;
+
+    /**
+     * Documented statuses this context cannot produce, and the class that proves each. Both need a
+     * default provider that declares neither BALANCE nor HOLDER_VALIDATION, while this context's
+     * default must declare both to produce its {@code 200}s.
+     */
+    static final Map<String, String> PROVED_ELSEWHERE = Map.of(
+            "GET /balance 501", "FeatureNotOfferedApiIT",
+            "GET /account-holders/{msisdn} 501", "FeatureNotOfferedApiIT");
+
+    /** Every {@code (method, path, status)} {@link #assertStatusDocumented} saw produced in this run. */
+    private static final Set<String> OBSERVED = new ConcurrentSkipListSet<>();
+
+    @RegisterExtension
+    static final WholeClassRun WHOLE_CLASS = new WholeClassRun(
+            "per-status coverage of docs/openapi.yaml", OpenApiSpecIT::everyDocumentedStatusIsProduced);
 
     @DynamicPropertySource
     static void mtnPointsAtTheSimulator(DynamicPropertyRegistry registry) {
@@ -214,6 +251,32 @@ class OpenApiSpecIT extends PostgresSpringBootIT {
         assertThat(responses.keySet())
                 .as("docs/openapi.yaml's %s %s does not document status %d", method.toUpperCase(Locale.ROOT), path, status)
                 .contains(String.valueOf(status));
+        OBSERVED.add(triple(method, path, String.valueOf(status)));
+    }
+
+    private static String triple(String method, String path, String status) {
+        return method.toUpperCase(Locale.ROOT) + " " + path + " " + status;
+    }
+
+    /** Every {@code (method, path, status)} the spec documents; a non-numeric response key is kept, to fail. */
+    static Set<String> documentedStatuses(Map<String, Object> spec) {
+        Set<String> result = new TreeSet<>();
+        Map<String, Object> paths = (Map<String, Object>) spec.get("paths");
+        paths.forEach((path, operations) -> ((Map<String, Object>) operations).forEach((method, operation) -> {
+            Map<String, Object> responses = (Map<String, Object>) ((Map<String, Object>) operation).get("responses");
+            if (responses != null) {
+                responses.keySet().forEach(status -> result.add(triple(method, path, String.valueOf(status))));
+            }
+        }));
+        return result;
+    }
+
+    /**
+     * Run by {@link #WHOLE_CLASS} after a whole, passing run: documented equals produced here plus
+     * {@link #PROVED_ELSEWHERE}, each direction reported on its own.
+     */
+    static void everyDocumentedStatusIsProduced() {
+        StatusCoverage.assertCoverage(documentedStatuses(spec), OBSERVED, PROVED_ELSEWHERE);
     }
 
     private JsonNode body(ResponseEntity<String> response) {

@@ -549,10 +549,15 @@ example request, the same example whose `Password` was decoded to confirm
 above).
 
 The test MSISDN `254708374149` is a third-party starting point, and is said so here rather
-than folded in as if this project had found it independently — Safaricom's own documented
-example uses `254722000000` and `254722111111` instead. Every run above confirmed
-`254708374149` against the real sandbox, so it stands as observed, sourced from where it was
-first read.
+than folded in as if this project had found it independently. This page used to say that
+Safaricom's own documented example uses `254722000000` and `254722111111` *instead*. That was
+half right. The *M-Pesa Express Simulate* page, read 2026-09-25, uses both numbers in its STK
+Push request sample: `254722000000` as `PartyA`, `254722111111` as `PhoneNumber`. Its
+successful-callback sample, on the same page, reports the payer as `254708374149`, the number
+this project first read from a third party. So Safaricom's example does not avoid that number.
+It is not consistent with itself: its request and its callback name different payers. Every
+run above confirmed `254708374149` against the real sandbox, so it stands as observed, sourced
+from where it was first read.
 
 Two statements above come from neither the portal nor a run, and are named here with a URL
 rather than left to the body's own "Wikipedia's own M-Pesa article" or "trade press" to stand

@@ -140,10 +140,13 @@ wrong passkey from a right one, and this ADR does not pretend otherwise.
 
 Also:
 
-- **The Helm chart does not gain this yet.** It passes every credential as a variable from a
+- **The Helm chart does not gain this yet.**¹ It passes every credential as a variable from a
   Secret reference, and a variable is not re-read. A chart deployment gets rotation without a
   restart only once the chart mounts those Secrets as files in the imported directory, which is
   a separate change.
+
+  ¹ No longer accurate: since 2026-09-25 the chart mounts the three as files by default. See
+  *Amendment, 2026-09-25* at the foot of this ADR.
 - **Measured, not assumed:** that a re-read value is trimmed exactly as the startup value was.
   The re-read uses Spring's own config-tree reader with the option Spring's import uses, and a
   test writes a file ending in one newline. The same goes for the gate: a test changes a file's
@@ -183,3 +186,22 @@ passkey does not. That difference is the whole argument for #223. Nothing in thi
 M-Pesa-specific apart from the three credential names. `MtnAdapter` could take a supplier the
 same way, and `CredentialFileReader` already resolves any bound property. That is recorded here
 as a possibility and not implemented.
+
+## Amendment, 2026-09-25
+
+One statement above is no longer accurate, and it is marked inline where it is read: *"The Helm
+chart does not gain this yet. It passes every credential as a variable from a Secret
+reference."*
+
+As of 2026-09-25 the chart mounts an M-Pesa installation's passkey, Consumer Key and Consumer
+Secret as files by default, in a directory the gateway imports, each named after the variable it
+replaces. The credentials now reach the gateway in the form it re-reads. How the chart does
+this, and the per-installation choice to keep variables, is in `charts/nkap/README.md`,
+*M-Pesa*; it is not restated here.
+
+What still stands is the assumption beneath it, and it now matters more. Whether a cluster's own
+Secret update reaches the running pod, and how quickly, is still not measured; *Assumed, not
+measured here* above remains exactly as written. So this amendment does not say that a chart
+deployment gains rotation without a restart. It says only that the chart no longer stands in the
+way of it. The decision recorded above is unchanged, which is why this is an amendment and not a
+superseding ADR.

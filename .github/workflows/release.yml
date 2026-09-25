@@ -31,6 +31,7 @@ permissions:
 env:
   GATEWAY_IMAGE: ghcr.io/deval123/nkap-gateway
   SIMULATOR_IMAGE: ghcr.io/deval123/nkap-simulator
+  SIMULATOR_MPESA_IMAGE: ghcr.io/deval123/nkap-simulator-mpesa
 
 jobs:
   # The conformance kit and the full reactor are what CONTRIBUTING.md says a release may be
@@ -94,11 +95,15 @@ jobs:
             echo "${SIMULATOR_IMAGE}:${version}"
             [ "${{ steps.version.outputs.latest }}" = "true" ] && echo "${SIMULATOR_IMAGE}:latest"
             echo "EOF"
+            echo "simulator_mpesa<<EOF"
+            echo "${SIMULATOR_MPESA_IMAGE}:${version}"
+            [ "${{ steps.version.outputs.latest }}" = "true" ] && echo "${SIMULATOR_MPESA_IMAGE}:latest"
+            echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
       # linux/arm64 is not a nicety: a large part of this project's audience is on ARM
       # hardware, and an amd64-only image turns "two commands" into an emulation warning and
-      # a slow start. NKAP_VERSION/NKAP_REVISION feed the OCI labels both Dockerfiles declare
+      # a slow start. NKAP_VERSION/NKAP_REVISION feed the OCI labels all three Dockerfiles declare
       # -- see their own comments for why `docker inspect` should answer "where did this come
       # from" without a search.
       - name: Build and push the gateway
@@ -125,13 +130,27 @@ jobs:
             NKAP_VERSION=${{ steps.version.outputs.version }}
             NKAP_REVISION=${{ github.sha }}
 
+      - name: Build and push the M-Pesa simulator
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: simulator-mpesa-app/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.tags.outputs.simulator_mpesa }}
+          build-args: |
+            NKAP_VERSION=${{ steps.version.outputs.version }}
+            NKAP_REVISION=${{ github.sha }}
+
       # GHCR packages default to private, and there is no supported GITHUB_TOKEN-only API to
       # flip that (checked before writing this workflow: the REST API has no "set container
       # package visibility" endpoint, and the one that exists needs a personal access token,
       # which this project's whole security story says does not belong in repository
       # settings). The first publish needs one manual, one-time step: on
       # github.com/users/deval123/packages/container/<name>, Package settings -> Danger Zone
-      # -> Change visibility -> Public, for both packages. `verify-pull` below is what catches
+      # -> Change visibility -> Public, for each of the three packages. nkap-simulator-mpesa was
+      # added after the others, so its first release needs this step again even though the
+      # other two are long public. `verify-pull` below is what catches
       # this being forgotten -- it fails loudly on an anonymous pull instead of shipping a
       # publish nobody can use.
       #
@@ -175,9 +194,10 @@ jobs:
       # notice. `imagetools inspect` reads the manifest list itself, no credentials needed
       # (proved: it works against a public image with no docker/login-action step run at all).
       # Asserts only -- a step whose output a human is supposed to read is a step nobody reads.
-      - name: Assert both images actually shipped linux/amd64 and linux/arm64
+      - name: Assert all three images actually shipped linux/amd64 and linux/arm64
         run: |
-          for image in "${GATEWAY_IMAGE}:${NKAP_VERSION}" "${SIMULATOR_IMAGE}:${NKAP_VERSION}"; do
+          for image in "${GATEWAY_IMAGE}:${NKAP_VERSION}" "${SIMULATOR_IMAGE}:${NKAP_VERSION}" \
+                       "${SIMULATOR_MPESA_IMAGE}:${NKAP_VERSION}"; do
             present="$(docker buildx imagetools inspect --raw "$image" \
               | jq -r '.manifests[].platform | select(.architecture != "unknown") | "\(.os)/\(.architecture)"' \
               | sort -u)"
@@ -193,6 +213,33 @@ jobs:
         run: |
           docker pull "${GATEWAY_IMAGE}:${NKAP_VERSION}"
           docker pull "${SIMULATOR_IMAGE}:${NKAP_VERSION}"
+          docker pull "${SIMULATOR_MPESA_IMAGE}:${NKAP_VERSION}"
+
+      # The quick-start demo below drives the gateway through MTN, so it never starts the M-Pesa
+      # simulator: exercising it there would mean configuring an M-Pesa installation in
+      # nkap-standalone.compose.yaml, which is a file operators download, for the sake of one CI
+      # check. Without this step the image would be pulled and never run. It is run on its own
+      # instead, with no gateway: the token route answers, a submission is accepted, and
+      # /_nkap/received reports what arrived -- the three things #240's `kind` job relies on.
+      - name: Run the M-Pesa simulator on its own
+        run: |
+          docker run -d --name simulator-mpesa -p 8082:8082 "${SIMULATOR_MPESA_IMAGE}:${NKAP_VERSION}"
+          for _ in $(seq 1 60); do
+            curl -sf -o /dev/null http://localhost:8082/_nkap/scenarios && break
+            sleep 2
+          done
+          token="$(curl -sf -u release-check-key:release-check-secret \
+            'http://localhost:8082/oauth/v1/generate?grant_type=client_credentials' | jq -r .access_token)"
+          [ -n "$token" ] && [ "$token" != null ] || { echo "::error::no token from the M-Pesa simulator"; exit 1; }
+          code="$(curl -sf -X POST http://localhost:8082/mpesa/stkpush/v1/processrequest \
+            -H "Authorization: Bearer $token" -H 'Content-Type: application/json' \
+            -d '{"BusinessShortCode":174379,"Password":"cmVsZWFzZS1jaGVjaw==","Timestamp":"20260101000000",
+                 "Amount":"1","PhoneNumber":"254708374149","CallBackURL":"https://example.invalid/cb",
+                 "AccountReference":"release-check"}' | jq -r .ResponseCode)"
+          [ "$code" = 0 ] || { echo "::error::the M-Pesa simulator did not accept a submission (ResponseCode: $code)"; exit 1; }
+          key="$(curl -sf http://localhost:8082/_nkap/received | jq -r .lastTokenRequest.consumerKey)"
+          [ "$key" = release-check-key ] || { echo "::error::/_nkap/received did not report the Consumer Key sent (got: $key)"; exit 1; }
+          docker rm -f simulator-mpesa
 
       - name: Bring up the standalone file, plus the release-check overlay
         run: docker compose up -d --wait --wait-timeout 240

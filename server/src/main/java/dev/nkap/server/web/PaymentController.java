@@ -83,7 +83,7 @@ class PaymentController {
         // ReferenceId.newReference() (issue #185).
         ProviderId provider = resolveProvider(request);
         PaymentIntent intent = toIntent(request);
-        rejectUnservedCurrency(provider, intent);
+        rejectUnservedCurrency(adapters, provider, intent.amount().currency(), "No payment was created.");
         // The merchant is the one the API key identifies, never a body field. This is what
         // makes the (merchant, key) scope of the idempotency store an identity the gateway
         // established rather than one the caller asserted — the hole this slice closes.
@@ -177,16 +177,19 @@ class PaymentController {
      * Turns away a currency the addressed installation does not settle, before any payment
      * or idempotency claim exists. This is not a failed payment: no operator was asked, and
      * the caller simply named a country that does not serve that currency.
+     *
+     * <p>Shared with {@link BalanceController}, which asks the same question of the default
+     * provider: one fact, one problem type, one sentence — only what did not happen differs.
      */
-    private void rejectUnservedCurrency(ProviderId provider, PaymentIntent intent) {
-        Currency requested = intent.amount().currency();
+    static void rejectUnservedCurrency(AdapterRegistry adapters, ProviderId provider, Currency requested,
+                                       String consequence) {
         adapters.settlementCurrency(provider)
                 .filter(settled -> settled != requested)
                 .ifPresent(settled -> {
                     throw new ApiException(HttpStatus.BAD_REQUEST, ProblemTypes.UNSERVED_CURRENCY,
                             "This deployment does not serve that currency",
-                            "Payments for " + provider + " settle in " + settled + "; this request was for "
-                                    + requested + ". No payment was created.");
+                            provider + " settles in " + settled + "; this request was for " + requested + ". "
+                                    + consequence);
                 });
     }
 

@@ -292,6 +292,10 @@ paths:
         balance with today's date on it. Operator data across **every** merchant this
         deployment serves, so it requires an **admin** key — a merchant key is `403`, the
         same gate `GET /statements/imports/{importId}` uses.
+
+        What this installation cannot serve is refused before the operator is asked: a
+        default provider that does not offer a balance at all is `501`, an `operation` or a
+        `currency` it does not serve is `400`.
       security:
         - bearerAuth: []
       parameters:
@@ -304,9 +308,10 @@ paths:
           in: query
           required: true
           description: >
-            The currency to read the balance in. Not validated against what this
-            installation actually settles — an operator answering in a currency Nkap does
-            not count in is a real, if unlikely, answer worth seeing rather than hiding.
+            The currency to read the balance in, which must be the one this installation
+            settles in. Any other is refused with `400 unserved-currency` — the answer
+            `POST /payments` gives for the same fact — and the operator is never asked: what
+            an installation settles in is known before any call is made (ADR 0013).
           schema: { type: string }
       responses:
         "200":
@@ -315,12 +320,19 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/BalanceResponse" }
         "400":
-          description: "`invalid-request` — `operation` is not `COLLECT`/`DISBURSE`, or `currency` is not one Nkap counts in."
+          description: >
+            `invalid-request` (`operation` is not `COLLECT`/`DISBURSE`, or `currency` is not
+            one Nkap counts in), `operation-not-served` (the default provider does not serve
+            that `operation` — `DISBURSE` against an installation configured for Collections
+            only), or `unserved-currency` (this installation settles a different currency).
+            The last two name what this installation does serve, and the operator was not
+            asked.
           content:
             application/problem+json:
               schema: { $ref: "#/components/schemas/Problem" }
         "401": { $ref: "#/components/responses/Unauthenticated" }
         "403": { $ref: "#/components/responses/AdminRequired" }
+        "501": { $ref: "#/components/responses/FeatureNotOffered" }
         "503": { $ref: "#/components/responses/OperatorDidNotAnswer" }
 
   /account-holders/{msisdn}:
@@ -336,6 +348,10 @@ paths:
         deactivated, and serving a stale "active" from a shared cache costs someone a payment
         sent to a number that no longer takes it. Every call here spends the operator's own
         quota for this check, not Nkap's.
+
+        What this installation cannot serve is refused before the operator is asked: a
+        default provider that does not offer holder validation at all is `501`, an
+        `operation` it does not serve is `400`.
       security:
         - bearerAuth: []
       parameters:
@@ -356,11 +372,15 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/AccountHolderResponse" }
         "400":
-          description: "`invalid-request` — `operation` is not `COLLECT`/`DISBURSE`."
+          description: >
+            `invalid-request` (`operation` is not `COLLECT`/`DISBURSE`) or
+            `operation-not-served` (the default provider does not serve that `operation`; the
+            message names the ones it does, and the operator was not asked).
           content:
             application/problem+json:
               schema: { $ref: "#/components/schemas/Problem" }
         "401": { $ref: "#/components/responses/Unauthenticated" }
+        "501": { $ref: "#/components/responses/FeatureNotOffered" }
         "503": { $ref: "#/components/responses/OperatorDidNotAnswer" }
 
   /statements/imports/{importId}:
@@ -623,6 +643,17 @@ components:
         This reads live from the operator and it did not answer. Not a failed read — it is
         not known, and the identical request can be retried; the same "a timeout is never a
         failure" rule a payment submission follows, applied to a read.
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    FeatureNotOffered:
+      description: >
+        `feature-not-offered` — this deployment's default provider does not offer what this
+        route reads. An M-Pesa-only deployment offers neither a balance nor holder
+        validation. Not a `400`: nothing in the request names the provider, so there is
+        nothing for the caller to correct, and the same request is refused until the
+        deployment is configured differently. The message names the provider and what it
+        does declare; the operator was not asked.
       content:
         application/problem+json:
           schema: { $ref: "#/components/schemas/Problem" }

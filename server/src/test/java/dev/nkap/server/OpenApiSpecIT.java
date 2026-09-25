@@ -394,6 +394,11 @@ class OpenApiSpecIT extends PostgresSpringBootIT {
 
     // --- GET /balance -----------------------------------------------------------------
 
+    // The 501 this route and GET /account-holders/{msisdn} document is proved in
+    // FeatureNotOfferedApiIT, not here: it needs a default provider that declares neither
+    // feature, and nkap.provider.default is context-wide -- this context's default has to
+    // declare both to produce the 200s below.
+
     private ResponseEntity<String> getBalance(String key, String operation, String currency) {
         HttpHeaders headers = new HttpHeaders();
         if (key != null) {

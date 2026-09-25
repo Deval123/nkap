@@ -2,6 +2,7 @@ package dev.nkap.server.web;
 
 import dev.nkap.provider.Capability;
 import dev.nkap.provider.HolderStatus;
+import dev.nkap.provider.ProviderAdapter;
 import dev.nkap.provider.ProviderId;
 import dev.nkap.provider.ProviderUnavailableException;
 import dev.nkap.server.provider.AdapterRegistry;
@@ -34,7 +35,9 @@ import org.springframework.web.bind.annotation.RestController;
  *
  * <p>An operator that does not answer is {@code 503} via {@link ProviderUnavailableException},
  * mapped centrally in {@link ApiExceptionHandler} — never {@link HolderStatus#INACTIVE}
- * guessed on the caller's behalf.
+ * guessed on the caller's behalf. A default provider that does not declare
+ * {@code HOLDER_VALIDATION} is {@code 501}, and an {@code operation} it does not declare is
+ * {@code 400}, both before the adapter is called (see {@link DeclaredCapabilities}).
  */
 @RestController
 class AccountHolderController {
@@ -52,7 +55,10 @@ class AccountHolderController {
             throws ProviderUnavailableException {
         Capability.Operation op = BalanceController.operation(operation);
 
-        HolderStatus status = adapters.require(defaultProvider).validateHolder(op, msisdn);
+        ProviderAdapter adapter = DeclaredCapabilities.require(
+                adapters, defaultProvider, "GET /account-holders/{msisdn}", Capability.Feature.HOLDER_VALIDATION, op);
+
+        HolderStatus status = adapter.validateHolder(op, msisdn);
 
         return new AccountHolderResponse(defaultProvider.toString(), op.name(), msisdn, status == HolderStatus.ACTIVE);
     }

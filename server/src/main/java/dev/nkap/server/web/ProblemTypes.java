@@ -34,7 +34,10 @@ public final class ProblemTypes {
     /** No adapter is configured for the provider the request routes to. */
     public static final URI PROVIDER_NOT_CONFIGURED = URI.create(BASE + "provider-not-configured");
 
-    /** The addressed deployment does not settle the currency the request asked for. */
+    /**
+     * The addressed deployment does not settle the currency the request asked for — a
+     * payment's, or the balance {@code GET /balance} was asked to read.
+     */
     public static final URI UNSERVED_CURRENCY = URI.create(BASE + "unserved-currency");
 
     /**
@@ -66,6 +69,25 @@ public final class ProblemTypes {
      * does not answer carries, given its own status and type instead of a bare 500.
      */
     public static final URI OPERATOR_DID_NOT_ANSWER = URI.create(BASE + "operator-did-not-answer");
+
+    /**
+     * {@code GET /balance} or {@code GET /account-holders/{msisdn}} reached a default
+     * provider whose adapter does not declare the feature the route needs — an M-Pesa
+     * installation declares neither. A {@code 501}, not a {@code 400}: the caller names
+     * nothing about the provider, so there is nothing in the request to correct, and the
+     * same request will be refused until the deployment changes. The adapter is never
+     * asked, the same refusal {@code PaymentService.submit} makes for an operation (ADR 0013).
+     */
+    public static final URI FEATURE_NOT_OFFERED = URI.create(BASE + "feature-not-offered");
+
+    /**
+     * {@code GET /balance} or {@code GET /account-holders/{msisdn}} named an
+     * {@code operation} the default provider's adapter does not declare — {@code DISBURSE}
+     * against an MTN installation configured for Collections only. A {@code 400}: the caller
+     * chose the operation. Refused before the adapter is called, and the message says which
+     * operations the provider does serve.
+     */
+    public static final URI OPERATION_NOT_SERVED = URI.create(BASE + "operation-not-served");
 
     /** No outbox event exists for the id in the path. */
     public static final URI EVENT_NOT_FOUND = URI.create(BASE + "event-not-found");

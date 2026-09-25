@@ -111,9 +111,10 @@ submission and every status query carries a `Password` computed from it:
 - **A leaked passkey alone is not enough to act as the installation, but it is most of it.**
   A request also needs a bearer token, and that needs the Consumer Key and Secret. Protect
   all three alike. None of the three is ever printed by Nkap: a missing one fails startup
-  naming the property, not the value. So does one with whitespace at either end, from a
-  variable or a file, a no-break space pasted from a web portal included; the refusal names
-  the field and which end, never the value. Without that refusal the gateway would start, the
+  naming the property, not the value. So does one that starts or ends with whitespace or an
+  invisible character, from a variable or a file: a no-break space pasted from a web portal, a
+  byte-order mark, or what a UTF-16 file becomes when read as UTF-8. The refusal names the
+  field and which end, never the value or the kind of character. Without that refusal the gateway would start, the
   operator would refuse every request, and with the value never printed it would look like an
   outage.
 - **Supplied as a file, the passkey leaves `docker inspect`, not the process.** A file named

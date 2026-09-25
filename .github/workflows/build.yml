@@ -138,6 +138,8 @@ jobs:
           version: "v4.3.0"
 
       - run: helm lint charts/nkap -f charts/nkap/ci/values-test.yaml
+      - run: helm lint charts/nkap -f charts/nkap/ci/values-mpesa-test.yaml
+      - run: helm lint charts/nkap -f charts/nkap/ci/values-mpesa-env-test.yaml
 
       # Rendering with no values at all must fail, naming what is missing, rather than
       # producing a Deployment whose Secret references point at nothing -- the credential
@@ -238,7 +240,9 @@ jobs:
           expect_failure "not known to mean anything" -f /tmp/two-mpesa.yaml
 
       - name: Render with M-Pesa test values (Secret names only, no credential values)
-        run: helm template ci-test charts/nkap -f charts/nkap/ci/values-mpesa-test.yaml > /tmp/rendered-mpesa.yaml
+        run: |
+          helm template ci-test charts/nkap -f charts/nkap/ci/values-mpesa-test.yaml > /tmp/rendered-mpesa.yaml
+          helm template ci-test charts/nkap -f charts/nkap/ci/values-mpesa-env-test.yaml > /tmp/rendered-mpesa-env.yaml
 
       - name: Assert the M-Pesa render sets the Kenya slot and the public base URL
         run: |
@@ -260,21 +264,96 @@ jobs:
       # looks like a credential may be followed by a plain "value:" anywhere in the render.
       - name: Assert every M-Pesa credential is a Secret reference and no credential renders as a literal
         run: |
-          for var in NKAP_PROVIDER_MPESA_KE_CONSUMER_KEY NKAP_PROVIDER_MPESA_KE_CONSUMER_SECRET NKAP_PROVIDER_MPESA_KE_PASSKEY NKAP_DB_PASSWORD; do
-            next_lines="$(awk -v v="- name: ${var}" '{ line=$0; gsub(/^[ \t]+/, "", line); if (line == v) { getline nxt; gsub(/^[ \t]+/, "", nxt); print nxt } }' /tmp/rendered-mpesa.yaml)"
+          # The three M-Pesa credentials are variables only with credentialsAs: env; by default
+          # they are files, asserted in the next step. The database password is a variable in both.
+          for pair in /tmp/rendered-mpesa-env.yaml:NKAP_PROVIDER_MPESA_KE_CONSUMER_KEY \
+                      /tmp/rendered-mpesa-env.yaml:NKAP_PROVIDER_MPESA_KE_CONSUMER_SECRET \
+                      /tmp/rendered-mpesa-env.yaml:NKAP_PROVIDER_MPESA_KE_PASSKEY \
+                      /tmp/rendered-mpesa.yaml:NKAP_DB_PASSWORD /tmp/rendered-mpesa-env.yaml:NKAP_DB_PASSWORD; do
+            rendered="${pair%%:*}"; var="${pair#*:}"
+            next_lines="$(awk -v v="- name: ${var}" '{ line=$0; gsub(/^[ \t]+/, "", line); if (line == v) { getline nxt; gsub(/^[ \t]+/, "", nxt); print nxt } }' "$rendered")"
             if [ -z "$next_lines" ]; then
-              echo "::error::${var} was not found in the rendered output at all"
+              echo "::error::${var} was not found in ${rendered} at all"
               exit 1
             fi
             if grep -qv '^valueFrom:$' <<< "$next_lines"; then
-              echo "::error::${var} is not sourced from a Secret in every occurrence (found: $(tr '\n' '|' <<< "$next_lines"))"
+              echo "::error::${var} is not sourced from a Secret in every occurrence in ${rendered} (found: $(tr '\n' '|' <<< "$next_lines"))"
               exit 1
             fi
           done
-          for rendered in /tmp/rendered-mpesa.yaml /tmp/rendered.yaml; do
+          for rendered in /tmp/rendered-mpesa.yaml /tmp/rendered-mpesa-env.yaml /tmp/rendered.yaml; do
             literals="$(awk '{ line=$0; gsub(/^[ \t]+/, "", line); if (line ~ /^- name: NKAP_[A-Z0-9_]*(KEY|SECRET|PASSKEY|PASSWORD|API_USER)$/) { name=line; getline nxt; gsub(/^[ \t]+/, "", nxt); if (nxt ~ /^value:/) print name } }' "$rendered")"
             if [ -n "$literals" ]; then
               echo "::error::credential variables rendered as literal values in ${rendered}: $(tr '\n' ' ' <<< "$literals")"
+              exit 1
+            fi
+          done
+
+      # M-Pesa's credentials as files, the default. The gateway refuses to start when one name
+      # is both a variable and a file, so the three variables must be absent wherever the files
+      # are mounted: a check on the volume alone would pass while the gateway refused to start.
+      # Both workloads, because the key-init Job starts the same application context.
+      - name: Assert M-Pesa credentials render as mounted files by default, and not also as variables
+        run: |
+          for template in deployment keyinit-job; do
+            out="$(helm template ci-test charts/nkap -f charts/nkap/ci/values-mpesa-test.yaml -s "templates/${template}.yaml")"
+            if [ "$(grep -c 'name: mpesa-ke-credentials' <<< "$out")" -ne 2 ]; then
+              echo "::error::${template}: expected the mpesa-ke-credentials volume and its mount"
+              exit 1
+            fi
+            for var in NKAP_PROVIDER_MPESA_KE_CONSUMER_KEY NKAP_PROVIDER_MPESA_KE_CONSUMER_SECRET NKAP_PROVIDER_MPESA_KE_PASSKEY; do
+              if ! grep -qE "^ *path: ${var}$" <<< "$out"; then
+                echo "::error::${template}: no volume item with path ${var}"
+                exit 1
+              fi
+              if grep -qE "^ *- name: ${var}$" <<< "$out"; then
+                echo "::error::${template}: ${var} is rendered as a variable as well as a file -- the gateway refuses to start"
+                exit 1
+              fi
+            done
+            mount="$(awk '/^ *mountPath: / { print $2 }' <<< "$out")"
+            dir="$(awk '{ line=$0; gsub(/^[ \t]+/, "", line); if (line == "- name: NKAP_SECRETS_DIR") { getline nxt; gsub(/^[ \t]+/, "", nxt); print nxt } }' <<< "$out")"
+            if [ -z "$mount" ] || [ "$dir" != "value: \"${mount}\"" ]; then
+              echo "::error::${template}: the credential mount (${mount}) and NKAP_SECRETS_DIR (${dir}) disagree"
+              exit 1
+            fi
+            # Not only agreeing: a directory of its own. In the gateway's image /var/run links
+            # to /run, and Kubernetes mounts the pod's service-account token under
+            # /var/run/secrets/kubernetes.io/serviceaccount. The import reads nested files, so a
+            # secrets directory at or under either path would import the token as properties.
+            secrets_dir="${dir#value: \"}"; secrets_dir="${secrets_dir%\"}"
+            case "$secrets_dir" in
+              /run|/run/*|/var/run|/var/run/*)
+                echo "::error::${template}: NKAP_SECRETS_DIR is ${secrets_dir}, at or under /run or /var/run. In the gateway's image /var/run links to /run, where Kubernetes mounts the pod's service-account token (/var/run/secrets/kubernetes.io/serviceaccount); the gateway's import reads nested files and would load that token as properties. Keep nkap.credentialsDir a directory of its own."
+                exit 1
+                ;;
+            esac
+          done
+
+      - name: Assert credentialsAs env renders the three variables and no credential volume
+        run: |
+          if grep -qE 'mpesa-ke-credentials|^ *volumes:' /tmp/rendered-mpesa-env.yaml; then
+            echo "::error::credentialsAs: env still rendered a credential volume"
+            exit 1
+          fi
+          for var in NKAP_PROVIDER_MPESA_KE_CONSUMER_KEY NKAP_PROVIDER_MPESA_KE_CONSUMER_SECRET NKAP_PROVIDER_MPESA_KE_PASSKEY; do
+            if [ "$(grep -cE "^ *- name: ${var}$" /tmp/rendered-mpesa-env.yaml)" -ne 2 ]; then
+              echo "::error::credentialsAs: env should render ${var} in the Deployment and the key-init Job"
+              exit 1
+            fi
+          done
+
+      - name: Assert an unknown credentialsAs fails rendering, naming the allowed values
+        run: |
+          if helm template ci-test charts/nkap -f charts/nkap/ci/values-mpesa-test.yaml \
+               --set 'provider.mpesa.installations[0].credentialsAs=file' >/dev/null 2>/tmp/credentials-as.err; then
+            echo "::error::helm template succeeded with credentialsAs=file -- it must fail naming the allowed values"
+            exit 1
+          fi
+          for expected in 'credentialsAs is "file"' '"files"' '"env"'; do
+            if ! grep -qF -- "$expected" /tmp/credentials-as.err; then
+              echo "::error::the credentialsAs failure does not name ${expected}:"
+              cat /tmp/credentials-as.err
               exit 1
             fi
           done

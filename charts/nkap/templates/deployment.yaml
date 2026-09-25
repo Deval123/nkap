@@ -43,6 +43,10 @@ spec:
               containerPort: 9464
           env:
             {{- include "nkap.env" . | nindent 12 }}
+          {{- with (include "nkap.credentialVolumeMounts" . | trim) }}
+          volumeMounts:
+            {{- . | nindent 12 }}
+          {{- end }}
           # /actuator/health is on the management port, not the API's -- the same reason
           # this port is never in the traffic Service (see service.yaml and
           # charts/nkap/README.md's "The management port"). Probing it here reaches it from
@@ -63,6 +67,10 @@ spec:
           resources:
             {{- toYaml . | nindent 12 }}
           {{- end }}
+      {{- with (include "nkap.credentialVolumes" . | trim) }}
+      volumes:
+        {{- . | nindent 8 }}
+      {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

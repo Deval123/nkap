@@ -26,10 +26,20 @@ All notable changes to Nkap are documented here. The format follows
   credentials, one warning names the file, and the new gauge `nkap_credentials_stale_seconds`
   stays above zero until it is fixed. `docs/prometheus-alerts.yml` has a rule for it. Only the
   credentials change: the base URL, shortcode and currency stay as started. A credential set as a
-  variable, and every MTN credential, still takes a restart. That includes the Helm chart, which
-  passes credentials as variables: a chart deployment does not gain this yet. `MpesaAdapter` gains a constructor
+  variable, and every MTN credential, still takes a restart. `MpesaAdapter` gains a constructor
   taking a `Supplier<MpesaProfile>`; its two existing constructors are unchanged. See
   [ADR 0015](docs/adr/0015-credentials-read-at-use.md).
+- **The Helm chart mounts M-Pesa's credentials as files by default.** The Secret named by
+  `provider.mpesa.installations[0].existingSecret` is mounted read-only at
+  `/etc/nkap/credentials`, as three files named after the variables they replace, which is the
+  form the gateway re-reads (previous entry). The three credential variables are no longer
+  rendered in that form, since the gateway refuses a name supplied both ways. The chart sets
+  `NKAP_SECRETS_DIR` to the mount path. Nothing to change in your values: the Secret, its keys
+  and the `*SecretKey` overrides are read as before. Whether a cluster's own Secret update
+  reaches the running pod, and how quickly, is not measured yet, so replacing the Secret and
+  restarting the pods is still the certain path. `credentialsAs: env` on the installation
+  renders the three variables as before, read once at startup, for a cluster that cannot mount
+  Secrets as volumes. Any other value fails rendering.
 
 - **M-Pesa is a configured operator.** Safaricom's STK Push, collections only: one Kenya slot,
   `NKAP_PROVIDER_MPESA_KE_*`, registered as `mpesa-ke`. `POST /payments` routes on the country
@@ -107,6 +117,20 @@ All notable changes to Nkap are documented here. The format follows
   payments and does not go unseen: the last valid credentials stay in use, and a gauge reports
   it until the file is fixed. The cost is that the last valid credentials stay in the process's
   memory for as long as it runs, where a heap dump shows them.
+- **In Kubernetes, the default credentials directory would also import the pod's
+  service-account token; the chart imports a directory of its own.** This release adds an
+  import of `/run/secrets` (`NKAP_SECRETS_DIR` moves it). No released version imports any
+  directory, so no earlier release is affected. *Measured:* in the gateway's image `/var/run` is
+  a link to `/run`, and the import reads a directory's nested files. Given a directory laid out
+  like Kubernetes' service-account volume, it produces the properties
+  `kubernetes.io.serviceaccount.token`, `.ca.crt` and `.namespace`. *Not measured:* that a pod
+  mounts the token there. That is where Kubernetes documents it,
+  `/var/run/secrets/kubernetes.io/serviceaccount`, but no cluster was run for this. So a
+  Kubernetes deployment of this release that keeps the default directory would have its
+  service-account token read into the gateway's configuration as properties. The Helm chart
+  sets `NKAP_SECRETS_DIR` to `/etc/nkap/credentials`, and CI fails if it is ever at or under
+  `/run` or `/var/run`. A deployment by other means should set `NKAP_SECRETS_DIR` to a
+  directory of its own.
 
 ## [2.0.0] - 2026-09-21
 

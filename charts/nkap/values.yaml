@@ -162,6 +162,28 @@ provider:
     #     consumerKeySecretKey: consumer-key
     #     consumerSecretSecretKey: consumer-secret
     #     passkeySecretKey: passkey
+    #     # How the three credentials reach the gateway: "files" (the default) or "env".
+    #     credentialsAs: files
+    #
+    # credentialsAs: "files" mounts the Secret as three files named after the variables they
+    # replace (NKAP_PROVIDER_MPESA_KE_PASSKEY and so on; the gateway fixes those names, and the
+    # *SecretKey fields above only choose which key of your Secret feeds each). Files are the
+    # form the gateway re-reads when they change (ADR 0015), so a replaced passkey can reach it
+    # without a restart. Whether a cluster's own Secret update reaches the running pod, and how
+    # quickly, is not yet measured. The default is files so that a deployment gets that form
+    # without reading a release note: the passkey has no observed revocation point, and
+    # replacing it quickly is the only remedy there is.
+    #
+    # "env" renders the three as environment variables, as this chart did before, read once at
+    # startup: for a cluster that cannot mount Secrets as volumes, or an operator who prefers
+    # variables. It is per installation, not per credential, because the gateway refuses to
+    # start when one name arrives both as a variable and as a file. Any other value fails
+    # rendering.
+    #
+    # The files are mounted at /etc/nkap/credentials, and the chart sets NKAP_SECRETS_DIR to
+    # the same path from the same definition, so the two cannot disagree. Not the gateway's
+    # default /run/secrets: in its image /var/run links to /run, which is where Kubernetes
+    # mounts the pod's service-account token.
     installations: []
 
 keyInit:

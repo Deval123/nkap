@@ -112,6 +112,13 @@ submission and every status query carries a `Password` computed from it:
   A request also needs a bearer token, and that needs the Consumer Key and Secret. Protect
   all three alike. None of the three is ever printed by Nkap: a missing one fails startup
   naming the property, not the value.
+- **Supplied as a file, the passkey leaves `docker inspect`, not the process.** A file named
+  `NKAP_PROVIDER_MPESA_KE_PASSKEY` in the imported credentials directory (`/run/secrets` by
+  default) takes the place of the variable. Mounted by compose's `secrets:`, it is no longer
+  part of the container's configuration that `docker inspect` prints. The gateway still reads
+  it once, at startup, and holds it in memory for as long as it runs, like every other
+  credential. Anything that can read that memory, or the mounted file, can still read the
+  passkey. Replacing the file takes a restart: the same cut-over with no overlap as above.
 
 **Credentials for an installation that does not exist fail the gateway at startup.** The
 gateway reads provider variables only for the slots `application.yml` declares. A variable for
@@ -121,6 +128,17 @@ them, watched them, or prompted anyone to rotate them. That is an exposure, not 
 misconfiguration, and it matters most for the M-Pesa `passkey` above, which a single request
 reveals. The gateway now refuses to start and names each offending operator and country. The
 check reads variable names only; no value is read, logged, or put into its message.
+
+**Credentials may also arrive as files, and the same checks cover them.** A file in the
+imported credentials directory, named exactly like a variable, is read where that variable
+would be (`server/README.md`, *Configuration*). What changes is only where the value sits
+before the gateway reads it. A compose `secrets:` file is not shown by `docker inspect`, where
+an `environment:` value is. Nothing changes after that: the value is read once, at startup,
+and held in the process's memory; rotating it still takes a restart. A file for a slot no one
+declares fails startup exactly as the variable would, and the message says it was a file. A
+name set both as a variable and as a file also fails startup. Refusing it means there is never
+one value that was checked and another that was used. Both checks read names only, never a
+file's contents.
 
 **Provisioning is a host-side command, never a route, in every case above** — API keys,
 webhook secrets, and (see ADR 0010) a refund's destination is never a request field either,

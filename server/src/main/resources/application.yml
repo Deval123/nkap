@@ -11,9 +11,11 @@ spring:
     # puts them; NKAP_SECRETS_DIR moves it. `optional:` because a deployment that uses variables
     # alone has no such directory, and must start exactly as before.
     #
-    # Read once, at startup, like the variables: replacing a file takes a restart. One name as
-    # both a variable and a file fails startup (CredentialSourceGuard), and so does a file for a
-    # slot declared nowhere below (ProviderSlotGuard). Only the exact, upper-case name is read.
+    # Read once, at startup, like the variables: replacing a file takes a restart, except for the
+    # three M-Pesa credentials, which are read again when their file changes (RereadMpesaProfile,
+    # ADR 0015). One name as both a variable and a file fails startup (CredentialSourceGuard), and
+    # so does a file for a slot declared nowhere below (ProviderSlotGuard). Only the exact,
+    # upper-case name is read.
     #
     # One trailing newline is removed: \n or \r\n, what `echo value > FILE` writes. Measured
     # against a real jar, on what a stub operator received. Nothing else is trimmed — a trailing space, or two

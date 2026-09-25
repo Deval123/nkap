@@ -4,12 +4,21 @@ import dev.nkap.provider.ProviderAdapter;
 import dev.nkap.provider.ProviderId;
 import dev.nkap.provider.mpesa.MpesaAdapter;
 import dev.nkap.provider.mpesa.MpesaProfile;
+import dev.nkap.server.provider.CredentialFileReader.CredentialFile;
+import dev.nkap.server.provider.RereadMpesaProfile.Credential;
+import java.time.Clock;
+import java.time.Duration;
 import java.util.ArrayList;
+import java.util.EnumMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.function.Supplier;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.Environment;
 
 /**
  * One {@link MpesaAdapter} per configured M-Pesa installation (issue #215), registered as
@@ -31,6 +40,12 @@ import org.springframework.context.annotation.Configuration;
  * its own field ({@code passkey}), not the property a deployer sets. The checks below run
  * first and name {@code nkap.provider.mpesa.installations[n].<property>}. No message built
  * here contains a credential, whole or partial, whether present or missing.
+ *
+ * <p><strong>A credential supplied as a file is read again when the file changes</strong> (issue
+ * #223, ADR 0015). Each adapter is handed a {@link RereadMpesaProfile} rather than a fixed profile.
+ * Startup is unchanged: the profile is built and validated here, and a bad value still stops the
+ * gateway. After startup, a bad value keeps the last valid one in use and is reported by one
+ * warning and by {@link CredentialStaleness}'s gauge.
  */
 @Configuration
 @EnableConfigurationProperties(MpesaProperties.class)
@@ -38,9 +53,14 @@ class MpesaConfiguration {
 
     private static final String PREFIX = "nkap.provider.mpesa.installations";
 
+    /**
+     * Each configured installation's profile, validated now, in the order and with the messages
+     * startup has always used, and re-read later from whichever of its credentials came from files.
+     */
     @Bean
-    List<ProviderAdapter> mpesaAdapters(MpesaProperties properties, PublicBaseUrl publicBaseUrl) {
-        List<ProviderAdapter> adapters = new ArrayList<>();
+    MpesaProfiles mpesaProfiles(MpesaProperties properties, PublicBaseUrl publicBaseUrl, Environment environment) {
+        CredentialFileReader files = CredentialFileReader.of(environment);
+        Map<ProviderId, RereadMpesaProfile> profiles = new LinkedHashMap<>();
         List<MpesaProperties.Installation> installations = properties.installations();
         for (int i = 0; i < installations.size(); i++) {
             MpesaProperties.Installation installation = installations.get(i);
@@ -49,9 +69,48 @@ class MpesaConfiguration {
             }
             ProviderId id = providerId(installation);
             requireCallbackAddress(id, publicBaseUrl);
-            adapters.add(new MpesaAdapter(id, profile(i, installation), installation.requestTimeout()));
+            MpesaProfile startup = profile(i, installation);
+            profiles.put(id, new RereadMpesaProfile(id, startup, credentialFiles(files, i), Clock.systemUTC()));
+        }
+        return new MpesaProfiles(profiles);
+    }
+
+    @Bean
+    List<ProviderAdapter> mpesaAdapters(MpesaProperties properties, MpesaProfiles profiles) {
+        List<ProviderAdapter> adapters = new ArrayList<>();
+        for (MpesaProperties.Installation installation : properties.installations()) {
+            if (installation.isConfigured()) {
+                ProviderId id = providerId(installation);
+                adapters.add(new MpesaAdapter(id, profiles.byId().get(id), installation.requestTimeout()));
+            }
         }
         return adapters;
+    }
+
+    /** What {@code CredentialStalenessMetrics} exports: the installations that re-read a credential file. */
+    @Bean
+    CredentialStaleness mpesaCredentialStaleness(MpesaProfiles profiles) {
+        Map<ProviderId, Supplier<Duration>> staleness = new LinkedHashMap<>();
+        profiles.byId().forEach((id, profile) -> {
+            if (profile.rereads()) {
+                staleness.put(id, profile::staleFor);
+            }
+        });
+        return new CredentialStaleness(staleness);
+    }
+
+    /** The configured installations' profiles, by provider id. */
+    record MpesaProfiles(Map<ProviderId, RereadMpesaProfile> byId) {
+    }
+
+    /** The files installation {@code index}'s credentials came from; a credential set any other way is absent. */
+    private static Map<Credential, CredentialFile> credentialFiles(CredentialFileReader files, int index) {
+        Map<Credential, CredentialFile> found = new EnumMap<>(Credential.class);
+        for (Credential credential : Credential.values()) {
+            files.fileFor(PREFIX + "[" + index + "]." + credential.property)
+                    .ifPresent(file -> found.put(credential, file));
+        }
+        return found;
     }
 
     /** The currency each installation settles in, and the country {@code POST /payments} routes on. */

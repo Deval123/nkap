@@ -52,8 +52,11 @@ made.
    are fixed at startup, in the server's supplier and again in the adapter, which takes them from
    the first profile it is given and ignores later ones'.
 
-6. **The re-read is gated on each file's modification time.** No file changed since the last
+6. **The re-read is gated on each file's modification time.**¹ No file changed since the last
    look, no file is read. Files that changed together are accepted or rejected together.
+
+   ¹ No longer accurate: the gate compares each file's real path, modification time and size,
+   because a Kubernetes Secret update was measured to leave the time unchanged. See *Amendment, 2026-09-25* at the foot of this ADR.
 
 7. **A changed Consumer Key or Secret drops the bearer token obtained with the old pair.** A
    passkey needs nothing: it is hashed into each `Password` as the request is built. The
@@ -140,19 +143,26 @@ wrong passkey from a right one, and this ADR does not pretend otherwise.
 
 Also:
 
-- **The Helm chart does not gain this yet.** It passes every credential as a variable from a
+- **The Helm chart does not gain this yet.**² It passes every credential as a variable from a
   Secret reference, and a variable is not re-read. A chart deployment gets rotation without a
   restart only once the chart mounts those Secrets as files in the imported directory, which is
   a separate change.
+
+  ² No longer accurate: the chart mounts the three as files by default. See *Amendment, 2026-09-25* at the foot of this ADR.
 - **Measured, not assumed:** that a re-read value is trimmed exactly as the startup value was.
   The re-read uses Spring's own config-tree reader with the option Spring's import uses, and a
   test writes a file ending in one newline. The same goes for the gate: a test changes a file's
   content, puts its modification time back, and asserts that nothing is read.
-- **Assumed, not measured here:** that a Kubernetes Secret update is seen. Kubernetes swaps a
+- **Assumed, not measured here:**³ that a Kubernetes Secret update is seen. Kubernetes swaps a
   symbolic link to a new directory, and the modification time is read through the link, so the
   new file's time is what is compared. No cluster was run for this ADR.
-- **A limit of the gate:** a file rewritten within the file system's timestamp resolution,
+
+  ³ Measured since, and false: the modification time did not change, so the gate never fired. See *Amendment, 2026-09-25* at the foot of this ADR.
+- **A limit of the gate:**⁴ a file rewritten within the file system's timestamp resolution,
   keeping the same modification time, is not seen until its next change.
+
+  ⁴ The wrong worry: the problem was not a timestamp too coarse, but that the timestamp is not
+  what a Kubernetes update changes. See *Amendment, 2026-09-25* at the foot of this ADR.
 - **The gauge counts from detection**, not from the file's own change. A scrape looks at the
   files through the same gate, so detection is no later than the next scrape or payment,
   whichever comes first.
@@ -183,3 +193,45 @@ passkey does not. That difference is the whole argument for #223. Nothing in thi
 M-Pesa-specific apart from the three credential names. `MtnAdapter` could take a supplier the
 same way, and `CredentialFileReader` already resolves any bound property. That is recorded here
 as a possibility and not implemented.
+
+## Amendment, 2026-09-25 — issue #244
+
+Four passages above are no longer accurate, each marked inline where it is read. The decision
+itself stands: credentials read at use, the last valid one kept when a candidate is refused, the
+stale use made visible. What changed is how the gateway sees that a file changed, and what is
+known about Kubernetes.
+
+**The assumption was measured, and it was false.** On a `kind` cluster running Kubernetes
+`v1.35.0`, a pod mounted the Secret exactly as the chart does, and the Secret's `passkey` was
+patched. Three facts were measured:
+
+- the new value reached the pod after about 2 seconds;
+- the file's real path changed, to a new timestamped directory, because `..data` was re-pointed;
+- the file's modification time did **not** change: `1790352293` before and after.
+
+The gate compared only the modification time, read through the link, so it never fired. In
+Kubernetes, a rotated credential was never re-read, and the gateway served the old value until it
+restarted. "A limit of the gate" named the wrong worry: the problem was not a resolution too
+coarse to notice a change, but that the time is not what changes. No test had caught it, because
+every test wrote a file and set its time by hand, measuring the gate and never the layout.
+
+**What the gate compares now: each file's real path, modification time and size.** A re-read
+happens when any of the three differs from the last one seen. Each deployment needs a different
+member. In Kubernetes the time is stable and the **real path** changes. A file bind-mounted by
+compose, or replaced in place, is not a link: its real path is stable and its **modification
+time** changes. The **size** catches a same-timestamp replacement of another length, for free. A
+file that cannot be looked at is a rejection, as before, and never a throw on the payment path.
+Hashing the contents and comparing the directory's time were rejected; `CredentialFileReader`'s
+`Stamp` says why. A test builds the Kubernetes layout itself: a timestamped directory, `..data`
+linking to it, the credentials as links through `..data`, then a second directory with the same
+modification time and `..data` re-pointed. It failed before this change, with the old passkey
+still served, and passes after it.
+
+**The chart and the gate are one story.** Since 2026-09-25 the chart mounts the three credentials
+as files by default (`charts/nkap/README.md`, *M-Pesa*), so they reach the gateway in the form it
+re-reads. Without that, there is nothing to detect. Without this gate, the files were detected by
+nothing. Only together do they deliver what this ADR decided.
+
+**Still not measured.** The end-to-end path has not been run: a Secret patched in a cluster, the
+gauge staying at zero, and the new passkey reaching Safaricom on the next request. The 2 seconds is
+one cluster's number, from one run, and not a general one.

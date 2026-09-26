@@ -54,8 +54,14 @@ import org.springframework.transaction.support.TransactionTemplate;
  * to be told the answer for that request specifically. Escalating instead of polling for the
  * whole window is the only runtime behaviour change that ADR makes, and it is a separate
  * reason to escalate, not a shorter {@link ReconciliationPolicy#windowExhausted} window: every
- * other unresolved payment is still chased exactly as before. No adapter declares only
- * {@code CALLBACK} today, so this path is dormant until one does.
+ * other unresolved payment is still chased exactly as before. {@code MpesaAdapter} has
+ * declared only {@code CALLBACK} since it landed on 2026-09-23 (#211), so this runs for
+ * every M-Pesa submission that produced no {@code CheckoutRequestID}: the call timed out or
+ * failed, or Safaricom answered with a status other than 200 or 400, or a 200 naming no
+ * payment. {@link dev.nkap.server.payment.PaymentService} records each of those as
+ * {@code UNKNOWN} with no provider reference, so the first pass to claim it escalates it,
+ * with {@code reason=cannot_query}, and a callback to its per-payment URL can still resolve
+ * it afterwards.
  *
  * <p>The operator call sits outside the claim transaction, for the reason written twice
  * elsewhere in this codebase: an operator that does not answer must not hold a database
@@ -195,10 +201,10 @@ public class Reconciler {
 
     /**
      * ADR 0014 decision 3's trigger, checked cheaply: the adapter lookup is in memory, so a
-     * claim whose adapter declares {@code QUERY} — every adapter today — never pays for the
-     * payment row read {@link Payment#cannotBeQueriedBy} also needs. Only once an adapter
-     * lacks {@code QUERY} does this go back to the database to check the one thing that can
-     * still save it: a provider reference from a submission that did get answered.
+     * claim whose adapter declares {@code QUERY} — MTN's, today — never pays for the payment
+     * row read {@link Payment#cannotBeQueriedBy} also needs. Only for an adapter that lacks
+     * {@code QUERY} — M-Pesa's — does this go back to the database to check the one thing that
+     * can still save it: a provider reference from a submission that did get answered.
      */
     private boolean cannotBeQueried(Claim claim) {
         return adapters.find(claim.provider())

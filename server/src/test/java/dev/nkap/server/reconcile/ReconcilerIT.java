@@ -111,9 +111,9 @@ class ReconcilerIT {
 
     @AfterEach
     void neutralizePendingPayments() {
-        // payment_transition is append-only (CLAUDE.md's rule 1) — no DELETE, and the FK
-        // from it to payment forbids deleting the payment row too. Raw-set the row to a
-        // terminal state instead: a_terminal_payment_is_never_claimed (below) already
+        // payment_transition is append-only (docs/conventions.md's rule 1) — no DELETE, and
+        // the FK from it to payment forbids deleting the payment row too. Raw-set the row to
+        // a terminal state instead: a_terminal_payment_is_never_claimed (below) already
         // establishes that the reconciler's claim query respects state above everything
         // else on the row, so this alone is enough to stop it being claimed again.
         for (ReferenceId reference : pendingReferences) {

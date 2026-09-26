@@ -8,6 +8,8 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.spi.ILoggingEvent;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.nkap.core.money.Currency;
 import dev.nkap.core.money.Money;
@@ -28,10 +30,13 @@ import dev.nkap.server.payment.SettlementService;
 import dev.nkap.server.persistence.PostgresLedger;
 import dev.nkap.server.persistence.PostgresPaymentRepository;
 import dev.nkap.server.provider.AdapterRegistry;
+import dev.nkap.server.provider.ConfiguredAdapterRegistry;
 import dev.nkap.server.support.DockerAvailable;
+import dev.nkap.server.support.LogCapture;
 import dev.nkap.server.support.PostgresDatabase;
 import dev.nkap.server.web.PaymentResponse;
 import dev.nkap.server.webhook.InMemoryWebhookEndpointStore;
+import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.Clock;
 import java.time.Duration;
@@ -79,6 +84,9 @@ import org.springframework.transaction.PlatformTransactionManager;
 class ReconcilerIT {
 
     private static final ProviderId MTN = ProviderId.of("mtn");
+
+    /** A provider payments were made through and no adapter is configured for any more (issue #252). */
+    private static final ProviderId UNCONFIGURED = ProviderId.of("mtn-unconfigured");
 
     private static JdbcTemplate jdbc;
     private static PlatformTransactionManager txManager;
@@ -651,6 +659,85 @@ class ReconcilerIT {
         assertThat(row.get("state")).isEqualTo(PaymentState.PENDING.name());
     }
 
+    // === a payment whose provider has no adapter configured (issue #252) ==============
+
+    @Test
+    @DisplayName("a payment whose provider has no adapter does not stop the rest of its batch from being reconciled")
+    void a_payment_with_no_adapter_does_not_stop_its_batch() throws Exception {
+        Reconciler reconciler = reconcilerWith(defaults(), onlyMtnConfigured(new ProviderStatus(
+                PaymentState.SUCCEEDED, "SUCCESSFUL", "txn-252", null, "", "{\"status\":\"SUCCESSFUL\"}")));
+
+        // Claimed in reconcile_due_at order: the orphan is due first, so it comes first.
+        ReferenceId orphan = anUnknownPaymentDueForReconciliation(UNCONFIGURED, Duration.ofHours(2));
+        ReferenceId served = anUnknownPaymentDueForReconciliation(MTN, Duration.ofHours(1));
+
+        assertThat(reconciler.runOnce()).as("both are claimed in the one pass").isEqualTo(2);
+
+        assertThat(payments.findByReference(served).orElseThrow().state())
+                .as("the payment after the orphan still reached its operator and resolved")
+                .isEqualTo(PaymentState.SUCCEEDED);
+        assertThat(paymentRow(orphan).get("state")).isEqualTo(PaymentState.UNKNOWN.name());
+    }
+
+    @Test
+    @DisplayName("a payment with no adapter is escalated with reason=no_adapter once its window is spent, and never FAILED")
+    void a_payment_with_no_adapter_escalates_when_its_window_is_spent() {
+        ReconcilerProperties properties = new ReconcilerProperties(
+                Duration.ofSeconds(30), 50,
+                Duration.ofMinutes(1), Duration.ofHours(1), Duration.ofHours(1), Duration.ofMinutes(2));
+        Instant unresolvedSince = Instant.now().truncatedTo(ChronoUnit.SECONDS);
+        AdjustableClock clock = new AdjustableClock(unresolvedSince.plus(Duration.ofHours(2)));
+        SimpleMeterRegistry meters = new SimpleMeterRegistry();
+        Reconciler reconciler = reconcilerWith(properties, onlyMtnConfigured(null), clock, meters);
+
+        ReferenceId orphan = anUnknownPaymentDueForReconciliation(UNCONFIGURED, Duration.ofHours(1));
+        jdbc.update("UPDATE payment SET unresolved_since = ? WHERE reference = ?",
+                OffsetDateTime.ofInstant(unresolvedSince, ZoneOffset.UTC), orphan.value());
+
+        reconciler.runOnce();
+
+        Map<String, Object> row = paymentRow(orphan);
+        assertThat(row.get("escalated_at")).as("two hours into a one-hour window, it is escalated").isNotNull();
+        assertThat(row.get("state")).isEqualTo(PaymentState.UNKNOWN.name());
+        assertThat(statesEverReached(orphan)).as("escalation is not a verdict").doesNotContain(PaymentState.FAILED.name());
+        assertThat(meters.find("nkap.payment.escalated")
+                .tags("provider", UNCONFIGURED.toString(), "reason", "no_adapter").counter())
+                .as("counted under its own reason, not window_exhausted")
+                .isNotNull()
+                .extracting(counter -> counter.count()).isEqualTo(1.0);
+    }
+
+    @Test
+    @DisplayName("a payment with no adapter is not escalated while its window lasts, and is claimed again on the next due pass")
+    void a_payment_with_no_adapter_is_retried_until_its_window_is_spent() {
+        Instant start = Instant.now().truncatedTo(ChronoUnit.SECONDS);
+        AdjustableClock clock = new AdjustableClock(start);
+        Reconciler reconciler = reconcilerWith(defaults(), onlyMtnConfigured(null), clock, new SimpleMeterRegistry());
+
+        ReferenceId orphan = anUnknownPaymentDueForReconciliation(UNCONFIGURED, Duration.ofHours(1));
+
+        try (LogCapture logs = new LogCapture(Reconciler.class)) {
+            assertThat(reconciler.runOnce()).isEqualTo(1);
+
+            List<String> warnings = logs.events().stream()
+                    .filter(event -> event.getLevel() == Level.WARN)
+                    .map(ILoggingEvent::getFormattedMessage)
+                    .toList();
+            assertThat(warnings).as("one WARN for the one occurrence").hasSize(1);
+            assertThat(warnings.get(0))
+                    .contains(orphan.toString())
+                    .contains(UNCONFIGURED.toString())
+                    .contains("reconcile_attempts=" + attemptsOf(orphan));
+        }
+        assertThat(escalatedAt(orphan))
+                .as("an adapter can come back; escalating now would take the payment out of the queue for good")
+                .isNull();
+
+        clock.set(reconcileDueAt(orphan).plusSeconds(1));
+        assertThat(reconciler.runOnce()).as("still claimable once it is due again").isEqualTo(1);
+        assertThat(escalatedAt(orphan)).as("the default 24h window is nowhere near spent").isNull();
+    }
+
     // === 6. two reconcilers, real SKIP LOCKED, never the same payment ================
 
     @Test
@@ -730,11 +817,36 @@ class ReconcilerIT {
     }
 
     private Reconciler reconcilerWith(ReconcilerProperties properties, AdapterRegistry adapters, Clock clock) {
+        return reconcilerWith(properties, adapters, clock, new SimpleMeterRegistry());
+    }
+
+    private Reconciler reconcilerWith(ReconcilerProperties properties, AdapterRegistry adapters, Clock clock,
+                                      MeterRegistry meters) {
         ReconciliationPolicy policy = new ReconciliationPolicy(properties);
         ReconciliationStore store = new PostgresReconciliationStore(jdbc, txManager, policy);
         SettlementService settlement = new SettlementService(payments, adapters, ledger,
                 new OutboxNotifier(new InMemoryOutbox(), new InMemoryWebhookEndpointStore(), new ObjectMapper()), txManager);
-        return new Reconciler(payments, store, settlement, adapters, policy, properties, clock, new SimpleMeterRegistry(), txManager);
+        return new Reconciler(payments, store, settlement, adapters, policy, properties, clock, meters, txManager);
+    }
+
+    /**
+     * A real {@link ConfiguredAdapterRegistry} holding one adapter, for {@link #MTN}, and none for
+     * {@link #UNCONFIGURED} -- so a payment for that provider meets the registry's own
+     * {@code NoAdapterConfiguredException}, not a stand-in for it. {@code answer} is what the MTN
+     * adapter's query returns, or {@code null} if no test here should reach it.
+     */
+    private static AdapterRegistry onlyMtnConfigured(ProviderStatus answer) {
+        ProviderAdapter operator = mock(ProviderAdapter.class);
+        when(operator.id()).thenReturn(MTN);
+        when(operator.resolves()).thenReturn(Set.of(Resolution.QUERY, Resolution.CALLBACK));
+        if (answer != null) {
+            try {
+                when(operator.query(any(), any())).thenReturn(answer);
+            } catch (ProviderUnavailableException impossible) {
+                throw new AssertionError(impossible);
+            }
+        }
+        return new ConfiguredAdapterRegistry(List.of(operator), List.of());
     }
 
     private static AdapterRegistry operatorThatIsSilent() {
@@ -787,6 +899,23 @@ class ReconcilerIT {
         // Make it unambiguously due, whatever the clocks are doing.
         jdbc.update("UPDATE payment SET reconcile_due_at = now() - interval '1 hour' WHERE reference = ?",
                 reference.value());
+        pendingReferences.add(reference);
+        return reference;
+    }
+
+    /**
+     * The same as {@link #anUnknownPaymentDueForReconciliation()}, for {@code provider}, due
+     * {@code overdue} ago -- which orders it among the others in the same claim.
+     */
+    private ReferenceId anUnknownPaymentDueForReconciliation(ProviderId provider, Duration overdue) {
+        ReferenceId reference = ReferenceId.newReference();
+        Payment payment = Payment.create(reference, provider, "merchant-1", intent());
+        payment.applyTransition(PaymentState.SUBMITTED, PaymentTransition.Cause.SUBMIT_RESPONSE, "", "", "");
+        payment.applyTransition(PaymentState.UNKNOWN, PaymentTransition.Cause.SUBMIT_RESPONSE,
+                "", "the submit call did not answer", "");
+        payments.save(payment);
+        jdbc.update("UPDATE payment SET reconcile_due_at = ? WHERE reference = ?",
+                OffsetDateTime.ofInstant(Instant.now().minus(overdue), ZoneOffset.UTC), reference.value());
         pendingReferences.add(reference);
         return reference;
     }

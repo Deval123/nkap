@@ -8,6 +8,7 @@ import dev.nkap.server.payment.PaymentRepository;
 import dev.nkap.server.payment.PaymentTransition;
 import dev.nkap.server.payment.SettlementService;
 import dev.nkap.server.provider.AdapterRegistry;
+import dev.nkap.server.provider.NoAdapterConfiguredException;
 import dev.nkap.server.reconcile.ReconciliationStore.Claim;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -64,6 +65,18 @@ import org.springframework.transaction.support.TransactionTemplate;
  * with no provider reference, so it is escalated without being queried, with
  * {@code reason=cannot_query}, and a callback to its per-payment URL can still resolve it
  * afterwards.
+ *
+ * <p><strong>A claim whose provider has no adapter configured (ADR 0016, issue #252).</strong>
+ * {@code confirm} throws {@code NoAdapterConfiguredException} for it. Since #220, a Cameroon
+ * slot whose country is not stated configures no adapter, so a deployment upgraded without
+ * stating it holds {@code mtn-cm} payments no adapter serves, and nothing says so. The
+ * exception is caught around {@code confirm} alone, and only that exception, so the rest of
+ * the batch is still asked and still escalated when due. Every claim in the batch has already
+ * had its schedule advanced, so a claim the loop never reached would be neither asked nor
+ * escalated until it came due again, with its window running all the while. The claim itself
+ * logs one WARN and is escalated with {@code reason=no_adapter} once its window is spent, not
+ * before. Unlike {@code cannot_query}, nothing proves the next ask cannot answer, because
+ * configuration comes back, and escalation is one-way.
  *
  * <p>The operator call sits outside the claim transaction, for the reason written twice
  * elsewhere in this codebase: an operator that does not answer must not hold a database
@@ -162,8 +175,16 @@ public class Reconciler {
                     }
                     continue;
                 }
-                ConfirmationOutcome outcome =
-                        settlement.confirm(claim.provider(), claim.reference(), PaymentTransition.Cause.RECONCILER);
+                ConfirmationOutcome outcome;
+                try {
+                    outcome = settlement.confirm(claim.provider(), claim.reference(), PaymentTransition.Cause.RECONCILER);
+                } catch (NoAdapterConfiguredException noAdapter) {
+                    // Caught here, around confirm alone, so this claim still gets its own window
+                    // check below and the claims after it still get theirs (ADR 0016). Only this
+                    // exception: anything else is a bug and still ends the pass loudly.
+                    noAdapter(claim, now);
+                    continue;
+                }
                 if (outcome.resolved()) {
                     continue;
                 }
@@ -216,6 +237,26 @@ public class Reconciler {
                 .orElse(false);
     }
 
+    /**
+     * A claim whose provider has no adapter configured: it cannot be asked about this pass. It is
+     * escalated once its window is spent, as a payment the operator never answers is, and not
+     * before (ADR 0016). A missing adapter is a configuration state, and configuration comes
+     * back, while escalation is one-way: an escalated payment is never claimed again. One WARN
+     * either way.
+     */
+    private void noAdapter(Claim claim, Instant now) {
+        if (policy.windowExhausted(claim.unresolvedSince(), now) && store.markEscalated(claim.reference(), now)) {
+            log.warn("payment {} escalated to a human after {} reconciler attempt(s): no adapter is configured "
+                            + "for provider {}, so this attempt could not ask the operator",
+                    claim.reference(), claim.attempts(), claim.provider());
+            escalated(claim.provider().toString(), "no_adapter");
+            return;
+        }
+        log.warn("payment {} not reconciled this pass: no adapter is configured for provider {}; "
+                        + "reconcile_attempts={}, retried until its window is spent, then escalated",
+                claim.reference(), claim.provider(), claim.attempts());
+    }
+
     private void escalated(String provider, String reason) {
         Counter.builder("nkap.payment.escalated")
                 .description("Payments the reconciler gave up retrying automatically. Still open, not FAILED "
@@ -223,7 +264,9 @@ public class Reconciler {
                         + "reason=cannot_query (ADR 0014 decision 3) is a payment escalated with zero operator "
                         + "calls (the claim still counts toward reconcile_attempts), because "
                         + "its adapter cannot resolve a lost submission by polling and it has no provider "
-                        + "reference to query with.")
+                        + "reference to query with. reason=no_adapter (ADR 0016) is a payment whose window was "
+                        + "spent while no adapter was configured for its provider, so the attempt that "
+                        + "escalated it could not ask the operator.")
                 .tag("provider", provider)
                 .tag("reason", reason)
                 .register(meterRegistry)

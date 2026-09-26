@@ -393,10 +393,14 @@ own behaviour is undocumented or untested; the simulator implements the second c
 mismatch between the two is a bug in the simulator or the doc, not in MTN. Read that file for
 what it imitates before you trust an integration test that only ever ran against this.
 
-**There is an M-Pesa simulator too**, a separate image on port 8082 so the two run side by side:
+**There is an M-Pesa simulator too**, on port 8082 so the two run side by side. Its image,
+`ghcr.io/deval123/nkap-simulator-mpesa`, ships from the first release after 2.0.0, and pulling
+it works for everyone only once a maintainer has made the package public by hand. Until then,
+run it from a clone:
 
 ```bash
-docker run -p 8082:8082 ghcr.io/deval123/nkap-simulator-mpesa
+mvn -B -pl simulator-mpesa-app -am package -DskipTests
+java -jar simulator-mpesa-app/target/nkap-simulator-mpesa-app-*-boot.jar
 ```
 
 It plays Safaricom Daraja's STK Push, collections only, and is scripted through the same

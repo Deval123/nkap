@@ -184,10 +184,12 @@ ORDER BY escalated_at;
 | `provider-mtn` | The MTN MoMo adapter. |
 | `provider-mpesa` | The M-Pesa STK Push adapter. Certified by the kit; configurable in the server, never yet run against Safaricom. |
 | `conformance` | The test kit every adapter must pass to be merged. |
+| `test-support` | Test infrastructure several modules share: booting a simulator, checking a record's `toString()`. Used at test scope only. |
 | `simulator-core` | What the fake operator does: scenarios, its memory of payments, callbacks, the `/_nkap` control plane. |
 | `simulator-mtn` | How the fake operator says it the way MTN does: routes, bodies, statuses, authentication. |
-| `simulator-mpesa` | How it says it the way Safaricom's M-Pesa STK Push does. Tested on its own; not yet in the image. |
-| `simulator` | A scriptable fake operator that misbehaves on command — the application and image built from the two above. |
+| `simulator-mpesa` | How it says it the way Safaricom's M-Pesa STK Push does. Tested on its own, and assembled into a deployable by `simulator-mpesa-app`. |
+| `simulator` | A scriptable fake operator that misbehaves on command — the application and image built from `simulator-core` and `simulator-mtn`. |
+| `simulator-mpesa-app` | The same for M-Pesa — the application and image built from `simulator-core` and `simulator-mpesa`, on port 8082. |
 | `server` | Spring Boot: REST, webhooks, outbox, schedulers. |
 
 `core` has no dependencies on purpose. It makes the accounting invariants testable in

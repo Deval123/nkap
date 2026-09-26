@@ -27,8 +27,8 @@ import org.springframework.stereotype.Component;
  *
  * <ul>
  *   <li><strong>{@code simulator-core}.</strong> A {@code @Component} there is scanned into every
- *       application that assembles the core — both faces' test applications,
- *       {@code server}'s embedded simulator — and
+ *       application that assembles the core — {@code simulator-mpesa}'s test application, both
+ *       deployables, {@code server}'s embedded simulator — and
  *       {@code nkap.scenario.file} becomes a behaviour of a published module that only a major
  *       release could take back. It would also move a class out of the MTN deployable, which this
  *       change set out not to touch.</li>

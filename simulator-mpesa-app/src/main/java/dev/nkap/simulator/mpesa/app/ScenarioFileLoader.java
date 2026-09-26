@@ -28,7 +28,7 @@ import org.springframework.stereotype.Component;
  * <ul>
  *   <li><strong>{@code simulator-core}.</strong> A {@code @Component} there is scanned into every
  *       application that assembles the core — both faces' test applications,
- *       {@code provider-mpesa}'s boot class, {@code server}'s embedded simulator — and
+ *       {@code server}'s embedded simulator — and
  *       {@code nkap.scenario.file} becomes a behaviour of a published module that only a major
  *       release could take back. It would also move a class out of the MTN deployable, which this
  *       change set out not to touch.</li>
@@ -40,9 +40,10 @@ import org.springframework.stereotype.Component;
  * </ul>
  *
  * <p>The cost: it is the first <em>production</em> duplication in this repository. The copies
- * #214 records are all test scope — {@code RecordToString} four times, {@code CallbackReceiver}
- * twice. A fix to one loader that is not made to the other makes the two images disagree on the
- * same file, and nothing but this paragraph and {@code ScenarioFileTest} in each module notices.
+ * #214 recorded were all test scope — {@code RecordToString} four times, {@code CallbackReceiver}
+ * twice — and #214 removed them. A fix to one loader that is not made to the other makes the two
+ * images disagree on the same file, and nothing but this paragraph and {@code ScenarioFileTest}
+ * in each module notices.
  * If a third deployable ever needs it, that is the point to move it to {@code simulator-core}
  * and accept the cost above, rather than copy it again.
  */

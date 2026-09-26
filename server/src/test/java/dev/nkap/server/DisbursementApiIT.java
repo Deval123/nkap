@@ -10,16 +10,20 @@ import dev.nkap.core.ledger.LedgerEntry;
 import dev.nkap.core.money.Currency;
 import dev.nkap.server.auth.ApiKeyStore;
 import dev.nkap.server.reconcile.Reconciler;
+import dev.nkap.server.support.BindLoopback;
 import dev.nkap.server.support.DockerAvailable;
 import dev.nkap.server.support.PostgresDatabase;
+import dev.nkap.testsupport.LoopbackOnly;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.client.TestRestTemplate;
+import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -56,6 +60,9 @@ class DisbursementApiIT {
 
     @DynamicPropertySource
     static void configuration(DynamicPropertyRegistry registry) {
+        // Not a PostgresSpringBootIT (see above), so the base's loopback binding is repeated
+        // here. Identical in DisbursementApiIT and RefundApiIT, which share one context.
+        BindLoopback.register(registry);
         PostgresDatabase db = PostgresDatabase.shared();
         registry.add("spring.datasource.url", db::jdbcUrl);
         registry.add("spring.datasource.username", db::username);
@@ -114,6 +121,19 @@ class DisbursementApiIT {
         PostgresDatabase.shared().setAsideUnresolvedPayments();
         SIMULATOR.reset();
         apiKey = apiKeys.provision("merchant-1", false, "DisbursementApiIT").token();
+    }
+
+    @LocalServerPort
+    private int port;
+
+    @Value("${local.management.port}")
+    private int managementPort;
+
+    @Test
+    @DisplayName("this context's gateway binds 127.0.0.1 alone, on its API and management ports (issue #221)")
+    void this_context_binds_loopback_only() throws Exception {
+        LoopbackOnly.assertBoundToLoopbackOnly(port);
+        LoopbackOnly.assertBoundToLoopbackOnly(managementPort);
     }
 
     @Test

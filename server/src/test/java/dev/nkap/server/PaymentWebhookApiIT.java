@@ -6,10 +6,12 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.nkap.server.auth.ApiKeyStore;
 import dev.nkap.server.outbox.OutboxRelay;
+import dev.nkap.server.support.BindLoopback;
 import dev.nkap.server.support.DockerAvailable;
 import dev.nkap.server.support.PostgresDatabase;
 import dev.nkap.server.support.StubReceiver;
 import dev.nkap.server.webhook.WebhookEndpointStore;
+import dev.nkap.testsupport.LoopbackOnly;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -17,8 +19,10 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.client.TestRestTemplate;
+import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -46,6 +50,9 @@ class PaymentWebhookApiIT {
 
     @DynamicPropertySource
     static void configuration(DynamicPropertyRegistry registry) {
+        // Not a PostgresSpringBootIT (see above), so the base's loopback binding is repeated
+        // here. Identical in DisbursementApiIT and RefundApiIT, which share one context.
+        BindLoopback.register(registry);
         PostgresDatabase db = PostgresDatabase.shared();
         registry.add("spring.datasource.url", db::jdbcUrl);
         registry.add("spring.datasource.username", db::username);
@@ -106,6 +113,19 @@ class PaymentWebhookApiIT {
     @AfterEach
     void closeReceiver() {
         receiver.close();
+    }
+
+    @LocalServerPort
+    private int port;
+
+    @Value("${local.management.port}")
+    private int managementPort;
+
+    @Test
+    @DisplayName("this context's gateway binds 127.0.0.1 alone, on its API and management ports (issue #221)")
+    void this_context_binds_loopback_only() throws Exception {
+        LoopbackOnly.assertBoundToLoopbackOnly(port);
+        LoopbackOnly.assertBoundToLoopbackOnly(managementPort);
     }
 
     @Test

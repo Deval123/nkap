@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import dev.nkap.testsupport.LoopbackOnly;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.LinkedHashMap;
@@ -30,7 +31,10 @@ import org.springframework.web.client.RestClient;
  * point of it is that a test can see a rotated credential arrive, so these tests prove the record
  * and, as firmly, that recording changed nothing about what the face accepts.
  */
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+// The address its tests dial, not the wildcard Tomcat binds by default (issue #221): see
+// LoopbackOnly for what another process could otherwise do with 127.0.0.1 on this port.
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+        properties = "server.address=" + LoopbackOnly.ADDRESS)
 @ExtendWith(OutputCaptureExtension.class)
 class MpesaReceivedTest {
 
@@ -63,6 +67,12 @@ class MpesaReceivedTest {
     }
 
     // --- the token face --------------------------------------------------------------------
+
+    @Test
+    @DisplayName("the application under test binds 127.0.0.1 alone, so no other listener can take the address its tests dial")
+    void it_binds_loopback_only() throws Exception {
+        LoopbackOnly.assertBoundToLoopbackOnly(port);
+    }
 
     @Test
     @DisplayName("a token request's Basic credentials are recorded decoded, and the next pair replaces them")

@@ -116,22 +116,38 @@ tagging. Untagged `main` is the normal state of this project.
 Once that judgment is made, cut the release from `main` only, once the conformance kit
 passes, in exactly this order:
 
-1. **Drop `-SNAPSHOT`, by hand.** Every POM in the reactor, and the CHANGELOG entry for the
-   version being cut gets its date. This is the release commit.
-2. **Tag it, by hand.** Annotated `vX.Y.Z` (why annotated, below), on the release commit,
-   once it is on `main`. Push the tag the same day the release commit merges: that commit
-   bumps `README.md`'s quickstart `curl` to
-   `raw.githubusercontent.com/deval123/nkap/v<version>/...`, and that URL 404s until the tag
+1. **Ask whether the two independent versions move.** `docs/openapi.yaml`'s `info.version` and
+   `charts/nkap/Chart.yaml`'s `version` are not the gateway's, and must not be made to follow
+   it. Since the last tag (`git describe --tags --abbrev=0`), did the API document gain or
+   change a path, method, field or status code? Did the chart gain a value, change a default
+   or fix a template? The answer is often no: a reworded description or comment is not a
+   change. Read the diff to answer, not its size:
+   `git diff <last tag>..HEAD -- docs/openapi.yaml charts/nkap/values.yaml charts/nkap/templates/`.
+   A yes means a bump in the release commit, as each file's own comment says, unless the number
+   already moved since the last tag and still covers everything that changed after it. A no
+   leaves the number where it is.
+2. **Make the release commit, by hand.** Drop `-SNAPSHOT` from every POM in the reactor, date
+   the version's `CHANGELOG.md` entry, and apply step 1's answers. Then move every release
+   version a reader copies, which nothing updates for you:
+   `git grep -n -E 'nkap/v[0-9]+\.[0-9]+\.[0-9]+/|NKAP_VERSION=[0-9]+\.[0-9]+\.[0-9]+[[:space:]]|image\.tag=[0-9]|nkap-[a-z-]+:[0-9]'`
+   finds them wherever they are stuck: the download URL and `NKAP_VERSION` in `README.md` and
+   in `nkap-standalone.compose.yaml`'s own header, and `charts/nkap/README.md`'s install
+   command. Then `git grep -n -F '<previous version>' -- . ':!CHANGELOG.md' ':!docs/adr' ':!docs/roadmap'`
+   finds sentences still pointing at this release as the future, such as "from the first
+   release after <previous version>": say what is true once it ships.
+3. **Tag it, by hand.** Annotated `vX.Y.Z` (why annotated, below), on the release commit,
+   once it is on `main`. Push the tag the same day the release commit merges: the download
+   URL it moved, `raw.githubusercontent.com/deval123/nkap/v<version>/...`, 404s until the tag
    exists — minutes apart if the two are done together, a day if the tag waits.
-3. **The workflow runs itself.** Pushing the tag triggers `.github/workflows/release.yml`
+4. **The workflow runs itself.** Pushing the tag triggers `.github/workflows/release.yml`
    with nobody doing anything: the full reactor build, then the images published, then
    pulled back down with no credentials and run through the demo to prove the publish
    actually works. See below for exactly what it does, including the one manual step
    inside it.
-4. **Create the GitHub release, by hand.** Nothing in this repository does this
+5. **Create the GitHub release, by hand.** Nothing in this repository does this
    automatically. Body: the version's own `CHANGELOG.md` entry, copied verbatim from below
    its heading to the next one; title `Nkap X.Y.Z`; neither draft nor prerelease.
-5. **Reopen the next `-SNAPSHOT`, by hand.** Every POM in the reactor. Until this lands,
+6. **Reopen the next `-SNAPSHOT`, by hand.** Every POM in the reactor. Until this lands,
    `main` sits on a released version, and a build from it produces an artifact claiming a
    version it is not.
 
@@ -145,7 +161,7 @@ passes, in exactly this order:
   it is a test-scope dependency, so breaking it fails a contributor's build loudly, before
   anything runs, and never makes an adapter misbehave where money moves. A minor release
   may break it, and its release note must say so.
-- Step 3, in full: the workflow runs the full reactor build, then publishes
+- Step 4, in full: the workflow runs the full reactor build, then publishes
   `ghcr.io/deval123/nkap-gateway`, `ghcr.io/deval123/nkap-simulator` and
   `ghcr.io/deval123/nkap-simulator-mpesa` for `linux/amd64` and `linux/arm64`, tagged
   `X.Y.Z` and the moving `latest` — never on a push to `main`, and never a rolling `X.Y` or

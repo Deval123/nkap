@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import dev.nkap.testsupport.LoopbackOnly;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
@@ -25,7 +26,10 @@ import org.springframework.web.client.RestClient;
  * established what it reports — that is the guarantee ADR 0002's amendment records, and the
  * point of every assertion below going through it rather than reading the file back.
  */
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+// The address its tests dial, not the wildcard Tomcat binds by default (issue #221): see
+// LoopbackOnly for what another process could otherwise do with 127.0.0.1 on this port.
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+        properties = "server.address=" + LoopbackOnly.ADDRESS)
 class ScenarioFileTest {
 
     private static final Path FILE = createScenarioFile();
@@ -57,6 +61,12 @@ class ScenarioFileTest {
 
     private String base() {
         return "http://localhost:" + port;
+    }
+
+    @Test
+    @DisplayName("the application under test binds 127.0.0.1 alone, so no other listener can take the address its tests dial")
+    void it_binds_loopback_only() throws Exception {
+        LoopbackOnly.assertBoundToLoopbackOnly(port);
     }
 
     @Test

@@ -16,6 +16,7 @@ public abstract class PostgresSpringBootIT {
 
     @DynamicPropertySource
     static void datasource(DynamicPropertyRegistry registry) {
+        BindLoopback.register(registry);
         PostgresDatabase db = PostgresDatabase.shared();
         registry.add("spring.datasource.url", db::jdbcUrl);
         registry.add("spring.datasource.username", db::username);

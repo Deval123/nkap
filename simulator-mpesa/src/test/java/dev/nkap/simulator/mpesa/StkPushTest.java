@@ -9,6 +9,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.nkap.simulator.ControlPlane;
+import dev.nkap.testsupport.LoopbackOnly;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -46,7 +47,10 @@ import org.springframework.web.client.RestClient;
  * dispatcher, and every scenario through the core's control plane. It runs on a real port
  * because a callback is a real outbound request.
  */
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+// The address its tests dial, not the wildcard Tomcat binds by default (issue #221): see
+// LoopbackOnly for what another process could otherwise do with 127.0.0.1 on this port.
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+        properties = "server.address=" + LoopbackOnly.ADDRESS)
 @AutoConfigureMockMvc
 class StkPushTest {
 
@@ -88,6 +92,12 @@ class StkPushTest {
     }
 
     // --- authentication --------------------------------------------------------------------
+
+    @Test
+    @DisplayName("the application under test binds 127.0.0.1 alone, so no other listener can take the address its tests dial")
+    void it_binds_loopback_only() throws Exception {
+        LoopbackOnly.assertBoundToLoopbackOnly(port);
+    }
 
     @Test
     @DisplayName("the token endpoint issues a 28-character bearer token whose expires_in is the declared lifetime")

@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 import dev.nkap.simulator.scenario.MomoStatus;
+import dev.nkap.testsupport.LoopbackOnly;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -31,7 +32,10 @@ import org.springframework.web.client.RestClient;
  * real port here because a callback is a real outbound HTTP request; MockMvc
  * would not see it.
  */
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+// The address its tests dial, not the wildcard Tomcat binds by default (issue #221): see
+// LoopbackOnly for what another process could otherwise do with 127.0.0.1 on this port.
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+        properties = "server.address=" + LoopbackOnly.ADDRESS)
 class CallbackDeliveryTest {
 
     private static final String BODY = """
@@ -86,6 +90,12 @@ class CallbackDeliveryTest {
     private List<Map<String, Object>> attempts(String reference) {
         return client.get().uri(base() + "/_nkap/callbacks/" + reference)
             .retrieve().body(List.class);
+    }
+
+    @Test
+    @DisplayName("the application under test binds 127.0.0.1 alone, so no other listener can take the address its tests dial")
+    void it_binds_loopback_only() throws Exception {
+        LoopbackOnly.assertBoundToLoopbackOnly(port);
     }
 
     @Test

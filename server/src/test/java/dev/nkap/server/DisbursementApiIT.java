@@ -10,16 +10,20 @@ import dev.nkap.core.ledger.LedgerEntry;
 import dev.nkap.core.money.Currency;
 import dev.nkap.server.auth.ApiKeyStore;
 import dev.nkap.server.reconcile.Reconciler;
+import dev.nkap.server.support.BindLoopback;
 import dev.nkap.server.support.DockerAvailable;
 import dev.nkap.server.support.PostgresDatabase;
+import dev.nkap.testsupport.LoopbackOnly;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.client.TestRestTemplate;
+import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -40,12 +44,16 @@ import org.springframework.test.context.DynamicPropertySource;
  * {@code nkap.reconciler.enabled} (see {@code ReconcilerWiringTest}), so {@code enabled=true}
  * is what lets {@code runOnce()} be autowired and called by hand below. A long interval does
  * not by itself stop the scheduled pass from firing -- its first tick fires as soon as the
- * context comes up, no matter the interval -- and this class shares its context with
- * {@code RefundApiIT} (identical {@code @DynamicPropertySource} values), so a live scheduler
- * would otherwise outlive both classes and keep sweeping the PostgreSQL instance every
- * {@code *IT} shares ({@code PostgresDatabase.shared()}) for the rest of the JVM's life
- * (issue #162). {@code @DirtiesContext(classMode = AFTER_CLASS)} below closes that context
- * once this class is done, which is what actually stops it.
+ * context comes up, no matter the interval.
+ *
+ * <p>Spring's test framework keeps a context cached, and open, after its class finishes, until
+ * the JVM exits or the cache evicts it. This one's scheduler would therefore outlive this class
+ * and keep sweeping the PostgreSQL instance every {@code *IT} shares
+ * ({@code PostgresDatabase.shared()}) (issue #162). {@code @DirtiesContext(classMode =
+ * AFTER_CLASS)} below closes the context as soon as this class is done, and that is what stops
+ * it. Remove the annotation and the sweep comes back. The context is this class's alone: it
+ * registers its own {@code SIMULATOR}'s base URL, so no other class's
+ * {@code @DynamicPropertySource} values match it. None of this depends on sharing.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ExtendWith(DockerAvailable.class)
@@ -56,6 +64,9 @@ class DisbursementApiIT {
 
     @DynamicPropertySource
     static void configuration(DynamicPropertyRegistry registry) {
+        // Not a PostgresSpringBootIT (see the class javadoc), so the base's loopback binding is
+        // registered here as well.
+        BindLoopback.register(registry);
         PostgresDatabase db = PostgresDatabase.shared();
         registry.add("spring.datasource.url", db::jdbcUrl);
         registry.add("spring.datasource.username", db::username);
@@ -114,6 +125,19 @@ class DisbursementApiIT {
         PostgresDatabase.shared().setAsideUnresolvedPayments();
         SIMULATOR.reset();
         apiKey = apiKeys.provision("merchant-1", false, "DisbursementApiIT").token();
+    }
+
+    @LocalServerPort
+    private int port;
+
+    @Value("${local.management.port}")
+    private int managementPort;
+
+    @Test
+    @DisplayName("this context's gateway binds 127.0.0.1 alone, on its API and management ports (issue #221)")
+    void this_context_binds_loopback_only() throws Exception {
+        LoopbackOnly.assertBoundToLoopbackOnly(port);
+        LoopbackOnly.assertBoundToLoopbackOnly(managementPort);
     }
 
     @Test

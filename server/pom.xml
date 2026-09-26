@@ -83,6 +83,12 @@
       <version>${project.version}</version>
       <scope>test</scope>
     </dependency>
+    <dependency>
+      <groupId>dev.nkap</groupId>
+      <artifactId>nkap-test-support</artifactId>
+      <version>${project.version}</version>
+      <scope>test</scope>
+    </dependency>
     <!-- The integration tests (*IT) run against a real PostgreSQL in a container. -->
     <dependency>
       <groupId>org.testcontainers</groupId>

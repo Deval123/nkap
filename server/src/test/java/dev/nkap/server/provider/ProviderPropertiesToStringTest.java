@@ -3,7 +3,7 @@ package dev.nkap.server.provider;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import dev.nkap.core.money.Currency;
-import dev.nkap.server.support.RecordToString;
+import dev.nkap.testsupport.RecordToString;
 import java.net.URI;
 import java.time.Duration;
 import java.util.Map;

@@ -65,11 +65,10 @@
         <version>${spring-boot.version}</version>
         <executions>
           <!--
-            The runnable, layered jar the Dockerfile packages. Nothing depends on this module
-            as a library today, unlike simulator/, whose plain jar server/ and provider-mtn
-            use at test scope; the classifier is kept anyway so that a consumer added later
-            (provider-mpesa, say, in place of its own boot class) gets a plain jar that
-            resolves, and so both Dockerfiles copy the same "-boot" name.
+            The runnable, layered jar the Dockerfile packages. A classifier keeps it beside
+            the plain jar, which provider-mpesa depends on as a test library, as server/ and
+            provider-mtn do on simulator/'s; a fat jar there would not resolve. Both
+            Dockerfiles copy the same "-boot" name.
           -->
           <execution>
             <id>repackage-boot-jar</id>

@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.catchThrowable;
 
 import dev.nkap.core.money.Currency;
+import dev.nkap.testsupport.RecordToString;
 import java.net.URI;
 import java.util.List;
 import java.util.Map;

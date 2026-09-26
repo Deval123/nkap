@@ -2,6 +2,7 @@ package dev.nkap.provider.mpesa;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import dev.nkap.testsupport.RecordToString;
 import java.time.Instant;
 import java.util.Map;
 import java.util.Set;

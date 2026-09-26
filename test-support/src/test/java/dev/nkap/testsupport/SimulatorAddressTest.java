@@ -1,4 +1,4 @@
-package dev.nkap.provider.mtn;
+package dev.nkap.testsupport;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -23,6 +23,12 @@ import org.junit.jupiter.api.Test;
  * That was shown on the machine the original failure happened on; the process that did it was
  * never identified. The simulator now binds {@code 127.0.0.1} itself and the harness connects to
  * exactly that, so the address it uses cannot be bound by anyone else.
+ *
+ * <p>{@code provider-mtn} and {@code provider-mpesa} each ran this test against their own simulator.
+ * One test of the one helper replaces both, and boots {@link BareApplication} rather than either
+ * simulator. Nothing is lost by that: the address comes from the {@code --server.address} argument
+ * {@link SimulatorUnderTest} passes, which outranks any application's own configuration, and
+ * neither simulator sets {@code server.address} or supplies its own web server factory.
  */
 class SimulatorAddressTest {
 
@@ -30,7 +36,7 @@ class SimulatorAddressTest {
 
     @BeforeAll
     static void start() {
-        simulator = new SimulatorUnderTest();
+        simulator = new SimulatorUnderTest(BareApplication.class, "bare application");
     }
 
     @AfterAll

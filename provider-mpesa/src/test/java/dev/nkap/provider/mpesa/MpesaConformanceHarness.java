@@ -1,5 +1,6 @@
 package dev.nkap.provider.mpesa;
 
+import dev.nkap.conformance.CallbackReceiver;
 import dev.nkap.conformance.ConformanceHarness;
 import dev.nkap.core.money.Currency;
 import dev.nkap.core.money.Money;
@@ -8,6 +9,7 @@ import dev.nkap.provider.PaymentIntent;
 import dev.nkap.provider.ProviderAdapter;
 import dev.nkap.provider.ProviderId;
 import dev.nkap.provider.RawCallback;
+import dev.nkap.testsupport.SimulatorUnderTest;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.Map;
@@ -29,7 +31,7 @@ final class MpesaConformanceHarness implements ConformanceHarness {
     /** Short, because the simulator lets it be. */
     private static final Duration CREDENTIAL_LIFETIME = Duration.ofSeconds(2);
 
-    private final MpesaSimulatorUnderTest simulator;
+    private final SimulatorUnderTest simulator;
     private final CallbackReceiver.Route route;
     private final MpesaAdapter adapter;
 
@@ -37,7 +39,7 @@ final class MpesaConformanceHarness implements ConformanceHarness {
     private String onQuery = "\"onQuery\":[{\"status\":\"SUCCESS\"}]";
     private String token = "\"token\":{\"ttl\":\"PT1H\"}";
 
-    MpesaConformanceHarness(MpesaSimulatorUnderTest simulator, CallbackReceiver callbacks) {
+    MpesaConformanceHarness(SimulatorUnderTest simulator, CallbackReceiver callbacks) {
         this.simulator = simulator;
         this.route = callbacks.open();
         MpesaProfile profile = new MpesaProfile(simulator.baseUrl(), "174379", "passkey", "consumer-key",

@@ -2,7 +2,7 @@ package dev.nkap.server.webhook;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import dev.nkap.server.support.RecordToString;
+import dev.nkap.testsupport.RecordToString;
 import java.time.Instant;
 import java.util.Map;
 import java.util.Set;

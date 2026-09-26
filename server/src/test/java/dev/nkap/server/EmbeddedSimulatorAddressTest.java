@@ -15,8 +15,8 @@ import org.junit.jupiter.api.Test;
 
 /**
  * {@link EmbeddedSimulator} must own the address its callers connect to, for as long as it runs
- * (issue #213) — the same assertion {@code provider-mtn}'s and {@code provider-mpesa}'s
- * {@code SimulatorAddressTest} make of their harnesses, which had the same defect.
+ * (issue #213) — the same assertion {@code test-support}'s {@code SimulatorAddressTest} makes of
+ * the harness both adapters' tests share, which had the same defect.
  *
  * <p>Bound to the IPv6 wildcard and reached through {@code localhost}, a second process could bind
  * {@code 127.0.0.1} on the same port with {@code SO_REUSEADDR} and take every call. This fixture

@@ -78,8 +78,9 @@ not in the test.
 | `core` | ledger, payment state machine, idempotency | nothing |
 | `provider-api` | the `ProviderAdapter` contract | `core` |
 | `provider-mtn` | the MTN MoMo adapter | `provider-api`; `simulator` at test scope only |
-| `provider-mpesa` | the M-Pesa STK Push adapter | `provider-api`; `simulator-mpesa` at test scope only |
-| `conformance` | the kit every adapter must pass | `provider-api` |
+| `provider-mpesa` | the M-Pesa STK Push adapter | `provider-api`; `simulator-mpesa-app` at test scope only |
+| `conformance` | the kit every adapter must pass, and the callback receiver a harness catches callbacks with | `provider-api` |
+| `test-support` | test infrastructure several modules share: booting a simulator and driving its control plane, checking a record's `toString()` | Spring Boot, AssertJ — never an nkap module; depended on at test scope only |
 | `simulator-core` | the fake operator's behaviour: scenarios, payment memory, callbacks, control plane | — (never a face module, at any scope) |
 | `simulator-mtn` | MTN's face on it: routes, bodies, statuses, authentication | `simulator-core` |
 | `simulator-mpesa` | M-Pesa's face on it (STK Push) | `simulator-core` |

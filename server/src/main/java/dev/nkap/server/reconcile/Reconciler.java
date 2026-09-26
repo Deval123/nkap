@@ -48,13 +48,15 @@ import org.springframework.transaction.support.TransactionTemplate;
  * <p><strong>One claim never reaches the operator at all (ADR 0014 decision 3, issue
  * #188).</strong> Before {@code confirm} is called, a claim whose adapter does not declare
  * {@link dev.nkap.provider.Resolution#QUERY} <em>and</em> whose payment holds no provider
- * reference — {@link Payment#cannotBeQueriedBy} — is escalated immediately, with zero
- * attempts and no operator call. Backing off and re-asking on a schedule assumes the next
- * ask might answer; here it provably cannot, because there is nothing to ask with and no way
- * to be told the answer for that request specifically. Escalating instead of polling for the
- * whole window is the only runtime behaviour change that ADR makes, and it is a separate
- * reason to escalate, not a shorter {@link ReconciliationPolicy#windowExhausted} window: every
- * other unresolved payment is still chased exactly as before. {@code MpesaAdapter} has
+ * reference — {@link Payment#cannotBeQueriedBy} — is escalated on the first pass that claims
+ * it, with zero operator calls. The claim itself still counts, as every claim does, so
+ * {@code reconcile_attempts} reads 1: it is the operator, not the claim, that this skips.
+ * Backing off and re-asking on a schedule assumes the next ask might answer; here it provably
+ * cannot, because there is nothing to ask with and no way to be told the answer for that
+ * request specifically. Escalating instead of polling for the whole window is the only
+ * runtime behaviour change that ADR makes, and it is a separate reason to escalate, not a
+ * shorter {@link ReconciliationPolicy#windowExhausted} window: every other unresolved
+ * payment is still chased exactly as before. {@code MpesaAdapter} has
  * declared only {@code CALLBACK} since it landed on 2026-09-23 (#211), so this runs for
  * every M-Pesa submission that produced no {@code CheckoutRequestID}: the call timed out or
  * failed, or Safaricom answered with a status other than 200 or 400, or a 200 naming no
@@ -217,9 +219,10 @@ public class Reconciler {
         Counter.builder("nkap.payment.escalated")
                 .description("Payments the reconciler gave up retrying automatically. Still open, not FAILED "
                         + "-- needs a human. reason=window_exhausted is the ordinary case; "
-                        + "reason=cannot_query (ADR 0014 decision 3) is a payment escalated with zero reconciler "
-                        + "attempts because its adapter cannot resolve a lost submission by polling and it has no "
-                        + "provider reference to query with.")
+                        + "reason=cannot_query (ADR 0014 decision 3) is a payment escalated on its first claim "
+                        + "with zero operator calls (the claim still counts: reconcile_attempts reads 1), because "
+                        + "its adapter cannot resolve a lost submission by polling and it has no provider "
+                        + "reference to query with.")
                 .tag("provider", provider)
                 .tag("reason", reason)
                 .register(meterRegistry)

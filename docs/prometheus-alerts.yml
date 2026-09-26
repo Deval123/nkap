@@ -40,7 +40,8 @@ groups:
       # automatically. "increase(...) > 0" fires on the event, not on how many are
       # currently open, so a quiet window with zero escalations stays quiet.
       # reason=window_exhausted is the ordinary case, below; reason=cannot_query
-      # (ADR 0014 decision 3) is a payment escalated with zero reconciler attempts
+      # (ADR 0014 decision 3) is a payment escalated on its first claim with zero
+      # operator calls (the claim still counts, so reconcile_attempts reads 1),
       # because its adapter cannot resolve a lost submission by polling at all.
       - alert: NkapPaymentEscalated
         expr: increase(nkap_payment_escalated_total[15m]) > 0
@@ -52,8 +53,8 @@ groups:
             reason=window_exhausted: the reconciler exhausted a payment's retry window
             without a conclusive answer from the operator. reason=cannot_query: the
             payment's adapter cannot resolve a lost submission by polling and this
-            payment has no provider reference to query with, so no attempt was made at
-            all. Either way the payment is not FAILED — it is still open, and a later
+            payment has no provider reference to query with, so the operator was never
+            called (the claim still counts: reconcile_attempts reads 1). Either way the payment is not FAILED — it is still open, and a later
             callback or manual query can still resolve it — but the automatic retries
             have stopped and it needs a human to look.
 

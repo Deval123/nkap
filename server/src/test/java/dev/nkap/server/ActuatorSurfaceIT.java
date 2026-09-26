@@ -234,6 +234,21 @@ class ActuatorSurfaceIT extends PostgresSpringBootIT {
         }
     }
 
+    @Test
+    @DisplayName("escalatedPayments reports the reason stored at escalation, even once the adapter it lacked is configured again (ADR 0016)")
+    void escalated_payments_reports_the_stored_reason() throws Exception {
+        Instant at = Instant.now().minus(Duration.ofHours(1)).truncatedTo(ChronoUnit.SECONDS);
+        ReferenceId reference = anEscalatedPayment("merchant-escalated-no-adapter", at, 48);
+        // Escalated while mtn-sandbox had no adapter; this context has one for it now, which is
+        // the moment someone reads the list. A reason recomputed from today's configuration
+        // would say window_exhausted.
+        jdbc.update("UPDATE payment SET escalation_reason = 'no_adapter' WHERE reference = ?", reference.value());
+
+        JsonNode items = json.readTree(onManagementPort("/actuator/escalatedPayments", String.class).getBody()).get("payments");
+
+        assertThat(itemFor(items, reference).get("reason").asText()).isEqualTo("no_adapter");
+    }
+
     private JsonNode itemFor(JsonNode items, ReferenceId reference) {
         for (JsonNode item : items) {
             if (item.get("reference").asText().equals(reference.toString())) {

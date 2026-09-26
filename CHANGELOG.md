@@ -153,6 +153,25 @@ All notable changes to Nkap are documented here. The format follows
   `/run` or `/var/run`. A deployment by other means should set `NKAP_SECRETS_DIR` to a
   directory of its own.
 
+### Fixed
+
+- **A payment whose provider has no adapter no longer keeps the rest of its reconciler batch
+  from being escalated.** Before, one such payment ended the reconciler's pass. Every payment
+  claimed after it in the same batch was counted as attempted but neither asked about nor
+  escalated, so a payment could spend its whole window without anyone being paged. The rest of
+  the batch is now reconciled and escalated as usual. A payment with no adapter is itself
+  escalated when its window is spent, with the new `reason=no_adapter` on
+  `nkap_payment_escalated_total` and in `GET /actuator/escalatedPayments`. Until then each pass
+  logs one warning for it, and the payment stays in the queue, so restoring the adapter within
+  the window resolves it with no one involved. An escalated payment is not re-queued when its
+  adapter comes back. See [ADR 0016](docs/adr/0016-a-payment-with-no-adapter-waits-for-its-window.md).
+- **`GET /actuator/escalatedPayments` reports why each payment was escalated, as recorded at
+  the time.** The reason is now stored with the escalation (migration V12) instead of being
+  recomputed on each read. Recomputation had never reported `cannot_query` for a payment the
+  reconciler escalated: every escalation follows a claim, which counts toward
+  `reconcile_attempts`, and the recomputation required that count to be 0. Payments escalated
+  before this release keep the recomputed reason, since theirs was never recorded.
+
 ## [2.0.0] - 2026-09-21
 
 ### Breaking

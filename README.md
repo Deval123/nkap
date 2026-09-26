@@ -169,7 +169,8 @@ still non-terminal, never `FAILED` — and logged once at WARN. Escalated paymen
 human are `PaymentRepository.findEscalated()`, or:
 
 ```sql
-SELECT reference, merchant_id, amount_minor, currency, reconcile_attempts, escalated_at
+SELECT reference, merchant_id, amount_minor, currency, reconcile_attempts, escalated_at,
+       escalation_reason
 FROM payment
 WHERE escalated_at IS NOT NULL AND state IN ('SUBMITTED', 'PENDING', 'UNKNOWN')
 ORDER BY escalated_at;

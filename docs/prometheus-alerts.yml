@@ -42,7 +42,11 @@ groups:
       # reason=window_exhausted is the ordinary case, below; reason=cannot_query
       # (ADR 0014 decision 3) is a payment escalated with zero operator calls (the
       # claim still counts toward reconcile_attempts), because its adapter cannot
-      # resolve a lost submission by polling at all.
+      # resolve a lost submission by polling at all. reason=no_adapter (ADR 0016) is
+      # a payment whose window was spent while no adapter was configured for its
+      # provider. It fits this rule rather than needing its own, which has no reason
+      # filter, but it pages only when the window ends: until then each pass logs a
+      # WARN for it and nothing else.
       - alert: NkapPaymentEscalated
         expr: increase(nkap_payment_escalated_total[15m]) > 0
         labels:
@@ -54,8 +58,11 @@ groups:
             without a conclusive answer from the operator. reason=cannot_query: the
             payment's adapter cannot resolve a lost submission by polling and this
             payment has no provider reference to query with, so the operator was never
-            called (the claim still counts toward reconcile_attempts). Either way the
-            payment is not FAILED — it is still open, and a later callback or manual
+            called (the claim still counts toward reconcile_attempts). reason=no_adapter:
+            the window was spent while no adapter was configured for this provider, so
+            the reconciler could not ask the operator at all; check the gateway's
+            provider configuration first, since every payment for that provider is
+            affected. Either way the payment is not FAILED — it is still open, and a later callback or manual
             query can still resolve it — but the automatic retries have stopped and it
             needs a human to look.
 

@@ -10,6 +10,7 @@ import dev.nkap.core.payment.ReferenceId;
 import dev.nkap.provider.Capability;
 import dev.nkap.provider.PaymentIntent;
 import dev.nkap.provider.ProviderId;
+import dev.nkap.server.payment.EscalationReason;
 import dev.nkap.server.payment.Payment;
 import dev.nkap.server.payment.PaymentRepository;
 import dev.nkap.server.payment.PaymentTransition;
@@ -71,9 +72,9 @@ public final class PostgresPaymentRepository implements PaymentRepository {
                                  counterparty_msisdn, payer_message, payee_note, provider_options,
                                  state, provider_reference, provider_transaction_id, provider_base_url,
                                  created_at, updated_at,
-                                 reconcile_attempts, reconcile_due_at, escalated_at, unresolved_since,
-                                 refund_of, refunded_minor)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                 reconcile_attempts, reconcile_due_at, escalated_at, escalation_reason,
+                                 unresolved_since, refund_of, refunded_minor)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT (reference) DO UPDATE SET
                 state = EXCLUDED.state,
                 provider_reference = EXCLUDED.provider_reference,
@@ -82,6 +83,7 @@ public final class PostgresPaymentRepository implements PaymentRepository {
                 reconcile_attempts = EXCLUDED.reconcile_attempts,
                 reconcile_due_at = EXCLUDED.reconcile_due_at,
                 escalated_at = EXCLUDED.escalated_at,
+                escalation_reason = EXCLUDED.escalation_reason,
                 unresolved_since = EXCLUDED.unresolved_since
             """;
 
@@ -135,6 +137,7 @@ public final class PostgresPaymentRepository implements PaymentRepository {
                 payment.reconcileAttempts(),
                 atUtc(payment.reconcileDueAt()),
                 atUtc(payment.escalatedAt()),
+                payment.escalationReason() == null ? null : payment.escalationReason().code(),
                 atUtc(payment.unresolvedSince()),
                 payment.refundOf().map(ReferenceId::value).orElse(null),
                 payment.refundedMinor());
@@ -278,6 +281,7 @@ public final class PostgresPaymentRepository implements PaymentRepository {
                 row.reconcileAttempts,
                 row.reconcileDueAt,
                 row.escalatedAt,
+                EscalationReason.ofCode(row.escalationReason),
                 row.unresolvedSince,
                 row.refundOf == null ? null : new ReferenceId(row.refundOf),
                 row.refundedMinor));
@@ -308,7 +312,8 @@ public final class PostgresPaymentRepository implements PaymentRepository {
             String counterpartyMsisdn, String payerMessage, String payeeNote, String providerOptions,
             String state, String providerReference, String providerTransactionId, String providerBaseUrl,
             Instant createdAt, Instant updatedAt,
-            int reconcileAttempts, Instant reconcileDueAt, Instant escalatedAt, Instant unresolvedSince,
+            int reconcileAttempts, Instant reconcileDueAt, Instant escalatedAt, String escalationReason,
+            Instant unresolvedSince,
             UUID refundOf, long refundedMinor) {
     }
 
@@ -331,6 +336,7 @@ public final class PostgresPaymentRepository implements PaymentRepository {
             rs.getInt("reconcile_attempts"),
             instantOrNull(rs.getObject("reconcile_due_at", OffsetDateTime.class)),
             instantOrNull(rs.getObject("escalated_at", OffsetDateTime.class)),
+            rs.getString("escalation_reason"),
             instantOrNull(rs.getObject("unresolved_since", OffsetDateTime.class)),
             (UUID) rs.getObject("refund_of"),
             rs.getLong("refunded_minor"));

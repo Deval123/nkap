@@ -2,6 +2,7 @@ package dev.nkap.server.reconcile;
 
 import dev.nkap.core.payment.ReferenceId;
 import dev.nkap.provider.ProviderId;
+import dev.nkap.server.payment.EscalationReason;
 import java.time.Instant;
 import java.util.List;
 
@@ -27,11 +28,11 @@ public interface ReconciliationStore {
     List<Claim> claimDue(int batch, Instant now);
 
     /**
-     * Stamps {@code escalated_at} on a payment, but only if it is still unresolved and not
-     * already escalated — so a payment resolved between the claim and now is left alone.
-     * Returns whether it actually escalated.
+     * Stamps {@code escalated_at} and {@code escalation_reason} on a payment, together, but only
+     * if it is still unresolved and not already escalated — so a payment resolved between the
+     * claim and now is left alone. Returns whether it actually escalated.
      */
-    boolean markEscalated(ReferenceId reference, Instant at);
+    boolean markEscalated(ReferenceId reference, Instant at, EscalationReason reason);
 
     /**
      * One claimed payment: which provider to ask, how many attempts it has now had, and

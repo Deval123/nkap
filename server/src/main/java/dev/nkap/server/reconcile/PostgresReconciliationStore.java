@@ -2,6 +2,7 @@ package dev.nkap.server.reconcile;
 
 import dev.nkap.core.payment.ReferenceId;
 import dev.nkap.provider.ProviderId;
+import dev.nkap.server.payment.EscalationReason;
 import java.sql.ResultSet;
 import java.time.Instant;
 import java.time.OffsetDateTime;
@@ -46,7 +47,7 @@ public final class PostgresReconciliationStore implements ReconciliationStore {
             "UPDATE payment SET reconcile_attempts = ?, reconcile_due_at = ? WHERE reference = ?";
 
     private static final String ESCALATE = """
-            UPDATE payment SET escalated_at = ?
+            UPDATE payment SET escalated_at = ?, escalation_reason = ?
              WHERE reference = ? AND state IN %s AND escalated_at IS NULL
             """.formatted(UNRESOLVED_STATES);
 
@@ -79,9 +80,9 @@ public final class PostgresReconciliationStore implements ReconciliationStore {
     }
 
     @Override
-    public boolean markEscalated(ReferenceId reference, Instant at) {
-        Boolean escalated = tx.execute(status ->
-                jdbc.update(ESCALATE, OffsetDateTime.ofInstant(at, ZoneOffset.UTC), reference.value()) > 0);
+    public boolean markEscalated(ReferenceId reference, Instant at, EscalationReason reason) {
+        Boolean escalated = tx.execute(status -> jdbc.update(ESCALATE,
+                OffsetDateTime.ofInstant(at, ZoneOffset.UTC), reason.code(), reference.value()) > 0);
         return Boolean.TRUE.equals(escalated);
     }
 

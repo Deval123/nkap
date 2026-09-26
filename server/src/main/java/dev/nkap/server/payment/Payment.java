@@ -74,10 +74,12 @@ public final class Payment {
     // the backoff and the escalation window both run from the first unresolved moment, not
     // from each hop between the three states (see applyTransition for why). escalatedAt is
     // stamped when the window is spent and a human is paged, and cleared only on that same
-    // way in — a hop does not un-escalate a payment. A flag, not a state.
+    // way in — a hop does not un-escalate a payment. A flag, not a state. escalationReason is
+    // part of that flag: stamped with it, cleared with it (ADR 0016).
     private int reconcileAttempts;
     private Instant reconcileDueAt;
     private Instant escalatedAt;
+    private EscalationReason escalationReason;
     private Instant unresolvedSince;
 
     private Payment(ReferenceId reference, ProviderId provider, String merchantId, PaymentIntent intent,
@@ -119,8 +121,8 @@ public final class Payment {
                                     PaymentState state, String providerReference, String providerTransactionId,
                                     String providerBaseUrl, Instant createdAt, Instant updatedAt,
                                     List<PaymentTransition> history, int reconcileAttempts, Instant reconcileDueAt,
-                                    Instant escalatedAt, Instant unresolvedSince, ReferenceId refundOf,
-                                    long refundedMinor) {
+                                    Instant escalatedAt, EscalationReason escalationReason,
+                                    Instant unresolvedSince, ReferenceId refundOf, long refundedMinor) {
         Payment payment = new Payment(reference, provider, merchantId, intent, refundOf, createdAt);
         payment.state = Objects.requireNonNull(state, "state");
         payment.updatedAt = Objects.requireNonNull(updatedAt, "updatedAt");
@@ -131,6 +133,7 @@ public final class Payment {
         payment.reconcileAttempts = reconcileAttempts;
         payment.reconcileDueAt = reconcileDueAt;
         payment.escalatedAt = escalatedAt;
+        payment.escalationReason = escalationReason;
         payment.unresolvedSince = unresolvedSince;
         payment.refundedMinor = refundedMinor;
         return payment;
@@ -146,10 +149,13 @@ public final class Payment {
         this.state = previous.transitionTo(target);
         this.updatedAt = Instant.now();
         if (this.state.isUnresolved() && !previous.isUnresolved()) {
-            // The payment has entered a fresh episode of being unresolved — from CREATED, or
-            // from a state it had briefly resolved out of. Everything the reconciler tracks
-            // starts here, and from here on is advanced only by the reconciler. A later hop
-            // between SUBMITTED, PENDING and UNKNOWN restarts none of it:
+            // The payment has just become unresolved, and it can only have come from CREATED:
+            // CREATED is the one state that is neither unresolved nor terminal, and a terminal
+            // state has no outgoing transition (PaymentState.ALLOWED), so nothing ever leaves
+            // one to come back. PaymentStateTest pins both. Each payment passes through here
+            // once, at most. Everything the reconciler tracks starts here, and from here on is
+            // advanced only by the reconciler. A later hop between SUBMITTED, PENDING and
+            // UNKNOWN restarts none of it:
             //   - the schedule (reconcileDueAt): due now, since there is nothing yet to
             //     preserve. A hop must NOT move it back to now — the claim that produced the
             //     hop already counted the attempt and pushed the next one out by a backoff
@@ -167,11 +173,12 @@ public final class Payment {
             //   - the escalation flag: cleared here, and only here. A hop leaves an escalated
             //     payment escalated — it is still that human's problem whichever non-terminal
             //     state it now wears — so the list a human reads does not flicker as the
-            //     operator changes its answer. The flag lifts only when a genuinely new
-            //     episode starts, which is the same moment a fresh window starts.
+            //     operator changes its answer. It is cleared only on the way in, which each
+            //     payment passes through once, when there is not yet anything to clear.
             this.reconcileAttempts = 0;
             this.reconcileDueAt = this.updatedAt;
             this.escalatedAt = null;
+            this.escalationReason = null;
             this.unresolvedSince = this.updatedAt;
         }
         this.history.add(new PaymentTransition(previous, this.state, this.updatedAt, cause, operatorCode, note, rawResponse));
@@ -288,6 +295,14 @@ public final class Payment {
     /** When this payment was escalated to a human, or {@code null} if it has not been. */
     public Instant escalatedAt() {
         return escalatedAt;
+    }
+
+    /**
+     * Why this payment was escalated, or {@code null} if it has not been, or was escalated
+     * before the reason was stored (V12): those rows never recorded one.
+     */
+    public EscalationReason escalationReason() {
+        return escalationReason;
     }
 
     /**

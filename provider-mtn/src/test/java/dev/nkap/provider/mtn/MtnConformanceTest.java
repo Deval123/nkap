@@ -1,7 +1,10 @@
 package dev.nkap.provider.mtn;
 
+import dev.nkap.conformance.CallbackReceiver;
 import dev.nkap.conformance.ConformanceHarness;
 import dev.nkap.conformance.ProviderAdapterConformanceTest;
+import dev.nkap.simulator.SimulatorApplication;
+import dev.nkap.testsupport.SimulatorUnderTest;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 
@@ -18,7 +21,7 @@ class MtnConformanceTest extends ProviderAdapterConformanceTest {
 
     @BeforeAll
     static void startSimulator() {
-        simulator = new SimulatorUnderTest();
+        simulator = new SimulatorUnderTest(SimulatorApplication.class, "simulator (MTN)");
         callbacks = new CallbackReceiver();
     }
 

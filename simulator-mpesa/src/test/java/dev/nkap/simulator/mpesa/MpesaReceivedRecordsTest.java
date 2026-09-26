@@ -1,5 +1,6 @@
 package dev.nkap.simulator.mpesa;
 
+import dev.nkap.testsupport.RecordToString;
 import java.util.Set;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;

@@ -1,4 +1,4 @@
-package dev.nkap.server.support;
+package dev.nkap.testsupport;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -11,6 +11,9 @@ import java.util.Set;
 /**
  * Checks a record's hand-written {@code toString()} against the record's own components, so a
  * credential-holding record cannot grow a component that is neither printed nor masked.
+ *
+ * <p>Once four copies ({@code server}, {@code provider-mtn}, {@code provider-mpesa},
+ * {@code simulator-mpesa}), identical but for their package; one now (issue #214).
  */
 public final class RecordToString {
 
@@ -24,7 +27,7 @@ public final class RecordToString {
      * here until someone decides which set it belongs in.
      */
     public static void assertEveryComponentPrintedOrMasked(Record record, Set<String> printed, Set<String> masked,
-                                                    String marker) {
+                                                           String marker) {
         RecordComponent[] components = record.getClass().getRecordComponents();
         String[] names = Arrays.stream(components).map(RecordComponent::getName).toArray(String[]::new);
         Map<String, String> shown = pairs(record);

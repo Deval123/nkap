@@ -1,9 +1,13 @@
 # simulator-mpesa-app
 
 A fake M-Pesa operator that misbehaves on command: the simulator's core with M-Pesa's face,
-as a runnable application and a published image,
-[`ghcr.io/deval123/nkap-simulator-mpesa`](https://github.com/deval123/nkap/pkgs/container/nkap-simulator-mpesa).
+as a runnable application and an image, `ghcr.io/deval123/nkap-simulator-mpesa`.
 [`simulator/`](../simulator/README.md) is the same thing with MTN's face.
+
+**The image has not been published yet.** It ships from the first release after 2.0.0. Until
+then, run the simulator from a clone, as below. Even after that release, pulling it works for
+everyone only once a maintainer has made the package public by hand
+([`CONTRIBUTING.md`](../CONTRIBUTING.md), step 3).
 
 ## Read this before you run it anywhere reachable
 
@@ -20,23 +24,32 @@ follows from it.
 
 ## Running it
 
-```bash
-docker run -p 8082:8082 ghcr.io/deval123/nkap-simulator-mpesa
-```
-
-or, from a clone:
+From a clone:
 
 ```bash
 mvn -B -pl simulator-mpesa-app -am package -DskipTests
 java -jar simulator-mpesa-app/target/nkap-simulator-mpesa-app-*-boot.jar
 ```
 
+From the first release after 2.0.0, once its package is public, the image as well:
+
+```bash
+docker run -p 8082:8082 ghcr.io/deval123/nkap-simulator-mpesa
+```
+
 It listens on **port 8082**, not the MTN simulator's 8081, so the two run side by side with no
 flag. State is held in memory only: every restart is a clean operator.
 
-A scenario can be mounted instead of posted, exactly as for the MTN image, and is applied before
-the first request (issue #99). No file there is not an error; a file that does not parse, or a
-directory where the file should be, stops the simulator at startup:
+A scenario can be read from a file instead of posted, exactly as for the MTN simulator, and is
+applied before the first request (issue #99). No file there is not an error; a file that does not
+parse, or a directory where the file should be, stops the simulator at startup. From a clone,
+name the file:
+
+```bash
+java -jar simulator-mpesa-app/target/nkap-simulator-mpesa-app-*-boot.jar --nkap.scenario.file=./scenario.json
+```
+
+With the image, once it is published, mount it at the path the image reads:
 
 ```bash
 docker run -p 8082:8082 -v ./scenario.json:/etc/nkap/scenario.json ghcr.io/deval123/nkap-simulator-mpesa

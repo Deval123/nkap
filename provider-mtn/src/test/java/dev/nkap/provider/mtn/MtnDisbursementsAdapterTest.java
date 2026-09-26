@@ -18,6 +18,8 @@ import dev.nkap.provider.RawCallback;
 import dev.nkap.provider.Resolution;
 import dev.nkap.provider.SubmitResult;
 import dev.nkap.provider.mtn.StubMtn.StubResponse;
+import dev.nkap.simulator.SimulatorApplication;
+import dev.nkap.testsupport.SimulatorUnderTest;
 import java.net.URI;
 import java.time.Duration;
 import java.util.Map;
@@ -39,7 +41,7 @@ class MtnDisbursementsAdapterTest {
 
     @BeforeAll
     static void startSimulator() {
-        simulator = new SimulatorUnderTest();
+        simulator = new SimulatorUnderTest(SimulatorApplication.class, "simulator (MTN)");
     }
 
     @AfterAll

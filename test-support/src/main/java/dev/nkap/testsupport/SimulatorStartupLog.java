@@ -1,4 +1,4 @@
-package dev.nkap.provider.mtn;
+package dev.nkap.testsupport;
 
 import java.io.BufferedReader;
 import java.io.EOFException;
@@ -31,8 +31,6 @@ import org.springframework.boot.web.server.WebServer;
  * a failure it probes the port directly, once per loopback address, and the result goes into
  * the failure's own message, so the diagnosis travels with the stack trace rather than
  * depending on anyone keeping the log.
- *
- * <p>{@code provider-mpesa} keeps a copy, for the same reason it keeps one of {@code CallbackReceiver}.
  */
 final class SimulatorStartupLog {
 

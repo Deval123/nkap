@@ -14,10 +14,11 @@ import org.springframework.context.ConfigurableApplicationContext;
 /**
  * The real simulator, booted on a random port for a test class, and its control plane.
  *
- * <p>This is the server module's own fixture. It is near-identical to
- * {@code provider-mtn}'s {@code SimulatorUnderTest} — the plan says not to reach into that
- * module's test sources, and this is what "not reaching in" costs: a second copy. If a
- * third consumer appears, a shared test fixture earns its keep; two do not.
+ * <p>This is the server module's own fixture, and a near-copy of {@code test-support}'s
+ * {@code SimulatorUnderTest}, which both adapters' tests now share (issue #214). It was left
+ * out of that move: it passes arguments only this JVM needs (no datasource, no management
+ * port), it has none of the shared one's startup diagnosis, and folding it in would touch
+ * every integration test that uses it, which is a change of its own.
  */
 final class EmbeddedSimulator implements AutoCloseable {
 

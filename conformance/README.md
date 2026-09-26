@@ -13,7 +13,7 @@ against MTN — the first real implementation. A rule that no adapter has ever s
 not in the kit. Three ADRs were corrected by implementation in the weeks this was written;
 the evidence is fairly clear about which method produces requirements that survive.
 
-## The two pieces
+## The three pieces
 
 **`ProviderAdapterConformanceTest`** — an abstract JUnit class whose `@Test` methods are the
 rules. It lives in `src/main` (with JUnit in compile scope) so a provider module can extend
@@ -24,8 +24,16 @@ It exposes the adapter and the means to put the operator into each condition, *e
 terms of what the gateway observes, never in an operator's own codes*. Writing one is the
 contributor's real work, and the thing to judge this kit by.
 
+**`CallbackReceiver`** — a real HTTP receiver for one test class, handing each harness a
+private route and the callbacks delivered to it exactly as they arrived: what
+`aDeliveredCallback()` needs from any operator that calls back over HTTP. It costs the kit
+nothing, being the JDK's `com.sun.net.httpserver` and `provider-api`'s `RawCallback`. It
+does not tell the operator where to call; the harness does, and how is part of what its
+`CALLBACK` rule proves (see its javadoc).
+
 The kit **does not depend on `nkap-simulator`**. The simulator wears MTN's shape; a future
-Orange adapter may be driven by something else entirely.
+Orange adapter may be driven by something else entirely. Booting a simulator is
+`nkap-test-support`'s `SimulatorUnderTest`, outside the kit, because it brings Spring Boot.
 
 ## What the kit checks
 

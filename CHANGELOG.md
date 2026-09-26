@@ -8,6 +8,11 @@ All notable changes to Nkap are documented here. The format follows
 
 ### Added
 
+- **The conformance kit catches callbacks for you.** `nkap-conformance` now includes
+  `dev.nkap.conformance.CallbackReceiver`: a real HTTP receiver that gives each harness its own
+  route and returns what the operator delivered there, unchanged. `aDeliveredCallback()` needs
+  nothing more. The kit's dependencies are unchanged. Before, each adapter's tests kept their
+  own copy.
 - **Credentials may come from files named after the variables they replace.** The gateway
   imports `/run/secrets` (`NKAP_SECRETS_DIR` moves it). A file there named exactly like a
   variable, such as `NKAP_PROVIDER_MTN_CM_API_KEY`, is read where that variable would be.

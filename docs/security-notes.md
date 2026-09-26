@@ -249,10 +249,11 @@ than a silence a reader has to interpret for themselves:
   serves them to anyone who can reach it. That is acceptable for a simulator, since the gateway
   sends the same values to whatever its `base-url` names. It follows that a deployment holding
   real credentials must never point at a simulator, or it hands them to whoever can reach
-  `/_nkap`. Since the M-Pesa simulator is published as an image
-  (`ghcr.io/deval123/nkap-simulator-mpesa`), this is something people run rather than a test
-  library, so the warning is also on its README and in the image's own description, which is
-  what a registry page shows: a note read after the fact is not enough for an image.
+  `/_nkap`. Since the M-Pesa simulator ships as an image
+  (`ghcr.io/deval123/nkap-simulator-mpesa`, from the first release after 2.0.0), this is
+  something people run rather than a test library, so the warning is also on its README and in
+  the image's own description, which is what a registry page shows: a note read after the fact
+  is not enough for an image.
 
 ## 4. What an operator must do that Nkap cannot
 

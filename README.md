@@ -184,10 +184,12 @@ ORDER BY escalated_at;
 | `provider-mtn` | The MTN MoMo adapter. |
 | `provider-mpesa` | The M-Pesa STK Push adapter. Certified by the kit; configurable in the server, never yet run against Safaricom. |
 | `conformance` | The test kit every adapter must pass to be merged. |
+| `test-support` | Test infrastructure several modules share: booting a simulator, checking a record's `toString()`. Used at test scope only. |
 | `simulator-core` | What the fake operator does: scenarios, its memory of payments, callbacks, the `/_nkap` control plane. |
 | `simulator-mtn` | How the fake operator says it the way MTN does: routes, bodies, statuses, authentication. |
-| `simulator-mpesa` | How it says it the way Safaricom's M-Pesa STK Push does. Tested on its own; not yet in the image. |
-| `simulator` | A scriptable fake operator that misbehaves on command — the application and image built from the two above. |
+| `simulator-mpesa` | How it says it the way Safaricom's M-Pesa STK Push does. Tested on its own, and assembled into a deployable by `simulator-mpesa-app`. |
+| `simulator` | A scriptable fake operator that misbehaves on command — the application and image built from `simulator-core` and `simulator-mtn`. |
+| `simulator-mpesa-app` | The same for M-Pesa — the application and image built from `simulator-core` and `simulator-mpesa`, on port 8082. |
 | `server` | Spring Boot: REST, webhooks, outbox, schedulers. |
 
 `core` has no dependencies on purpose. It makes the accounting invariants testable in
@@ -240,13 +242,15 @@ what to publish first.
 [`ghcr.io/deval123/nkap-gateway`](https://github.com/deval123/nkap/pkgs/container/nkap-gateway)
 and
 [`ghcr.io/deval123/nkap-simulator`](https://github.com/deval123/nkap/pkgs/container/nkap-simulator)
-(MTN) and
-[`ghcr.io/deval123/nkap-simulator-mpesa`](https://github.com/deval123/nkap/pkgs/container/nkap-simulator-mpesa)
-(M-Pesa, [below](#the-simulator-on-its-own)) —
+(MTN) —
 public, no login needed to pull, `linux/amd64` and `linux/arm64` — tagged with the exact
 version and with a moving `latest` that always points at the newest release, never at `main`.
 `docker inspect ghcr.io/deval123/nkap-gateway:latest` names the exact commit and version it
 was built from.
+
+The M-Pesa simulator's image, `ghcr.io/deval123/nkap-simulator-mpesa`, has not been published
+yet: it ships from the first release after 2.0.0. Until then, run it from a clone with the two
+commands in [`simulator-mpesa-app/README.md`](simulator-mpesa-app/README.md#running-it).
 
 This is for running Nkap for real, against your own MTN credentials — not for trying it. If
 you have not run Nkap before, the [quick start](#quick-start-the-contributors-path) above is a
@@ -389,10 +393,14 @@ own behaviour is undocumented or untested; the simulator implements the second c
 mismatch between the two is a bug in the simulator or the doc, not in MTN. Read that file for
 what it imitates before you trust an integration test that only ever ran against this.
 
-**There is an M-Pesa simulator too**, a separate image on port 8082 so the two run side by side:
+**There is an M-Pesa simulator too**, on port 8082 so the two run side by side. Its image,
+`ghcr.io/deval123/nkap-simulator-mpesa`, ships from the first release after 2.0.0, and pulling
+it works for everyone only once a maintainer has made the package public by hand. Until then,
+run it from a clone:
 
 ```bash
-docker run -p 8082:8082 ghcr.io/deval123/nkap-simulator-mpesa
+mvn -B -pl simulator-mpesa-app -am package -DskipTests
+java -jar simulator-mpesa-app/target/nkap-simulator-mpesa-app-*-boot.jar
 ```
 
 It plays Safaricom Daraja's STK Push, collections only, and is scripted through the same

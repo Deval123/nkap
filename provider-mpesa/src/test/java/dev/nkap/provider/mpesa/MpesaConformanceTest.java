@@ -1,7 +1,10 @@
 package dev.nkap.provider.mpesa;
 
+import dev.nkap.conformance.CallbackReceiver;
 import dev.nkap.conformance.ConformanceHarness;
 import dev.nkap.conformance.ProviderAdapterConformanceTest;
+import dev.nkap.simulator.mpesa.app.MpesaSimulatorApplication;
+import dev.nkap.testsupport.SimulatorUnderTest;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 
@@ -11,12 +14,12 @@ import org.junit.jupiter.api.BeforeAll;
  */
 class MpesaConformanceTest extends ProviderAdapterConformanceTest {
 
-    private static MpesaSimulatorUnderTest simulator;
+    private static SimulatorUnderTest simulator;
     private static CallbackReceiver callbacks;
 
     @BeforeAll
     static void startSimulator() {
-        simulator = new MpesaSimulatorUnderTest();
+        simulator = new SimulatorUnderTest(MpesaSimulatorApplication.class, "simulator-mpesa");
         callbacks = new CallbackReceiver();
     }
 

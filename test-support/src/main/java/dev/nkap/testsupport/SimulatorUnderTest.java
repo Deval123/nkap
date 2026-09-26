@@ -1,6 +1,5 @@
-package dev.nkap.provider.mtn;
+package dev.nkap.testsupport;
 
-import dev.nkap.simulator.SimulatorApplication;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -15,11 +14,17 @@ import org.springframework.boot.web.servlet.context.ServletWebServerApplicationC
 import org.springframework.context.ConfigurableApplicationContext;
 
 /**
- * Boots the real simulator on a random port for the lifetime of a test class, and drives
- * its control plane. This is what the simulator was built for: the MTN adapter is tested
- * against it, never against the real sandbox.
+ * Boots a real simulator on a random port for the lifetime of a test class, and drives its
+ * control plane. This is what the simulators were built for: an adapter is tested against one,
+ * never against the operator's real sandbox.
+ *
+ * <p>Which simulator is the caller's to say, by its application class: {@code simulator}'s
+ * {@code SimulatorApplication} for MTN, {@code simulator-mpesa-app}'s
+ * {@code MpesaSimulatorApplication} for M-Pesa. Both serve the same {@code /_nkap} control
+ * plane, which is all this class speaks. Taking the class rather than depending on either
+ * keeps this module free of every nkap module.
  */
-final class SimulatorUnderTest implements AutoCloseable {
+public final class SimulatorUnderTest implements AutoCloseable {
 
     private static final Pattern SUBMISSIONS_COUNT = Pattern.compile("\"count\"\\s*:\\s*(\\d+)");
 
@@ -31,10 +36,14 @@ final class SimulatorUnderTest implements AutoCloseable {
     private final SimulatorStartupLog startup;
     private final HttpClient http = HttpClient.newHttpClient();
 
-    SimulatorUnderTest() {
-        SpringApplication app = new SpringApplication(SimulatorApplication.class);
+    /**
+     * @param application the simulator's {@code @SpringBootApplication} class
+     * @param name        what the startup log calls it, e.g. {@code "simulator (MTN)"}
+     */
+    public SimulatorUnderTest(Class<?> application, String name) {
+        SpringApplication app = new SpringApplication(application);
         app.setBannerMode(Banner.Mode.OFF);
-        // Command-line args outrank the simulator's application.yml (server.port: 8081).
+        // Command-line args outrank the simulator's application.yml (server.port: 8081 or 8082).
         // Immediate shutdown: the NO_RESPONSE scenario deliberately leaves a request
         // hanging, and graceful shutdown would then wait out its full timeout.
         long runCalled = System.nanoTime();
@@ -48,16 +57,16 @@ final class SimulatorUnderTest implements AutoCloseable {
                 "--server.shutdown=immediate",
                 "--spring.lifecycle.timeout-per-shutdown-phase=3s");
         WebServer webServer = ((ServletWebServerApplicationContext) context).getWebServer();
-        this.startup = SimulatorStartupLog.started("simulator (MTN)", webServer, runCalled);
+        this.startup = SimulatorStartupLog.started(name, webServer, runCalled);
         this.baseUrl = URI.create("http://" + LOOPBACK + ":" + webServer.getPort());
     }
 
-    URI baseUrl() {
+    public URI baseUrl() {
         return baseUrl;
     }
 
     /** POST a configuration document to {@code /_nkap/scenarios}. */
-    void declare(String configurationJson) {
+    public void declare(String configurationJson) {
         call("POST", "/_nkap/scenarios", configurationJson);
     }
 
@@ -65,7 +74,7 @@ final class SimulatorUnderTest implements AutoCloseable {
      * How many submissions the simulator has processed since its state was last forgotten —
      * {@code GET /_nkap/submissions} (issue #175).
      */
-    int submissionsReceived() {
+    public int submissionsReceived() {
         String body = call("GET", "/_nkap/submissions", null);
         Matcher count = SUBMISSIONS_COUNT.matcher(body);
         if (!count.find()) {
@@ -74,8 +83,8 @@ final class SimulatorUnderTest implements AutoCloseable {
         return Integer.parseInt(count.group(1));
     }
 
-    /** Back to the happy path, no enforcement, and every reference forgotten. */
-    void reset() {
+    /** Back to the happy path, no enforcement, and every payment forgotten. */
+    public void reset() {
         call("DELETE", "/_nkap/scenarios", null);
         call("DELETE", "/_nkap/state", null);
     }

@@ -17,9 +17,9 @@
     an adapter must be embeddable in a plain JVM process.
 
     Its only source is docs/providers/m-pesa.md. It was written and certified without a
-    Safaricom account: the tests run against simulator-mpesa (test scope only), booted on its
-    own. simulator-mpesa-app is a deployable of that face now; whether these tests should boot
-    it instead of their own class is #214's question, not settled here.
+    Safaricom account: the tests run against simulator-mpesa-app (test scope only), the
+    deployable M-Pesa simulator, as provider-mtn's run against simulator (issue #214). Its
+    plain jar is what they use; the image is built from the "-boot" one.
   -->
   <dependencies>
     <dependency>
@@ -39,7 +39,13 @@
     </dependency>
     <dependency>
       <groupId>dev.nkap</groupId>
-      <artifactId>nkap-simulator-mpesa</artifactId>
+      <artifactId>nkap-simulator-mpesa-app</artifactId>
+      <version>${project.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>dev.nkap</groupId>
+      <artifactId>nkap-test-support</artifactId>
       <version>${project.version}</version>
       <scope>test</scope>
     </dependency>

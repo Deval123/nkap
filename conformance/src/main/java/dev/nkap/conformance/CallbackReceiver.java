@@ -1,4 +1,4 @@
-package dev.nkap.provider.mtn;
+package dev.nkap.conformance;
 
 import com.sun.net.httpserver.HttpServer;
 import dev.nkap.provider.RawCallback;
@@ -17,8 +17,14 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * A single real HTTP receiver, shared for the lifetime of one test class, that hands back
- * every callback the simulator delivers to it exactly as it arrived: headers and body
- * untouched, nothing reconstructed.
+ * every callback the operator delivers to it exactly as it arrived: headers and body
+ * untouched, nothing reconstructed. What a harness needs to implement
+ * {@link ConformanceHarness#aDeliveredCallback()} against an operator that calls back over HTTP.
+ *
+ * <p>In the kit because it costs the kit nothing: the JDK's {@code com.sun.net.httpserver} and
+ * {@link RawCallback}, which {@code provider-api} already supplies. Booting an operator to call
+ * it is not here, because that would bring whatever the operator runs on into every
+ * contributor's test classpath.
  *
  * <p>Kept at class scope and started once, well before the first test runs, on purpose. A
  * fresh {@link HttpServer} per test looked simpler but was flaky: its background dispatch
@@ -28,7 +34,7 @@ import java.util.concurrent.TimeUnit;
  * harness should work around). One server, started during {@code @BeforeAll} alongside the
  * simulator itself, gives that one-time cost seconds to resolve instead of milliseconds.
  *
- * <p><strong>One receiver, but not one queue.</strong> {@link MtnConformanceHarness#aDeliveredCallback()}
+ * <p><strong>One receiver, but not one queue.</strong> {@link ConformanceHarness#aDeliveredCallback()}
  * promises the callback for the submission the kit just made through that harness —
  * not merely the next thing this receiver happened to catch. Sharing one queue across every
  * harness the test class ever opens would not honour that: {@code close()} runs synchronously
@@ -40,15 +46,23 @@ import java.util.concurrent.TimeUnit;
  * satisfy it just as well as a real one. {@link #open()} gives each harness its own path and
  * its own queue, so a late arrival from a harness nobody is listening to anymore has nowhere
  * of another harness's to land in.
+ *
+ * <p><strong>The receiver does not tell the operator where to call.</strong> The harness does,
+ * and how it does is part of what its {@code CALLBACK} rule proves. {@code provider-mtn}'s
+ * harness declares {@link Route#url()} to the simulator as the address to call back when a
+ * submission names none. {@code provider-mpesa}'s declares no such fallback and hands the
+ * address to the adapter alone, in the intent; a callback reaching the route then proves the
+ * adapter forwarded the URL it was handed, since the operator had no other way to learn it.
+ * Nothing here chooses between the two.
  */
-final class CallbackReceiver implements AutoCloseable {
+public final class CallbackReceiver implements AutoCloseable {
 
     private static final String PATH_PREFIX = "/callback/";
 
     private final HttpServer server;
     private final ConcurrentMap<String, BlockingQueue<RawCallback>> routes = new ConcurrentHashMap<>();
 
-    CallbackReceiver() {
+    public CallbackReceiver() {
         try {
             server = HttpServer.create(new InetSocketAddress("localhost", 0), 0);
             server.createContext(PATH_PREFIX, exchange -> {
@@ -80,7 +94,7 @@ final class CallbackReceiver implements AutoCloseable {
      * A fresh route, isolated from every other one this receiver has ever opened: its own
      * random path, its own queue. One harness opens exactly one, for its own lifetime.
      */
-    Route open() {
+    public Route open() {
         String token = UUID.randomUUID().toString();
         routes.put(token, new LinkedBlockingQueue<>());
         return new Route(token);
@@ -92,7 +106,7 @@ final class CallbackReceiver implements AutoCloseable {
     }
 
     /** One harness's private address on this receiver, and the queue only it ever reads from. */
-    final class Route {
+    public final class Route {
 
         private final String token;
 
@@ -100,18 +114,18 @@ final class CallbackReceiver implements AutoCloseable {
             this.token = token;
         }
 
-        /** Where this route's owner should tell the simulator to call back. */
-        String url() {
+        /** Where this route's owner should tell the operator to call back. */
+        public String url() {
             return "http://localhost:" + server.getAddress().getPort() + PATH_PREFIX + token;
         }
 
         /** The next callback delivered to this route, waiting up to {@code timeout} for one. */
-        RawCallback poll(Duration timeout) {
+        public RawCallback poll(Duration timeout) {
             try {
                 RawCallback delivered = routes.get(token).poll(timeout.toMillis(), TimeUnit.MILLISECONDS);
                 if (delivered == null) {
                     throw new IllegalStateException(
-                            "the simulator never delivered a callback to this route within " + timeout);
+                            "the operator never delivered a callback to this route within " + timeout);
                 }
                 return delivered;
             } catch (InterruptedException e) {
@@ -121,7 +135,7 @@ final class CallbackReceiver implements AutoCloseable {
         }
 
         /** Forgets this route: nothing still in flight for it can be mistaken for anyone else's. */
-        void close() {
+        public void close() {
             routes.remove(token);
         }
     }

@@ -44,6 +44,13 @@ build commands — read it before opening a first pull request.
    outright refusal, status flapping, credential renewal, and untrusted callbacks. See
    `provider-mtn` for a worked example. If writing the harness is laborious, say so in your
    pull request — that is a signal about the contract, not about you.
+
+   You do not write the plumbing around it. The kit's `CallbackReceiver` catches your
+   operator's callbacks on a route private to each harness. If your operator has a simulator
+   in this repository, `nkap-test-support`'s `SimulatorUnderTest` boots it and drives its
+   `/_nkap` control plane; depend on it at test scope, never at any other. It stays out of the
+   kit because it brings Spring Boot with it, and the kit depends on `provider-api` and JUnit
+   alone. The module boundaries are in [`docs/conventions.md`](docs/conventions.md).
 3. Document the operator's quirks in `docs/providers/<name>.md` — the undocumented status
    codes, the field that is sometimes absent, the sandbox that lies. This file is often
    more valuable than the code.

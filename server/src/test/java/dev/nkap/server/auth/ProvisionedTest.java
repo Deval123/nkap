@@ -2,7 +2,7 @@ package dev.nkap.server.auth;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import dev.nkap.server.support.RecordToString;
+import dev.nkap.testsupport.RecordToString;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;

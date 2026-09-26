@@ -11,11 +11,9 @@
 FROM maven:3.9.9-eclipse-temurin-21 AS build
 WORKDIR /src
 COPY . .
-# The BuildKit cache mount keeps the Maven repository between builds without baking it
-# into an image layer, so editing a source file recompiles but does not re-download.
 # `mvn package` builds the layered, runnable "-boot" jar (see the repackage execution in
 # server/pom.xml). The BuildKit cache mount keeps the Maven repository between builds
-# without baking it into a layer, so editing a source file recompiles but does not
+# without baking it into an image layer, so editing a source file recompiles but does not
 # re-download.
 RUN --mount=type=cache,target=/root/.m2 \
     mvn -B -ntp -q -pl server -am package -DskipTests \

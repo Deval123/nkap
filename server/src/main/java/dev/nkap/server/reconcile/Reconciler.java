@@ -48,14 +48,22 @@ import org.springframework.transaction.support.TransactionTemplate;
  * <p><strong>One claim never reaches the operator at all (ADR 0014 decision 3, issue
  * #188).</strong> Before {@code confirm} is called, a claim whose adapter does not declare
  * {@link dev.nkap.provider.Resolution#QUERY} <em>and</em> whose payment holds no provider
- * reference — {@link Payment#cannotBeQueriedBy} — is escalated immediately, with zero
- * attempts and no operator call. Backing off and re-asking on a schedule assumes the next
- * ask might answer; here it provably cannot, because there is nothing to ask with and no way
- * to be told the answer for that request specifically. Escalating instead of polling for the
- * whole window is the only runtime behaviour change that ADR makes, and it is a separate
- * reason to escalate, not a shorter {@link ReconciliationPolicy#windowExhausted} window: every
- * other unresolved payment is still chased exactly as before. No adapter declares only
- * {@code CALLBACK} today, so this path is dormant until one does.
+ * reference — {@link Payment#cannotBeQueriedBy} — is escalated, with zero operator calls, by
+ * the first pass that claims it while that adapter is registered. The claim itself still
+ * counts toward {@code reconcile_attempts}, as every claim does: it is the operator, not the
+ * claim, that this skips. Backing off and re-asking on a schedule assumes the next ask might
+ * answer; here it provably cannot, because there is nothing to ask with and no way to be
+ * told the answer for that request specifically. Escalating instead of polling for the whole
+ * window is the only runtime behaviour change that ADR makes, and it is a separate reason to
+ * escalate, not a shorter {@link ReconciliationPolicy#windowExhausted} window: every other
+ * unresolved payment is still chased exactly as before. {@code MpesaAdapter} has declared
+ * only {@code CALLBACK} since it landed on 2026-09-23 (#211), so this runs for every M-Pesa
+ * submission that produced no {@code CheckoutRequestID}: the call timed out or failed, or
+ * Safaricom answered with a status other than 200 or 400, or a 200 naming no payment.
+ * {@link dev.nkap.server.payment.PaymentService} records each of those as {@code UNKNOWN}
+ * with no provider reference, so it is escalated without being queried, with
+ * {@code reason=cannot_query}, and a callback to its per-payment URL can still resolve it
+ * afterwards.
  *
  * <p>The operator call sits outside the claim transaction, for the reason written twice
  * elsewhere in this codebase: an operator that does not answer must not hold a database
@@ -147,8 +155,9 @@ public class Reconciler {
                     if (store.markEscalated(claim.reference(), now)) {
                         log.warn("payment {} escalated to a human immediately: provider {} does not declare "
                                         + "Resolution.QUERY and this payment holds no provider reference, so no "
-                                        + "reconciler attempt could ever resolve it -- no attempt was made",
-                                claim.reference(), claim.provider());
+                                        + "reconciler attempt could ever resolve it -- no operator call was made; "
+                                        + "the claim still counted, so reconcile_attempts={}",
+                                claim.reference(), claim.provider(), claim.attempts());
                         escalated(claim.provider().toString(), "cannot_query");
                     }
                     continue;
@@ -195,10 +204,10 @@ public class Reconciler {
 
     /**
      * ADR 0014 decision 3's trigger, checked cheaply: the adapter lookup is in memory, so a
-     * claim whose adapter declares {@code QUERY} — every adapter today — never pays for the
-     * payment row read {@link Payment#cannotBeQueriedBy} also needs. Only once an adapter
-     * lacks {@code QUERY} does this go back to the database to check the one thing that can
-     * still save it: a provider reference from a submission that did get answered.
+     * claim whose adapter declares {@code QUERY} — MTN's, today — never pays for the payment
+     * row read {@link Payment#cannotBeQueriedBy} also needs. Only for an adapter that lacks
+     * {@code QUERY} — M-Pesa's — does this go back to the database to check the one thing that
+     * can still save it: a provider reference from a submission that did get answered.
      */
     private boolean cannotBeQueried(Claim claim) {
         return adapters.find(claim.provider())
@@ -211,9 +220,10 @@ public class Reconciler {
         Counter.builder("nkap.payment.escalated")
                 .description("Payments the reconciler gave up retrying automatically. Still open, not FAILED "
                         + "-- needs a human. reason=window_exhausted is the ordinary case; "
-                        + "reason=cannot_query (ADR 0014 decision 3) is a payment escalated with zero reconciler "
-                        + "attempts because its adapter cannot resolve a lost submission by polling and it has no "
-                        + "provider reference to query with.")
+                        + "reason=cannot_query (ADR 0014 decision 3) is a payment escalated with zero operator "
+                        + "calls (the claim still counts toward reconcile_attempts), because "
+                        + "its adapter cannot resolve a lost submission by polling and it has no provider "
+                        + "reference to query with.")
                 .tag("provider", provider)
                 .tag("reason", reason)
                 .register(meterRegistry)

@@ -7,7 +7,7 @@ as a runnable application and an image, `ghcr.io/deval123/nkap-simulator-mpesa`.
 **The image has not been published yet.** It ships from the first release after 2.0.0. Until
 then, run the simulator from a clone, as below. Even after that release, pulling it works for
 everyone only once a maintainer has made the package public by hand
-([`CONTRIBUTING.md`](../CONTRIBUTING.md), step 3).
+([`CONTRIBUTING.md`](../CONTRIBUTING.md), step 4).
 
 ## Read this before you run it anywhere reachable
 

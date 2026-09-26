@@ -505,6 +505,64 @@ Left open deliberately rather than guessed. Each is worth a pull request adding 
   reads `Body.stkCallback`, `CheckoutRequestID`, `ResultCode` and `ResultDesc`, and no
   metadata item at all, because no successful callback has ever been observed. When one is,
   this paragraph says how to read it.
+- **Asked in four places, and still open.** Three entries here are questions only Safaricom can
+  close. This records where they were put, because an unknown that has been asked about is a
+  different kind of unknown from one nobody raised, and because the chain itself is the
+  finding. Nothing below establishes a fact about the API.
+
+  - **The documentation does not say.** The M-Pesa Express page lists the result codes and the
+    `CallbackMetadata` items, without stating whether the table is exhaustive or which items
+    are guaranteed. That is what started this section.
+  - **The sandbox cannot show.** Its test MSISDN never answers the prompt, so no successful
+    callback is ever produced there. Every observation on this page above is the timeout path
+    for that reason.
+  - **Support did not answer.** A message went to `APIFeedback@safaricom.co.ke` on
+    **2026-09-25** asking whether `ResultCode 4999` is intended and whether the documented
+    table is exhaustive, which `CallbackMetadata` items are guaranteed, and whether
+    `ResultCode 0` is the only success value. It also offered the `500.001.1001` observation
+    recorded above, since that one runs the other way. API Support replied on **2026-09-26**
+    asking for the request payload, advising a valid Safaricom number to receive the STK
+    prompt, and advising small test amounts. It addressed none of the three questions and did
+    not mention `500.001.1001`. A follow-up went back the same day with the payload and **one**
+    question, the `4999` one, on the reasoning that a single yes-or-no question is harder to
+    close as incomplete.
+  - **Stack Overflow had not been asked.** The success-case questions were posted on
+    **2026-09-25** ([question 80005727](https://stackoverflow.com/q/80005727)). After a day: no
+    answers, and one comment suggesting the support route that had already been taken. The
+    questions Stack Overflow lists as related are matched on the `payment-gateway` tag rather
+    than on the subject — a 2019 Django integration question and two questions about PayPal and
+    Authorize.Net from 2010 and 2012. That is suggestive and not conclusive, since the related
+    list is a tag-and-title similarity and not a search: it appears that nobody had asked these
+    questions, rather than that many people ask them.
+
+  Worth separating from the record: the support reply's advice is answerable here, because a
+  reader may wonder the same thing. **No observation above needed the prompt to be answered.**
+  Each submission was accepted with `ResponseCode: 0` and a `CheckoutRequestID`. What followed
+  was either that identifier's status query or the callback Safaricom sent once the prompt
+  timed out, and neither needed anyone to approve anything. The sandbox test MSISDN was used
+  deliberately, and the fact that it never answers the prompt is precisely why the
+  `CallbackMetadata` question cannot be settled in the sandbox at all.
+
+  An answer from support, if one arrives, will be recorded as **stated by Safaricom support**
+  and dated, which is not the same as observed. This page has already measured Safaricom's own
+  artefacts contradicting each other (the `CallbackMetadata` entry above, and *Sources*), so a
+  statement is a claim to check against behaviour, not a fact that replaces it. An answer on
+  Stack Overflow would be weaker still: someone else's observation of their own traffic, worth
+  recording as exactly that.
+
+  **What the three answers would change, and what they would not.** None of them would let this
+  gateway conclude anything wrongly in the meantime. `MpesaStatusMap` maps a `ResultCode` it
+  does not know to `UNKNOWN`, which is not terminal: the reconciler keeps asking and, once its
+  window is spent, a human is paged, and the payment never moves to `FAILED`. `4999` is not
+  left to that default. It is mapped to `PENDING` from observation, so whether Safaricom
+  intends it changes no code. A second success code, if one exists, would reach the default and
+  wait for a human: safe, but not handled. It is the one answer that would add a line, to that
+  table. `500.001.1001` raises `ProviderUnavailableException` rather than mapping to a status,
+  for the reason [ADR 0013](../adr/0013-a-refusal-the-operator-never-made.md) gives. And
+  `parseCallback` reads no `CallbackMetadata` item at all, so a missing guarantee cannot break
+  it. Beyond that one line, the answers would change what this page may assert, not what the
+  code does. That is what [ADR 0014](../adr/0014-resolvable-not-queryable.md)'s shape is for:
+  ignorance is a state the gateway holds, not a hole it has to fill.
 - **Whether the in-flight window looks the same for a payer who can be reached.** What a
   genuinely in-flight query answers is no longer unknown: `HTTP 200`, `ResultCode 4999`, "The
   transaction is still under processing". This was seen in one run, on 2026-09-23 (*A query in

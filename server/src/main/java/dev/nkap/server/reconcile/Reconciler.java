@@ -155,7 +155,8 @@ public class Reconciler {
                     if (store.markEscalated(claim.reference(), now)) {
                         log.warn("payment {} escalated to a human immediately: provider {} does not declare "
                                         + "Resolution.QUERY and this payment holds no provider reference, so no "
-                                        + "reconciler attempt could ever resolve it -- no attempt was made",
+                                        + "reconciler attempt could ever resolve it -- no operator call was made; "
+                                        + "the claim still counted, so reconcile_attempts=1",
                                 claim.reference(), claim.provider());
                         escalated(claim.provider().toString(), "cannot_query");
                     }

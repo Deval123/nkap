@@ -50,8 +50,8 @@ class PaymentWebhookApiIT {
 
     @DynamicPropertySource
     static void configuration(DynamicPropertyRegistry registry) {
-        // Not a PostgresSpringBootIT (see above), so the base's loopback binding is repeated
-        // here. Identical in DisbursementApiIT and RefundApiIT, which share one context.
+        // Not a PostgresSpringBootIT (see the class javadoc), so the base's loopback binding is
+        // registered here as well.
         BindLoopback.register(registry);
         PostgresDatabase db = PostgresDatabase.shared();
         registry.add("spring.datasource.url", db::jdbcUrl);

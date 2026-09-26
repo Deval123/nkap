@@ -53,12 +53,16 @@ import org.springframework.test.context.DynamicPropertySource;
  * {@code nkap.reconciler.enabled} (see {@code ReconcilerWiringTest}), so {@code enabled=true}
  * is what lets {@code runOnce()} be autowired and called by hand below. A long interval does
  * not by itself stop the scheduled pass from firing -- its first tick fires as soon as the
- * context comes up, no matter the interval -- and this class shares its context with
- * {@code DisbursementApiIT} (identical {@code @DynamicPropertySource} values), so a live
- * scheduler would otherwise outlive both classes and keep sweeping the PostgreSQL instance
- * every {@code *IT} shares ({@code PostgresDatabase.shared()}) for the rest of the JVM's
- * life (issue #162). {@code @DirtiesContext(classMode = AFTER_CLASS)} below closes that
- * context once this class is done, which is what actually stops it.
+ * context comes up, no matter the interval.
+ *
+ * <p>Spring's test framework keeps a context cached, and open, after its class finishes, until
+ * the JVM exits or the cache evicts it. This one's scheduler would therefore outlive this class
+ * and keep sweeping the PostgreSQL instance every {@code *IT} shares
+ * ({@code PostgresDatabase.shared()}) (issue #162). {@code @DirtiesContext(classMode =
+ * AFTER_CLASS)} below closes the context as soon as this class is done, and that is what stops
+ * it. Remove the annotation and the sweep comes back. The context is this class's alone: it
+ * registers its own {@code SIMULATOR}'s base URL, so no other class's
+ * {@code @DynamicPropertySource} values match it. None of this depends on sharing.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ExtendWith(DockerAvailable.class)

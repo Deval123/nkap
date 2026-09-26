@@ -101,6 +101,19 @@ submission and every status query carries a `Password` computed from it:
   containing the passkey. Nkap does not log one: the adapter's error messages quote only
   what Safaricom answered, never what was sent. A proxy, a debugging tap or a request log
   placed between Nkap and Safaricom would record it, in every request.
+- **And the request body is what people are asked for.** The paths named above are technical:
+  a proxy, a debugging tap, a request log. The one observed in practice is human. Safaricom's
+  own API Support, on **2026-09-26**, asked for the request payload as the first step of a
+  support exchange (the exchange is recorded in `docs/providers/m-pesa.md`, *Still unknown*).
+  That is not careless — a payload is the obvious thing to ask for — but with this formula it
+  means handing over the passkey, and, as the next point says, no way of revoking one has
+  been observed. The shape of a submission circulates freely in public answers, with the
+  `Password` behind a variable name, and that is fine. It is the value that must not
+  circulate, because a pasted value is the passkey. So: when a support ticket, an issue, a
+  question or an article needs a Daraja request body, replace the `Password` before it leaves
+  your machine, and say that it was the documented `base64(shortcode + passkey + timestamp)`
+  so nobody has to ask whether it was well formed. A **response** or a **callback** is safe
+  to share once the receipt number and the MSISDN are removed; a **request** never is.
 - **It is not rotated the way a Nkap API key is.** The zero-downtime procedure above works
   because Nkap issues and revokes its own API keys, and two stay active during the handover.
   The passkey is issued by Safaricom, and no endpoint for revoking or reissuing one has been

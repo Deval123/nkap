@@ -16,5 +16,5 @@ Thumbs.db
 *.local
 application-local.yml
 
-# Plan de session, non versionné
+# A maintainer's working notes for the current session, kept out of the repository
 PLAN.md

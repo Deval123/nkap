@@ -8,10 +8,10 @@
 FROM maven:3.9.9-eclipse-temurin-21 AS build
 WORKDIR /src
 COPY . .
-# `spring-boot:repackage` is run here, not bound in the pom: the project uses the Spring
-# Boot BOM rather than the starter parent, so `mvn package` alone produces a plain jar,
-# and binding repackage would hand a fat jar to the modules that depend on this one as a
-# test library. Repackaging only in the image keeps that blast radius at zero.
+# `mvn package` builds the layered, runnable "-boot" jar: the repackage execution is bound in
+# simulator/pom.xml, with a classifier so the plain jar stays a plain jar. That matters here
+# more than in the other images: server and provider-mtn depend on this module's plain jar
+# as a test library, and a fat jar in its place would not resolve.
 RUN --mount=type=cache,target=/root/.m2 \
     mvn -B -ntp -q -pl simulator -am package -DskipTests \
  && cp simulator/target/nkap-simulator-*-boot.jar app.jar \

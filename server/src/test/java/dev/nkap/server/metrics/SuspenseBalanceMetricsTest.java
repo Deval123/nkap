@@ -63,8 +63,8 @@ class SuspenseBalanceMetricsTest {
                 .as("the operator says 5000 EUR moved and no settled payment claims it")
                 .isEqualTo(-5000.0);
 
-        // "Resolved" is CLAUDE.md's own rule, applied: the ledger is append-only, so a
-        // mistake is corrected by a reversing entry, never by editing the original. The
+        // "Resolved" is docs/conventions.md's own rule, applied: the ledger is append-only,
+        // so a mistake is corrected by a reversing entry, never by editing the original. The
         // gauge must reflect that reversal live, the same way it reflected the original post.
         LedgerEntry posted = ledger.entriesForReference("statement:txn-1").stream().findFirst().orElseThrow();
         ledger.append(LedgerEntry.reversalOf(posted, "suspense-resolved:mtn:txn-1", Instant.now(),

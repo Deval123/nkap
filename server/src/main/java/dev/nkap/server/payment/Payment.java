@@ -149,10 +149,13 @@ public final class Payment {
         this.state = previous.transitionTo(target);
         this.updatedAt = Instant.now();
         if (this.state.isUnresolved() && !previous.isUnresolved()) {
-            // The payment has entered a fresh episode of being unresolved — from CREATED, or
-            // from a state it had briefly resolved out of. Everything the reconciler tracks
-            // starts here, and from here on is advanced only by the reconciler. A later hop
-            // between SUBMITTED, PENDING and UNKNOWN restarts none of it:
+            // The payment has just become unresolved, and it can only have come from CREATED:
+            // CREATED is the one state that is neither unresolved nor terminal, and a terminal
+            // state has no outgoing transition (PaymentState.ALLOWED), so nothing ever leaves
+            // one to come back. PaymentStateTest pins both. Each payment passes through here
+            // once, at most. Everything the reconciler tracks starts here, and from here on is
+            // advanced only by the reconciler. A later hop between SUBMITTED, PENDING and
+            // UNKNOWN restarts none of it:
             //   - the schedule (reconcileDueAt): due now, since there is nothing yet to
             //     preserve. A hop must NOT move it back to now — the claim that produced the
             //     hop already counted the attempt and pushed the next one out by a backoff
@@ -170,8 +173,8 @@ public final class Payment {
             //   - the escalation flag: cleared here, and only here. A hop leaves an escalated
             //     payment escalated — it is still that human's problem whichever non-terminal
             //     state it now wears — so the list a human reads does not flicker as the
-            //     operator changes its answer. The flag lifts only when a genuinely new
-            //     episode starts, which is the same moment a fresh window starts.
+            //     operator changes its answer. It is cleared only on the way in, which each
+            //     payment passes through once, when there is not yet anything to clear.
             this.reconcileAttempts = 0;
             this.reconcileDueAt = this.updatedAt;
             this.escalatedAt = null;

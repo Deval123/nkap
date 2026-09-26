@@ -1,5 +1,7 @@
 package dev.nkap.core.payment;
 
+import java.util.EnumSet;
+import java.util.Set;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -80,6 +82,22 @@ class PaymentStateTest {
     void submissionMayBeAcknowledgedAsPending() {
         assertTrue(PaymentState.CREATED.canTransitionTo(PaymentState.PENDING));
         assertEquals(PaymentState.PENDING, PaymentState.CREATED.transitionTo(PaymentState.PENDING));
+    }
+
+    @Test
+    @DisplayName("CREATED is the only state that is neither unresolved nor terminal, so it is the only way into the unresolved states")
+    void createdIsTheOnlyWayIntoTheUnresolvedStates() {
+        // Derived from values(), not listed: a new state that is neither would make every
+        // "entered from CREATED" argument false (Payment.applyTransition, ADR 0016), and must
+        // fail here first.
+        Set<PaymentState> neither = EnumSet.noneOf(PaymentState.class);
+        for (PaymentState state : PaymentState.values()) {
+            if (!state.isUnresolved() && !state.isTerminal()) {
+                neither.add(state);
+            }
+        }
+        assertEquals(EnumSet.of(PaymentState.CREATED), neither,
+                "the states a payment can enter the unresolved states from");
     }
 
     @Test

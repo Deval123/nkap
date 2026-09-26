@@ -10,6 +10,7 @@ import dev.nkap.core.payment.PaymentState;
 import dev.nkap.core.payment.ReferenceId;
 import dev.nkap.provider.ProviderId;
 import dev.nkap.server.payment.ConfirmationOutcome;
+import dev.nkap.server.payment.EscalationReason;
 import dev.nkap.server.payment.PaymentRepository;
 import dev.nkap.server.payment.SettlementService;
 import dev.nkap.server.provider.AdapterRegistry;
@@ -53,7 +54,7 @@ class ReconcilerTest {
         ReferenceId reference = ReferenceId.newReference();
         Claim claim = new Claim(ProviderId.of("mtn"), reference, 5, now.minus(Duration.ofHours(25)));
         when(store.claimDue(anyInt(), any())).thenReturn(List.of(claim));
-        when(store.markEscalated(reference, now)).thenReturn(true);
+        when(store.markEscalated(reference, now, EscalationReason.WINDOW_EXHAUSTED)).thenReturn(true);
         when(settlement.confirm(any(), any(), any())).thenAnswer(invocation -> {
             // A real SettlementService.confirm would log through its own logger on this
             // same thread; the mock stands in for the "resolved but not conclusive"

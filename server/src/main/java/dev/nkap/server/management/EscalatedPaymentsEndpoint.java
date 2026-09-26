@@ -1,5 +1,6 @@
 package dev.nkap.server.management;
 
+import dev.nkap.server.payment.EscalationReason;
 import dev.nkap.server.payment.Payment;
 import dev.nkap.server.payment.PaymentRepository;
 import dev.nkap.server.provider.AdapterRegistry;
@@ -33,23 +34,26 @@ import org.springframework.stereotype.Component;
  * {@code application.yml} already gives for keeping that port off the public network. What is
  * returned answers only which payments need a human, for which merchant, and since when.
  *
- * <p><strong>{@code reason} (ADR 0014 decision 3, issue #188).</strong> A bounded reason
- * code — {@code cannot_query} or {@code window_exhausted} — never a message, for the same
- * reason the other fields here stay narrow: this port is unauthenticated and a message could
- * carry an operator's own text. Not a stored column: {@link Payment#providerReference()} is
- * already on hand and never changes after a payment leaves {@code CREATED}
- * ({@code recordProviderReference} is only ever called at submission), so
- * {@link Payment#cannotBeQueriedBy} can recompute half of the trigger the reconciler decided
- * escalation on instead of persisting it. The other half cannot be trusted the same way:
- * whether the configured adapter for {@link Payment#provider()} declares
- * {@link dev.nkap.provider.Resolution#QUERY} is a fact about <em>today's</em> deployment, not
- * about the payment, and a reconfigured or upgraded adapter can answer that question
- * differently tomorrow than it did at escalation time — recomputing it live could relabel a
- * payment's own history. {@code reason} is {@code cannot_query} only when
- * {@link Payment#cannotBeQueriedBy} holds <strong>and</strong>
- * {@link Payment#reconcileAttempts()} is {@code 0}, which is what that escalation path always
- * and only produces (the reconciler never calls the operator on it); a payment queried even
- * once carries {@code window_exhausted}, whatever the adapter declares now.
+ * <p><strong>{@code reason} (ADR 0014 decision 3, ADR 0016).</strong> A bounded reason code,
+ * one of {@link EscalationReason}'s: {@code window_exhausted}, {@code cannot_query} or
+ * {@code no_adapter}. Never a message, for the same reason the other fields here stay narrow:
+ * this port is unauthenticated and a message could carry an operator's own text.
+ *
+ * <p>Read from {@code escalation_reason}, stored by the reconciler in the same statement that
+ * escalated the payment (V12). It used to be recomputed here instead, and recomputation cannot
+ * serve {@code no_adapter}: that reason says no adapter was configured when the window was
+ * spent, and this list is usually read after the adapter is restored, when a recomputation
+ * would say something else. Whether an adapter declares {@link dev.nkap.provider.Resolution#QUERY}
+ * is the same kind of fact about <em>today's</em> deployment, which is why recomputing
+ * {@code cannot_query} was already limited to half of its trigger.
+ *
+ * <p>Rows escalated before V12 have no stored reason, and keep the derivation this endpoint
+ * always used: {@code cannot_query} when {@link Payment#cannotBeQueriedBy} holds for the
+ * configured adapter <strong>and</strong> {@link Payment#reconcileAttempts()} is {@code 0},
+ * {@code window_exhausted} otherwise. That rule has a known limit, left as it is because
+ * those rows' true reason was never recorded: every escalation the reconciler makes follows a
+ * claim, and every claim counts toward {@code reconcile_attempts}, so a reconciler-escalated
+ * row always has at least {@code 1} and the derivation reports it as {@code window_exhausted}.
  *
  * <p><strong>Bounded</strong>, not because the list is expected to be large but because the
  * moment an operator reads this is the moment escalations are rising — precisely when it
@@ -101,11 +105,16 @@ public class EscalatedPaymentsEndpoint {
     }
 
     private String reasonFor(Payment payment) {
+        if (payment.escalationReason() != null) {
+            return payment.escalationReason().code();
+        }
+        // Escalated before V12 stored a reason: the derivation this endpoint always used (see
+        // the class javadoc for its limit).
         boolean cannotQuery = payment.reconcileAttempts() == 0
                 && adapters.find(payment.provider())
                         .map(payment::cannotBeQueriedBy)
                         .orElse(false);
-        return cannotQuery ? "cannot_query" : "window_exhausted";
+        return (cannotQuery ? EscalationReason.CANNOT_QUERY : EscalationReason.WINDOW_EXHAUSTED).code();
     }
 
     private static String orEmpty(Instant instant) {

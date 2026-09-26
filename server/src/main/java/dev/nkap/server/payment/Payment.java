@@ -74,10 +74,12 @@ public final class Payment {
     // the backoff and the escalation window both run from the first unresolved moment, not
     // from each hop between the three states (see applyTransition for why). escalatedAt is
     // stamped when the window is spent and a human is paged, and cleared only on that same
-    // way in — a hop does not un-escalate a payment. A flag, not a state.
+    // way in — a hop does not un-escalate a payment. A flag, not a state. escalationReason is
+    // part of that flag: stamped with it, cleared with it (ADR 0016).
     private int reconcileAttempts;
     private Instant reconcileDueAt;
     private Instant escalatedAt;
+    private EscalationReason escalationReason;
     private Instant unresolvedSince;
 
     private Payment(ReferenceId reference, ProviderId provider, String merchantId, PaymentIntent intent,
@@ -119,8 +121,8 @@ public final class Payment {
                                     PaymentState state, String providerReference, String providerTransactionId,
                                     String providerBaseUrl, Instant createdAt, Instant updatedAt,
                                     List<PaymentTransition> history, int reconcileAttempts, Instant reconcileDueAt,
-                                    Instant escalatedAt, Instant unresolvedSince, ReferenceId refundOf,
-                                    long refundedMinor) {
+                                    Instant escalatedAt, EscalationReason escalationReason,
+                                    Instant unresolvedSince, ReferenceId refundOf, long refundedMinor) {
         Payment payment = new Payment(reference, provider, merchantId, intent, refundOf, createdAt);
         payment.state = Objects.requireNonNull(state, "state");
         payment.updatedAt = Objects.requireNonNull(updatedAt, "updatedAt");
@@ -131,6 +133,7 @@ public final class Payment {
         payment.reconcileAttempts = reconcileAttempts;
         payment.reconcileDueAt = reconcileDueAt;
         payment.escalatedAt = escalatedAt;
+        payment.escalationReason = escalationReason;
         payment.unresolvedSince = unresolvedSince;
         payment.refundedMinor = refundedMinor;
         return payment;
@@ -172,6 +175,7 @@ public final class Payment {
             this.reconcileAttempts = 0;
             this.reconcileDueAt = this.updatedAt;
             this.escalatedAt = null;
+            this.escalationReason = null;
             this.unresolvedSince = this.updatedAt;
         }
         this.history.add(new PaymentTransition(previous, this.state, this.updatedAt, cause, operatorCode, note, rawResponse));
@@ -288,6 +292,14 @@ public final class Payment {
     /** When this payment was escalated to a human, or {@code null} if it has not been. */
     public Instant escalatedAt() {
         return escalatedAt;
+    }
+
+    /**
+     * Why this payment was escalated, or {@code null} if it has not been, or was escalated
+     * before the reason was stored (V12): those rows never recorded one.
+     */
+    public EscalationReason escalationReason() {
+        return escalationReason;
     }
 
     /**

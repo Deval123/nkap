@@ -235,6 +235,7 @@ class ReconcilerIT {
 
         Map<String, Object> row = paymentRow(reference);
         assertThat(row.get("escalated_at")).as("two hours into a one-hour window, it is escalated").isNotNull();
+        assertThat(row.get("escalation_reason")).isEqualTo("window_exhausted");
         assertThat(row.get("state")).isEqualTo(PaymentState.UNKNOWN.name());
         assertThat(statesEverReached(reference))
                 .as("escalation is not a verdict — never FAILED")
@@ -627,6 +628,7 @@ class ReconcilerIT {
 
         Map<String, Object> row = paymentRow(reference);
         assertThat(row.get("escalated_at")).as("escalated on the very first pass").isNotNull();
+        assertThat(row.get("escalation_reason")).isEqualTo("cannot_query");
         assertThat(row.get("state")).isEqualTo(PaymentState.UNKNOWN.name());
         assertThat(((Number) row.get("reconcile_attempts")).intValue())
                 .as("claiming the payment still counts as usual -- it is the operator, not the claim, that this trigger skips")
@@ -698,6 +700,7 @@ class ReconcilerIT {
 
         Map<String, Object> row = paymentRow(orphan);
         assertThat(row.get("escalated_at")).as("two hours into a one-hour window, it is escalated").isNotNull();
+        assertThat(row.get("escalation_reason")).as("the reason is stored with the escalation").isEqualTo("no_adapter");
         assertThat(row.get("state")).isEqualTo(PaymentState.UNKNOWN.name());
         assertThat(statesEverReached(orphan)).as("escalation is not a verdict").doesNotContain(PaymentState.FAILED.name());
         assertThat(meters.find("nkap.payment.escalated")

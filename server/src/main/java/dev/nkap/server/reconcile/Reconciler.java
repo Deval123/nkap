@@ -3,6 +3,7 @@ package dev.nkap.server.reconcile;
 import dev.nkap.core.payment.PaymentState;
 import dev.nkap.provider.Resolution;
 import dev.nkap.server.payment.ConfirmationOutcome;
+import dev.nkap.server.payment.EscalationReason;
 import dev.nkap.server.payment.Payment;
 import dev.nkap.server.payment.PaymentRepository;
 import dev.nkap.server.payment.PaymentTransition;
@@ -165,13 +166,13 @@ public class Reconciler {
             log.debug("reconciler pass {} claimed {} payment(s)", passId, claims.size());
             for (Claim claim : claims) {
                 if (cannotBeQueried(claim)) {
-                    if (store.markEscalated(claim.reference(), now)) {
+                    if (store.markEscalated(claim.reference(), now, EscalationReason.CANNOT_QUERY)) {
                         log.warn("payment {} escalated to a human immediately: provider {} does not declare "
                                         + "Resolution.QUERY and this payment holds no provider reference, so no "
                                         + "reconciler attempt could ever resolve it -- no operator call was made; "
                                         + "the claim still counted, so reconcile_attempts={}",
                                 claim.reference(), claim.provider(), claim.attempts());
-                        escalated(claim.provider().toString(), "cannot_query");
+                        escalated(claim.provider().toString(), EscalationReason.CANNOT_QUERY);
                     }
                     continue;
                 }
@@ -188,10 +189,11 @@ public class Reconciler {
                 if (outcome.resolved()) {
                     continue;
                 }
-                if (policy.windowExhausted(claim.unresolvedSince(), now) && store.markEscalated(claim.reference(), now)) {
+                if (policy.windowExhausted(claim.unresolvedSince(), now)
+                        && store.markEscalated(claim.reference(), now, EscalationReason.WINDOW_EXHAUSTED)) {
                     log.warn("payment {} escalated to a human after {} reconciler attempt(s); operator's last answer: {}",
                             claim.reference(), claim.attempts(), outcome.lastOperatorAnswer());
-                    escalated(claim.provider().toString(), "window_exhausted");
+                    escalated(claim.provider().toString(), EscalationReason.WINDOW_EXHAUSTED);
                 }
             }
             return claims.size();
@@ -245,11 +247,12 @@ public class Reconciler {
      * either way.
      */
     private void noAdapter(Claim claim, Instant now) {
-        if (policy.windowExhausted(claim.unresolvedSince(), now) && store.markEscalated(claim.reference(), now)) {
+        if (policy.windowExhausted(claim.unresolvedSince(), now)
+                && store.markEscalated(claim.reference(), now, EscalationReason.NO_ADAPTER)) {
             log.warn("payment {} escalated to a human after {} reconciler attempt(s): no adapter is configured "
                             + "for provider {}, so this attempt could not ask the operator",
                     claim.reference(), claim.attempts(), claim.provider());
-            escalated(claim.provider().toString(), "no_adapter");
+            escalated(claim.provider().toString(), EscalationReason.NO_ADAPTER);
             return;
         }
         log.warn("payment {} not reconciled this pass: no adapter is configured for provider {}; "
@@ -257,7 +260,7 @@ public class Reconciler {
                 claim.reference(), claim.provider(), claim.attempts());
     }
 
-    private void escalated(String provider, String reason) {
+    private void escalated(String provider, EscalationReason reason) {
         Counter.builder("nkap.payment.escalated")
                 .description("Payments the reconciler gave up retrying automatically. Still open, not FAILED "
                         + "-- needs a human. reason=window_exhausted is the ordinary case; "
@@ -268,7 +271,7 @@ public class Reconciler {
                         + "spent while no adapter was configured for its provider, so the attempt that "
                         + "escalated it could not ask the operator.")
                 .tag("provider", provider)
-                .tag("reason", reason)
+                .tag("reason", reason.code())
                 .register(meterRegistry)
                 .increment();
     }

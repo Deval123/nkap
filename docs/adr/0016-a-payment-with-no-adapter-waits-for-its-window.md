@@ -43,6 +43,10 @@ every merchant on every provider.
    naming the payment, the provider and its `reconcile_attempts`, and the payment stays in the
    queue.
 
+3. **The reason is stored with the escalation.** `escalation_reason` (V12) is written by the
+   same statement that stamps `escalated_at`, and `GET /actuator/escalatedPayments` reports it.
+   The codes are `EscalationReason`'s: `window_exhausted`, `cannot_query`, `no_adapter`.
+
 ## Rationale
 
 **Why escalate at all, instead of retrying forever.** The escalation guarantee is that an
@@ -72,6 +76,12 @@ payment with no adapter comes after `confirm` in that body, so the exception ski
 payment is retried forever and never escalated. Around `confirm` alone, the catch hands the
 payment to its own window check in the same pass.
 
+**Why the reason is stored.** Before this, the endpoint recomputed the reason on each read.
+`no_adapter` cannot be recomputed: it describes the deployment when the window was spent, and
+the list is usually read after the adapter has been restored, when a recomputation would say
+`window_exhausted`. The endpoint's own javadoc had already refused to recompute the configuration
+half of `cannot_query`, for the same reason.
+
 ## Consequences
 
 **Gained.**
@@ -82,6 +92,8 @@ payment to its own window check in the same pass.
   and each pass instead logged an error.
 - If the adapter comes back before the window is spent, the next pass resolves the payment with
   no human involved.
+- Every escalation carries a stored reason, and the metric and the endpoint report the same
+  code for it.
 
 **Costs.**
 
@@ -97,11 +109,18 @@ payment to its own window check in the same pass.
   for `no_adapter` is not re-queued automatically when its adapter returns. This is not handled,
   and here is what a human can do. Restore the provider's configuration first, since every
   payment for that provider is affected. Then list the payments with
-  `GET /actuator/escalatedPayments` and ask the operator about each one of that provider's. A callback from the operator to the payment's own URL still resolves it, through the
+  `GET /actuator/escalatedPayments`, whose `reason` is `no_adapter`, and ask the operator about
+  each one. A callback from the operator to the payment's own URL still resolves it, through the
   restored adapter. No route resolves or re-queues a payment by hand. That gap is not specific
   to this reason: a `window_exhausted` payment has it too. Closing it would mean clearing
   `escalated_at`, which changes what escalation means. It needs its own decision and is not
   made here.
+- **Rows escalated before V12 have no stored reason.** The endpoint keeps deriving one for them,
+  as it always did. That derivation reports `cannot_query` only for a payment with
+  `reconcile_attempts` at 0. Every escalation follows a claim, and every claim counts toward
+  `reconcile_attempts`, so those rows read `window_exhausted` whatever their real reason was. It
+  is left as it is: their reason was never recorded, and a guess written into the column would
+  be worse than a known limit.
 
 ## Alternatives rejected
 
@@ -113,3 +132,6 @@ other one, including the next bug of this kind.
 
 **Refuse to start while unresolved payments name an unconfigured provider.** Rejected in the
 context: it turns one provider's problem into an outage for all of them.
+
+**Recompute `no_adapter` on the endpoint from today's registry.** The reason would change as soon
+as the adapter came back, at exactly the moment someone reads the list.

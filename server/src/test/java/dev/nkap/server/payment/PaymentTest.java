@@ -155,7 +155,7 @@ class PaymentTest {
         // attempt is scheduled half an hour out.
         Payment payment = Payment.rehydrate(ReferenceId.newReference(), ProviderId.of("mtn"), "merchant-1", intent,
                 PaymentState.UNKNOWN, "", "", "", createdAt, createdAt, List.of(),
-                7, nextAttemptDue, escalatedAt, becameUnresolved, null, 0L);
+                7, nextAttemptDue, escalatedAt, EscalationReason.WINDOW_EXHAUSTED, becameUnresolved, null, 0L);
 
         payment.applyTransition(PaymentState.PENDING, PaymentTransition.Cause.RECONCILER, "PENDING", "", "");
 
@@ -171,6 +171,9 @@ class PaymentTest {
         assertThat(payment.escalatedAt())
                 .as("a hop does not un-escalate — one episode of not knowing gets one escalation")
                 .isEqualTo(escalatedAt);
+        assertThat(payment.escalationReason())
+                .as("the reason is part of the escalation, kept with it")
+                .isEqualTo(EscalationReason.WINDOW_EXHAUSTED);
     }
 
     @Test

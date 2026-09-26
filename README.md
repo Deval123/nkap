@@ -242,13 +242,15 @@ what to publish first.
 [`ghcr.io/deval123/nkap-gateway`](https://github.com/deval123/nkap/pkgs/container/nkap-gateway)
 and
 [`ghcr.io/deval123/nkap-simulator`](https://github.com/deval123/nkap/pkgs/container/nkap-simulator)
-(MTN) and
-[`ghcr.io/deval123/nkap-simulator-mpesa`](https://github.com/deval123/nkap/pkgs/container/nkap-simulator-mpesa)
-(M-Pesa, [below](#the-simulator-on-its-own)) —
+(MTN) —
 public, no login needed to pull, `linux/amd64` and `linux/arm64` — tagged with the exact
 version and with a moving `latest` that always points at the newest release, never at `main`.
 `docker inspect ghcr.io/deval123/nkap-gateway:latest` names the exact commit and version it
 was built from.
+
+The M-Pesa simulator's image, `ghcr.io/deval123/nkap-simulator-mpesa`, has not been published
+yet: it ships from the first release after 2.0.0. Until then, run it from a clone with the two
+commands in [`simulator-mpesa-app/README.md`](simulator-mpesa-app/README.md#running-it).
 
 This is for running Nkap for real, against your own MTN credentials — not for trying it. If
 you have not run Nkap before, the [quick start](#quick-start-the-contributors-path) above is a

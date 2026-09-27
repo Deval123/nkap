@@ -4,9 +4,9 @@ A fake M-Pesa operator that misbehaves on command: the simulator's core with M-P
 as a runnable application and an image, `ghcr.io/deval123/nkap-simulator-mpesa`.
 [`simulator/`](../simulator/README.md) is the same thing with MTN's face.
 
-**The image ships from 2.1.0.** Pulling it works for everyone only once a maintainer has made
-the package public by hand ([`CONTRIBUTING.md`](../CONTRIBUTING.md), step 4); until that is
-done, run the simulator from a clone, as below.
+**The image has shipped since 2.1.0**, published by the release workflow
+([`CONTRIBUTING.md`](../CONTRIBUTING.md), step 4), and it pulls with no login: measured on
+2026-09-27, by that release's own credential-less pull and again by hand.
 
 ## Read this before you run it anywhere reachable
 
@@ -23,17 +23,18 @@ follows from it.
 
 ## Running it
 
-From a clone:
+The released simulator, from its image:
+
+```bash
+docker run -p 8082:8082 ghcr.io/deval123/nkap-simulator-mpesa
+```
+
+From a clone, when you are changing the simulator itself and want to run what you changed
+rather than what was released:
 
 ```bash
 mvn -B -pl simulator-mpesa-app -am package -DskipTests
 java -jar simulator-mpesa-app/target/nkap-simulator-mpesa-app-*-boot.jar
-```
-
-From 2.1.0, once its package is public, the image as well:
-
-```bash
-docker run -p 8082:8082 ghcr.io/deval123/nkap-simulator-mpesa
 ```
 
 It listens on **port 8082**, not the MTN simulator's 8081, so the two run side by side with no
@@ -48,7 +49,7 @@ name the file:
 java -jar simulator-mpesa-app/target/nkap-simulator-mpesa-app-*-boot.jar --nkap.scenario.file=./scenario.json
 ```
 
-With the image, once it is published, mount it at the path the image reads:
+With the image, mount it at the path the image reads:
 
 ```bash
 docker run -p 8082:8082 -v ./scenario.json:/etc/nkap/scenario.json ghcr.io/deval123/nkap-simulator-mpesa

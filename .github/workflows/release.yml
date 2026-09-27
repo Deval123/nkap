@@ -154,6 +154,15 @@ jobs:
       # this being forgotten -- it fails loudly on an anonymous pull instead of shipping a
       # publish nobody can use.
       #
+      # Corrected 2026-09-27: that prediction about nkap-simulator-mpesa was wrong. 2.1.0
+      # published it for the first time that day, no maintainer changed its visibility, and
+      # `verify-pull`'s anonymous pull of it passed (run 36309480695), as did one by hand the
+      # same day. Why it came out pullable is not established: the packages API would say
+      # its visibility, but only to a token with read:packages, and its settings page would
+      # say whether it inherits access from this repository. Until one of those is read, do
+      # not conclude that a future package needs no step, or that it does -- `verify-pull`
+      # still decides, and 2.1.0 was the first release where it reported good news.
+      #
       # Do not delete the 0.0.1-rc1 package versions this workflow's first rehearsal left in
       # GHCR (issue #103) until each package has another version. Deleting a package's only
       # version can remove the package itself and reset this same manual visibility step --

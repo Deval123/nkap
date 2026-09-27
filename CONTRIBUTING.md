@@ -184,7 +184,10 @@ passes, in exactly this order:
   tagged release, a maintainer sets each package to public once, by hand, in its package
   settings — including `nkap-simulator-mpesa` at the first release that publishes it, though
   the other two are long public — the pull-and-verify step above is what catches this being
-  forgotten.
+  forgotten. That prediction for `nkap-simulator-mpesa` was wrong: 2.1.0 published it for the
+  first time on 2026-09-27, nobody changed its visibility, and the pull-and-verify step pulled
+  it with no credentials. Why is not established (the workflow's comment says what would
+  settle it), so the step above still decides whether a new package needs the manual step.
 
 `v1.0.0` was Nkap's first release; its scope was fixed in
 [`docs/roadmap/v1.0.0-mtn-end-to-end.md`](docs/roadmap/v1.0.0-mtn-end-to-end.md), which is a

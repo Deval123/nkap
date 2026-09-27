@@ -28,8 +28,8 @@ that matter.
 {{- define "nkap.labels" -}}
 helm.sh/chart: {{ include "nkap.chart" . }}
 {{ include "nkap.selectorLabels" . }}
-{{- if .Chart.AppVersion }}
-app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
+{{- with include "nkap.versionLabel" . }}
+app.kubernetes.io/version: {{ . | quote }}
 {{- end }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- end -}}
@@ -37,6 +37,28 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- define "nkap.selectorLabels" -}}
 app.kubernetes.io/name: {{ include "nkap.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end -}}
+
+{{/*
+The gateway image's tag, exactly as given: what the Deployment and the key-init Job run. Required,
+and nothing else -- the chart deploys any tag Kubernetes accepts, a digest-pinned one included.
+*/}}
+{{- define "nkap.imageTag" -}}
+{{- required "image.tag is required -- set it to a real release, e.g. \"1.0.0\" (see https://github.com/deval123/nkap/releases)" .Values.image.tag | toString -}}
+{{- end -}}
+
+{{/*
+The app.kubernetes.io/version label's value: the image tag up to its first "@", so that the label
+names the image that is running rather than Chart.yaml's appVersion, which nothing installs (#257).
+Empty, and the label omitted, when that is not a valid label value (at most 63 letters, digits,
+'-', '_' and '.', starting and ending with a letter or digit) -- never truncated, because a
+truncated version is a wrong one.
+*/}}
+{{- define "nkap.versionLabel" -}}
+{{- $version := include "nkap.imageTag" . | splitList "@" | first -}}
+{{- if regexMatch "^[A-Za-z0-9]([-A-Za-z0-9_.]{0,61}[A-Za-z0-9])?$" $version -}}
+{{- $version -}}
+{{- end -}}
 {{- end -}}
 
 {{/*

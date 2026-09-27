@@ -27,7 +27,7 @@ required reference is absent:
 
 ```
 $ helm template . 
-Error: execution error at (nkap/templates/keyinit-job.yaml:44:61):
+Error: execution error at (nkap/templates/service.yaml:11:8):
 image.tag is required -- set it to a real release, e.g. "1.0.0" (see https://github.com/deval123/nkap/releases)
 ```
 
@@ -169,6 +169,10 @@ helm install my-nkap ./charts/nkap \
   --set image.tag=1.0.0 \
   -f my-values.yaml   # database.host, database.existingSecret, keyInit.merchantId, at minimum
 ```
+
+The chart's objects carry `app.kubernetes.io/version` set to `image.tag` up to any `@digest`
+(`2.0.0@sha256:…` is labelled `2.0.0`), and carry no version label when that part cannot be a
+label value, such as `1.0.0+build.5` — the tag still deploys exactly as given.
 
 Then read the three questions below — before you rely on this deployment, not after.
 
@@ -334,7 +338,12 @@ the rendered output:
   `secretKeyRef` variables and no credential volume renders; an unknown `credentialsAs` fails,
   naming `files` and `env`; and no variable whose name looks like a credential renders as a
   literal `value:` in any render, whether or not anyone remembered to list it;
-- the MTN-only render carries no M-Pesa variable and no public base URL.
+- the MTN-only render carries no M-Pesa variable and no public base URL;
+- `app.kubernetes.io/version` is the image tag on the Deployment, both Services and the
+  key-init Job, checked with a tag that differs from `Chart.yaml`'s `appVersion`, so that a
+  label still read from `appVersion` would fail it; a digest-pinned tag renders, with the digest
+  in the image and the version before it in the label; and a tag that cannot be a label
+  renders, with no version label on any object.
 
 **What one CI job does: install this chart into a real cluster, for M-Pesa.**
 `.github/workflows/credential-rotation.yml` installs it on `kind`, from images built from the

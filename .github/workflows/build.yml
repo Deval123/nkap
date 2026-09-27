@@ -185,6 +185,64 @@ jobs:
             exit 1
           fi
 
+      # The version label must name the image that is running (#257), on every object that
+      # carries it. Rendered with a tag that differs from Chart.yaml's appVersion on purpose:
+      # the CI values files and appVersion all say 1.0.0, so a check made with them alone
+      # would pass whether the label came from the tag or from appVersion.
+      - name: Assert app.kubernetes.io/version is the image tag on every labelled object
+        run: |
+          tag=9.9.9-ci
+          for template in deployment service service-metrics keyinit-job; do
+            out="$(helm template ci-test charts/nkap -f charts/nkap/ci/values-test.yaml \
+              --set-string image.tag="$tag" --set metrics.service.enabled=true --set keyInit.enabled=true \
+              -s "templates/${template}.yaml")"
+            label="$(grep -E '^ *app.kubernetes.io/version: ' <<< "$out" | sed -E 's/^ *app.kubernetes.io\/version: //')"
+            if [ "$label" != "\"${tag}\"" ]; then
+              echo "::error::${template}: app.kubernetes.io/version is ${label:-absent}, but image.tag is ${tag} -- the label must name the image that is running (see charts/nkap/Chart.yaml's appVersion)"
+              exit 1
+            fi
+          done
+
+      # The label must never cost a tag its install: a digest-pinned tag renders, with the digest
+      # in the image and the version before it in the label, and a tag that cannot be a label
+      # renders with no version label at all -- omitted, never truncated into a wrong version.
+      - name: Assert a digest-pinned or unlabelable image tag still renders, labelled only when it can be
+        run: |
+          render() {
+            helm template ci-test charts/nkap -f charts/nkap/ci/values-test.yaml \
+              --set-string image.tag="$1" --set metrics.service.enabled=true --set keyInit.enabled=true \
+              -s "templates/$2.yaml" 2>/tmp/tag.err
+          }
+          digest="sha256:$(printf '0123456789abcdef%.0s' 1 2 3 4)"
+          pinned="2.0.0@${digest}"
+          unlabelable="2.1.0-rc.1-build-20260927T101100Z-abcdef0123456789abcdef0123456789"
+          for template in deployment service service-metrics keyinit-job; do
+            if ! out="$(render "$pinned" "$template")"; then
+              echo "::error::${template}: rendering failed with image.tag=${pinned} -- a digest-pinned tag must deploy:"
+              cat /tmp/tag.err
+              exit 1
+            fi
+            if ! grep -qE '^ *app.kubernetes.io/version: "2.0.0"$' <<< "$out"; then
+              echo "::error::${template}: with image.tag=${pinned}, app.kubernetes.io/version is not \"2.0.0\", the version before the digest"
+              exit 1
+            fi
+            if [ "$template" = deployment ] || [ "$template" = keyinit-job ]; then
+              if ! grep -qE "^ *image: .*/nkap-gateway:${pinned}$" <<< "$out"; then
+                echo "::error::${template}: with image.tag=${pinned}, the image line does not carry the tag and its digest as given"
+                exit 1
+              fi
+            fi
+            if ! out="$(render "$unlabelable" "$template")"; then
+              echo "::error::${template}: rendering failed with image.tag=${unlabelable} -- a tag that cannot be a label must still render, unlabelled:"
+              cat /tmp/tag.err
+              exit 1
+            fi
+            if grep -q 'app.kubernetes.io/version' <<< "$out"; then
+              echo "::error::${template}: with image.tag=${unlabelable}, which cannot be a label value, app.kubernetes.io/version is still rendered -- it must be omitted, not truncated"
+              exit 1
+            fi
+          done
+
       # Every credential-bearing variable must be a Secret reference, never a literal --
       # checked structurally (the line right after every "- name: <VAR>" must be
       # "valueFrom:", for every occurrence: the same variable is set in both the Deployment

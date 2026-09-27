@@ -57,7 +57,7 @@ spec:
       restartPolicy: Never
       containers:
         - name: key-init
-          image: {{ printf "%s:%s" .Values.image.repository (required "image.tag is required -- set it to a real release, e.g. \"1.0.0\" (see https://github.com/deval123/nkap/releases)" .Values.image.tag) }}
+          image: {{ printf "%s:%s" .Values.image.repository (include "nkap.imageTag" .) }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           env:
             {{- include "nkap.env" . | nindent 12 }}

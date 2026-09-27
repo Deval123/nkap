@@ -215,7 +215,7 @@ jobs:
           }
           digest="sha256:$(printf '0123456789abcdef%.0s' 1 2 3 4)"
           pinned="2.0.0@${digest}"
-          unlabelable="1.0.0+build.5"
+          unlabelable="2.1.0-rc.1-build-20260927T101100Z-abcdef0123456789abcdef0123456789"
           for template in deployment service service-metrics keyinit-job; do
             if ! out="$(render "$pinned" "$template")"; then
               echo "::error::${template}: rendering failed with image.tag=${pinned} -- a digest-pinned tag must deploy:"

@@ -185,6 +185,24 @@ jobs:
             exit 1
           fi
 
+      # The version label must name the image that is running (#257), on every object that
+      # carries it. Rendered with a tag that differs from Chart.yaml's appVersion on purpose:
+      # the CI values files and appVersion all say 1.0.0, so a check made with them alone
+      # would pass whether the label came from the tag or from appVersion.
+      - name: Assert app.kubernetes.io/version is the image tag on every labelled object
+        run: |
+          tag=9.9.9-ci
+          for template in deployment service service-metrics keyinit-job; do
+            out="$(helm template ci-test charts/nkap -f charts/nkap/ci/values-test.yaml \
+              --set-string image.tag="$tag" --set metrics.service.enabled=true --set keyInit.enabled=true \
+              -s "templates/${template}.yaml")"
+            label="$(grep -E '^ *app.kubernetes.io/version: ' <<< "$out" | sed -E 's/^ *app.kubernetes.io\/version: //')"
+            if [ "$label" != "\"${tag}\"" ]; then
+              echo "::error::${template}: app.kubernetes.io/version is ${label:-absent}, but image.tag is ${tag} -- the label must name the image that is running (see charts/nkap/Chart.yaml's appVersion)"
+              exit 1
+            fi
+          done
+
       # Every credential-bearing variable must be a Secret reference, never a literal --
       # checked structurally (the line right after every "- name: <VAR>" must be
       # "valueFrom:", for every occurrence: the same variable is set in both the Deployment

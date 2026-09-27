@@ -27,7 +27,7 @@ required reference is absent:
 
 ```
 $ helm template . 
-Error: execution error at (nkap/templates/keyinit-job.yaml:44:61):
+Error: execution error at (nkap/templates/service.yaml:11:8):
 image.tag is required -- set it to a real release, e.g. "1.0.0" (see https://github.com/deval123/nkap/releases)
 ```
 
@@ -334,7 +334,10 @@ the rendered output:
   `secretKeyRef` variables and no credential volume renders; an unknown `credentialsAs` fails,
   naming `files` and `env`; and no variable whose name looks like a credential renders as a
   literal `value:` in any render, whether or not anyone remembered to list it;
-- the MTN-only render carries no M-Pesa variable and no public base URL.
+- the MTN-only render carries no M-Pesa variable and no public base URL;
+- `app.kubernetes.io/version` is the image tag on the Deployment, both Services and the
+  key-init Job, checked with a tag that differs from `Chart.yaml`'s `appVersion`, so that a
+  label still read from `appVersion` would fail it.
 
 **What one CI job does: install this chart into a real cluster, for M-Pesa.**
 `.github/workflows/credential-rotation.yml` installs it on `kind`, from images built from the

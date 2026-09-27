@@ -171,6 +171,13 @@ All notable changes to Nkap are documented here. The format follows
   reconciler escalated: every escalation follows a claim, which counts toward
   `reconcile_attempts`, and the recomputation required that count to be 0. Payments escalated
   before this release keep the recomputed reason, since theirs was never recorded.
+- **The Helm chart's version label names the image that is running.** `app.kubernetes.io/version`
+  is now rendered from `image.tag`, not from `Chart.yaml`'s `appVersion`, so a chart installed
+  with `image.tag=2.1.0` no longer labels its objects `1.0.0`. This changes the rendered output
+  of existing installations: the Deployment, both Services and the key-init Job carry the new
+  value on their next upgrade. No selector includes the label, so the upgrade goes through as
+  any other. Pods are not relabelled; their template never carried it. A tag that cannot be a
+  label value, such as one with a digest appended, is now refused at render time, naming why.
 
 ## [2.0.0] - 2026-09-21
 

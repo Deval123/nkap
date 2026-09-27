@@ -20,8 +20,9 @@ type: application
 # reason -- an interface should version by what changed in it, not by what shares a
 # repository with it.
 version: 1.0.0
-# Documentation only -- there is no default image.tag (see values.yaml), so this is not a
-# default anything installs. It names the release this chart was written for.
+# Documentation only, because nothing renders it: the image and the app.kubernetes.io/version
+# label both come from image.tag, which has no default (see values.yaml). It names the release
+# this chart was written for.
 appVersion: "1.0.0"
 home: https://github.com/deval123/nkap
 sources:

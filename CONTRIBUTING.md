@@ -134,19 +134,30 @@ passes, in exactly this order:
    above, a reworded javadoc is not a change. A break in `provider-api` takes a major
    release. A break in the kit is allowed in a minor, and its release note must say so (see
    below). A no needs nothing.
-2. **Make the release commit, by hand.** Drop `-SNAPSHOT` from every POM in the reactor, date
-   the version's `CHANGELOG.md` entry, and apply step 1's answers. Then move every release
-   version a reader copies, which nothing updates for you:
+2. **Make the release commit, by hand.** The release commit goes through a pull request like
+   any other change: `main` refuses direct pushes and merges nothing whose checks have not
+   passed, which is welcome — a release commit is the last one that should skip them. Drop
+   `-SNAPSHOT` from every POM in the reactor, date the version's `CHANGELOG.md` entry, and
+   apply step 1's answers. Then move every release version a reader copies, which nothing
+   updates for you:
    `git grep -n -E 'nkap/v[0-9]+\.[0-9]+\.[0-9]+/|NKAP_VERSION=[0-9]+\.[0-9]+\.[0-9]+[[:space:]]|image\.tag=[0-9]|nkap-[a-z-]+:[0-9]'`
    finds them wherever they are stuck: the download URL and `NKAP_VERSION` in `README.md` and
-   in `nkap-standalone.compose.yaml`'s own header, and `charts/nkap/README.md`'s install
-   command. Then `git grep -n -F '<previous version>' -- . ':!CHANGELOG.md' ':!docs/adr' ':!docs/roadmap'`
+   in `nkap-standalone.compose.yaml`'s own header — in each file those two are one fact, so
+   they move together — and `charts/nkap/README.md`'s install command. Then
+   `git grep -n -F '<previous version>' -- . ':!CHANGELOG.md' ':!docs/adr' ':!docs/roadmap'`
    finds sentences still pointing at this release as the future, such as "from the first
-   release after <previous version>": say what is true once it ships.
+   release after <previous version>": say what is true once it ships. A release also makes true
+   sentences false: anything describing what it ships as not yet existing, not yet published,
+   or waiting on a step it performs. No grep finds those; reread them.
 3. **Tag it, by hand.** Annotated `vX.Y.Z` (why annotated, below), on the release commit,
-   once it is on `main`. Push the tag the same day the release commit merges: the download
-   URL it moved, `raw.githubusercontent.com/deval123/nkap/v<version>/...`, 404s until the tag
-   exists — minutes apart if the two are done together, a day if the tag waits.
+   once it is on `main`: after `git fetch origin`,
+   `git merge-base --is-ancestor <release commit> origin/main && echo "on main"` must print
+   `on main` (otherwise it prints nothing). Before pushing the tag, check what it points at:
+   `git show v<version>:pom.xml | grep -m1 '<version>'` must print the released version, not
+   `-SNAPSHOT`, and `git show v<version>:CHANGELOG.md | grep -m1 '^## \['` its dated heading.
+   Push the tag the same day the release commit merges: the download URL it moved,
+   `raw.githubusercontent.com/deval123/nkap/v<version>/...`, 404s until the tag exists —
+   minutes apart if the two are done together, a day if the tag waits.
 4. **The workflow runs itself.** Pushing the tag triggers `.github/workflows/release.yml`
    with nobody doing anything: the full reactor build, then the images published, then
    pulled back down with no credentials and run through the demo to prove the publish

@@ -184,7 +184,14 @@ passes, in exactly this order:
   tagged release, a maintainer sets each package to public once, by hand, in its package
   settings — including `nkap-simulator-mpesa` at the first release that publishes it, though
   the other two are long public — the pull-and-verify step above is what catches this being
-  forgotten.
+  forgotten. That prediction for `nkap-simulator-mpesa` was wrong: 2.1.0 published it for the
+  first time on 2026-09-27, nobody changed its visibility, the pull-and-verify step pulled it
+  with no credentials, and the packages API reports it `public`: it was created public, with
+  no manual step. Why is not established. It either inherited this public repository's
+  visibility, or GHCR no longer makes a package published from one private. The package's
+  settings page, showing whether it inherits access from the repository, is the one check
+  that tells them apart (the workflow's comment has the detail). Until it is made, a new
+  package may still need the manual step, and the pull-and-verify step decides.
 
 `v1.0.0` was Nkap's first release; its scope was fixed in
 [`docs/roadmap/v1.0.0-mtn-end-to-end.md`](docs/roadmap/v1.0.0-mtn-end-to-end.md), which is a

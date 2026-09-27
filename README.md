@@ -249,10 +249,10 @@ version and with a moving `latest` that always points at the newest release, nev
 `docker inspect ghcr.io/deval123/nkap-gateway:latest` names the exact commit and version it
 was built from.
 
-The M-Pesa simulator's image, `ghcr.io/deval123/nkap-simulator-mpesa`, ships from 2.1.0.
-Pulling it works for everyone only once a maintainer has made the package public by hand, so
-until that is done, run it from a clone with the two commands in
-[`simulator-mpesa-app/README.md`](simulator-mpesa-app/README.md#running-it).
+The M-Pesa simulator's image, `ghcr.io/deval123/nkap-simulator-mpesa`, has shipped since
+2.1.0, same platforms and tags, and it pulls with no login too: measured on 2026-09-27, by that
+release's own credential-less pull and again by hand. How to run it, from the image or from a
+clone, is in [`simulator-mpesa-app/README.md`](simulator-mpesa-app/README.md#running-it).
 
 This is for running Nkap for real, against your own MTN credentials — not for trying it. If
 you have not run Nkap before, the [quick start](#quick-start-the-contributors-path) above is a
@@ -396,9 +396,14 @@ mismatch between the two is a bug in the simulator or the doc, not in MTN. Read 
 what it imitates before you trust an integration test that only ever ran against this.
 
 **There is an M-Pesa simulator too**, on port 8082 so the two run side by side. Its image,
-`ghcr.io/deval123/nkap-simulator-mpesa`, ships from 2.1.0, and pulling it works for everyone
-only once a maintainer has made the package public by hand. Until that is done, run it from a
-clone:
+`ghcr.io/deval123/nkap-simulator-mpesa`, has shipped since 2.1.0 and pulls with no login
+(measured on 2026-09-27):
+
+```bash
+docker run -p 8082:8082 ghcr.io/deval123/nkap-simulator-mpesa
+```
+
+To run the simulator you are changing rather than the released one, build it from a clone:
 
 ```bash
 mvn -B -pl simulator-mpesa-app -am package -DskipTests

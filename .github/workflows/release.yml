@@ -154,6 +154,21 @@ jobs:
       # this being forgotten -- it fails loudly on an anonymous pull instead of shipping a
       # publish nobody can use.
       #
+      # Corrected 2026-09-27: that prediction about nkap-simulator-mpesa was wrong. 2.1.0
+      # published it for the first time that day, no maintainer changed its visibility, and
+      # `verify-pull`'s anonymous pull of it passed (run 36309480695), as did one by hand the
+      # same day. `gh api /user/packages/container/nkap-simulator-mpesa` answers
+      # visibility: public, repository: Deval123/nkap, created 09:38:12Z, 39 seconds before
+      # that pull: the package was created public, with no manual step. Why is not
+      # established. The payload has no field about inheritance, so two explanations remain:
+      # the package inherited this public repository's visibility when it was created, or
+      # GHCR no longer defaults to private for a package an Actions workflow publishes from a
+      # public repository. The one check that tells them apart is the package's settings
+      # page, which shows whether "Inherit access from source repository" is set. One package
+      # narrows the private default above; it does not overturn it. Until that check is
+      # made, a future package may still need the manual step, and `verify-pull` decides for
+      # each one. 2.1.0 was the first release where it reported good news.
+      #
       # Do not delete the 0.0.1-rc1 package versions this workflow's first rehearsal left in
       # GHCR (issue #103) until each package has another version. Deleting a package's only
       # version can remove the package itself and reset this same manual visibility step --

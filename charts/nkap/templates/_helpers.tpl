@@ -28,7 +28,9 @@ that matter.
 {{- define "nkap.labels" -}}
 helm.sh/chart: {{ include "nkap.chart" . }}
 {{ include "nkap.selectorLabels" . }}
-app.kubernetes.io/version: {{ include "nkap.imageTag" . | quote }}
+{{- with include "nkap.versionLabel" . }}
+app.kubernetes.io/version: {{ . | quote }}
+{{- end }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- end -}}
 
@@ -38,18 +40,25 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end -}}
 
 {{/*
-The gateway image's tag: what the Deployment and the key-init Job run, and the
-app.kubernetes.io/version label on every object "nkap.labels" is on -- from this one definition,
-so the label names the image that is running rather than Chart.yaml's appVersion, which nothing
-installs (#257). Required, so the label is never empty and never omitted, and refused here if it
-could not be a label value, rather than by the API server after rendering.
+The gateway image's tag, exactly as given: what the Deployment and the key-init Job run. Required,
+and nothing else -- the chart deploys any tag Kubernetes accepts, a digest-pinned one included.
 */}}
 {{- define "nkap.imageTag" -}}
-{{- $tag := required "image.tag is required -- set it to a real release, e.g. \"1.0.0\" (see https://github.com/deval123/nkap/releases)" .Values.image.tag | toString -}}
-{{- if not (regexMatch "^[A-Za-z0-9]([-A-Za-z0-9_.]{0,61}[A-Za-z0-9])?$" $tag) -}}
-{{- fail (printf "image.tag is %q, which cannot be the app.kubernetes.io/version label this chart puts on every object -- a label value is at most 63 letters, digits, '-', '_' and '.', starting and ending with a letter or digit" $tag) -}}
+{{- required "image.tag is required -- set it to a real release, e.g. \"1.0.0\" (see https://github.com/deval123/nkap/releases)" .Values.image.tag | toString -}}
 {{- end -}}
-{{- $tag -}}
+
+{{/*
+The app.kubernetes.io/version label's value: the image tag up to its first "@", so that the label
+names the image that is running rather than Chart.yaml's appVersion, which nothing installs (#257).
+Empty, and the label omitted, when that is not a valid label value (at most 63 letters, digits,
+'-', '_' and '.', starting and ending with a letter or digit) -- never truncated, because a
+truncated version is a wrong one.
+*/}}
+{{- define "nkap.versionLabel" -}}
+{{- $version := include "nkap.imageTag" . | splitList "@" | first -}}
+{{- if regexMatch "^[A-Za-z0-9]([-A-Za-z0-9_.]{0,61}[A-Za-z0-9])?$" $version -}}
+{{- $version -}}
+{{- end -}}
 {{- end -}}
 
 {{/*

@@ -22,7 +22,8 @@ type: application
 version: 1.0.0
 # Documentation only, because nothing renders it: the image and the app.kubernetes.io/version
 # label both come from image.tag, which has no default (see values.yaml). It names the release
-# this chart was written for.
+# this chart was written for. The label is image.tag up to any "@digest", and is omitted when that
+# part cannot be a label value (1.0.0+build.5, say): such a tag deploys normally, unlabelled.
 appVersion: "1.0.0"
 home: https://github.com/deval123/nkap
 sources:

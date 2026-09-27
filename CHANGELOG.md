@@ -176,8 +176,9 @@ All notable changes to Nkap are documented here. The format follows
   with `image.tag=2.1.0` no longer labels its objects `1.0.0`. This changes the rendered output
   of existing installations: the Deployment, both Services and the key-init Job carry the new
   value on their next upgrade. No selector includes the label, so the upgrade goes through as
-  any other. Pods are not relabelled; their template never carried it. A tag that cannot be a
-  label value, such as one with a digest appended, is now refused at render time, naming why.
+  any other. Pods are not relabelled; their template never carried it. A digest-pinned tag,
+  `2.0.0@sha256:…`, is labelled `2.0.0`. A tag whose version cannot be a label value, such as
+  `1.0.0+build.5`, deploys as before and carries no version label, rather than a truncated one.
 
 ## [2.0.0] - 2026-09-21
 

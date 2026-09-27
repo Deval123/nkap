@@ -166,7 +166,7 @@ installation.
 
 ```bash
 helm install my-nkap ./charts/nkap \
-  --set image.tag=1.0.0 \
+  --set image.tag=2.1.0 \
   -f my-values.yaml   # database.host, database.existingSecret, keyInit.merchantId, at minimum
 ```
 

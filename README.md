@@ -249,9 +249,10 @@ version and with a moving `latest` that always points at the newest release, nev
 `docker inspect ghcr.io/deval123/nkap-gateway:latest` names the exact commit and version it
 was built from.
 
-The M-Pesa simulator's image, `ghcr.io/deval123/nkap-simulator-mpesa`, has not been published
-yet: it ships from the first release after 2.0.0. Until then, run it from a clone with the two
-commands in [`simulator-mpesa-app/README.md`](simulator-mpesa-app/README.md#running-it).
+The M-Pesa simulator's image, `ghcr.io/deval123/nkap-simulator-mpesa`, ships from 2.1.0.
+Pulling it works for everyone only once a maintainer has made the package public by hand, so
+until that is done, run it from a clone with the two commands in
+[`simulator-mpesa-app/README.md`](simulator-mpesa-app/README.md#running-it).
 
 This is for running Nkap for real, against your own MTN credentials — not for trying it. If
 you have not run Nkap before, the [quick start](#quick-start-the-contributors-path) above is a
@@ -261,7 +262,7 @@ come back here.
 
 ```bash
 curl -fsSL -o nkap-standalone.compose.yaml \
-  https://raw.githubusercontent.com/deval123/nkap/v2.0.0/nkap-standalone.compose.yaml
+  https://raw.githubusercontent.com/deval123/nkap/v2.1.0/nkap-standalone.compose.yaml
 ```
 
 Pinned to a tag, not to `main`, so the file you get and the images it names are the same
@@ -279,7 +280,7 @@ real must never have one reachable from the same process that moves real money; 
 own comment for the rest of that reasoning.
 
 ```bash
-export NKAP_VERSION=2.0.0                 # the release you downloaded the file for
+export NKAP_VERSION=2.1.0                 # the release you downloaded the file for
 export NKAP_DB_PASSWORD=$(openssl rand -hex 32)
 export NKAP_MERCHANT_ID=your-merchant-id
 docker compose -f nkap-standalone.compose.yaml up -d
@@ -395,9 +396,9 @@ mismatch between the two is a bug in the simulator or the doc, not in MTN. Read 
 what it imitates before you trust an integration test that only ever ran against this.
 
 **There is an M-Pesa simulator too**, on port 8082 so the two run side by side. Its image,
-`ghcr.io/deval123/nkap-simulator-mpesa`, ships from the first release after 2.0.0, and pulling
-it works for everyone only once a maintainer has made the package public by hand. Until then,
-run it from a clone:
+`ghcr.io/deval123/nkap-simulator-mpesa`, ships from 2.1.0, and pulling it works for everyone
+only once a maintainer has made the package public by hand. Until that is done, run it from a
+clone:
 
 ```bash
 mvn -B -pl simulator-mpesa-app -am package -DskipTests

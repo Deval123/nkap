@@ -4,10 +4,9 @@ A fake M-Pesa operator that misbehaves on command: the simulator's core with M-P
 as a runnable application and an image, `ghcr.io/deval123/nkap-simulator-mpesa`.
 [`simulator/`](../simulator/README.md) is the same thing with MTN's face.
 
-**The image has not been published yet.** It ships from the first release after 2.0.0. Until
-then, run the simulator from a clone, as below. Even after that release, pulling it works for
-everyone only once a maintainer has made the package public by hand
-([`CONTRIBUTING.md`](../CONTRIBUTING.md), step 4).
+**The image ships from 2.1.0.** Pulling it works for everyone only once a maintainer has made
+the package public by hand ([`CONTRIBUTING.md`](../CONTRIBUTING.md), step 4); until that is
+done, run the simulator from a clone, as below.
 
 ## Read this before you run it anywhere reachable
 
@@ -31,7 +30,7 @@ mvn -B -pl simulator-mpesa-app -am package -DskipTests
 java -jar simulator-mpesa-app/target/nkap-simulator-mpesa-app-*-boot.jar
 ```
 
-From the first release after 2.0.0, once its package is public, the image as well:
+From 2.1.0, once its package is public, the image as well:
 
 ```bash
 docker run -p 8082:8082 ghcr.io/deval123/nkap-simulator-mpesa

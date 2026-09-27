@@ -126,6 +126,14 @@ passes, in exactly this order:
    A yes means a bump in the release commit, as each file's own comment says, unless the number
    already moved since the last tag and still covers everything that changed after it. A no
    leaves the number where it is.
+
+   Then ask the same of the two surfaces third parties compile against: since the last tag,
+   did `provider-api` or `nkap-conformance` change in a way the release note must declare — a
+   signature, a new abstract member, a removed one?
+   `git diff <last tag>..HEAD -- provider-api/src/main conformance/src/main` answers it; as
+   above, a reworded javadoc is not a change. A break in `provider-api` takes a major
+   release. A break in the kit is allowed in a minor, and its release note must say so (see
+   below). A no needs nothing.
 2. **Make the release commit, by hand.** Drop `-SNAPSHOT` from every POM in the reactor, date
    the version's `CHANGELOG.md` entry, and apply step 1's answers. Then move every release
    version a reader copies, which nothing updates for you:

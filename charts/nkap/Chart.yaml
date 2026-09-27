@@ -19,7 +19,7 @@ type: application
 # the exact coupling issue #96 spent a slice removing from ProviderAdapter for a different
 # reason -- an interface should version by what changed in it, not by what shares a
 # repository with it.
-version: 1.0.0
+version: 1.1.0
 # Documentation only, because nothing renders it: the image and the app.kubernetes.io/version
 # label both come from image.tag, which has no default (see values.yaml). It names the release
 # this chart was written for. The label is image.tag up to any "@digest", and is omitted when that

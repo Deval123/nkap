@@ -75,6 +75,15 @@ All notable changes to Nkap are documented here. The format follows
 
 ### Changed
 
+- **`nkap-conformance` breaks in this release: an existing third-party harness does not compile
+  until it implements two new methods.** `ConformanceHarness` gained `aDeliveredCallback()` and
+  `submissionsReceived()`, both abstract, with no default. `aDeliveredCallback()` must return
+  the callback the operator really delivered for a submission the kit already made, exactly as
+  it arrived, never one built by hand. `submissionsReceived()` must count the submissions
+  observed at the operator once past authentication, not what the adapter reports, so a retry
+  after a `401` has not resent anything. `ConformanceHarness`'s own javadoc states both in
+  full. The kit may break in a minor release, as long as the release note says so
+  (`CONTRIBUTING.md`, "Versioning and releases"). `provider-api` does not break.
 - **A deployment that relied on MTN Cameroon's country defaulting to `cm` loses its MTN adapter
   on this upgrade, and nothing says so at startup.** Every slot's country now defaults to blank,
   so a deployment that set `NKAP_PROVIDER_MTN_CM_*` credentials but never set

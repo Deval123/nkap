@@ -134,9 +134,12 @@ passes, in exactly this order:
    above, a reworded javadoc is not a change. A break in `provider-api` takes a major
    release. A break in the kit is allowed in a minor, and its release note must say so (see
    below). A no needs nothing.
-2. **Make the release commit, by hand.** Drop `-SNAPSHOT` from every POM in the reactor, date
-   the version's `CHANGELOG.md` entry, and apply step 1's answers. Then move every release
-   version a reader copies, which nothing updates for you:
+2. **Make the release commit, by hand.** The release commit goes through a pull request like
+   any other change: `main` refuses direct pushes and merges nothing whose checks have not
+   passed, which is welcome — a release commit is the last one that should skip them. Drop
+   `-SNAPSHOT` from every POM in the reactor, date the version's `CHANGELOG.md` entry, and
+   apply step 1's answers. Then move every release version a reader copies, which nothing
+   updates for you:
    `git grep -n -E 'nkap/v[0-9]+\.[0-9]+\.[0-9]+/|NKAP_VERSION=[0-9]+\.[0-9]+\.[0-9]+[[:space:]]|image\.tag=[0-9]|nkap-[a-z-]+:[0-9]'`
    finds them wherever they are stuck: the download URL and `NKAP_VERSION` in `README.md` and
    in `nkap-standalone.compose.yaml`'s own header — in each file those two are one fact, so
@@ -145,10 +148,7 @@ passes, in exactly this order:
    finds sentences still pointing at this release as the future, such as "from the first
    release after <previous version>": say what is true once it ships. A release also makes true
    sentences false: anything describing what it ships as not yet existing, not yet published,
-   or waiting on a step it performs. No grep finds those; reread them. The release commit
-   goes through a pull request like any other change: `main` refuses direct pushes and merges
-   nothing whose checks have not passed, which is welcome — a release commit is the last one
-   that should skip them.
+   or waiting on a step it performs. No grep finds those; reread them.
 3. **Tag it, by hand.** Annotated `vX.Y.Z` (why annotated, below), on the release commit,
    once it is on `main`: after `git fetch origin`,
    `git merge-base --is-ancestor <release commit> origin/main && echo "on main"` must print

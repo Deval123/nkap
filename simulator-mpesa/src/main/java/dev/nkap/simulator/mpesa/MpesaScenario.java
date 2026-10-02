@@ -13,8 +13,9 @@ import java.util.List;
  *
  * <ul>
  *   <li>no {@code onSubmit} means {@link SubmitOutcome#ACCEPT} with no delay;</li>
- *   <li>an empty {@code onQuery} means a single {@link MpesaResult#SUCCESS} — a
- *       <strong>modelled</strong> success, since none has been observed.</li>
+ *   <li>an empty {@code onQuery} means a single {@link MpesaResult#SUCCESS}. The code and
+ *       its query description are <strong>observed</strong> (2026-10-02); that it answers on
+ *       the first query is <strong>modelled</strong>, since the real one took 17 seconds.</li>
  * </ul>
  */
 public record MpesaScenario(
@@ -35,7 +36,7 @@ public record MpesaScenario(
         callbacks = callbacks != null ? List.copyOf(callbacks) : List.of();
     }
 
-    /** Accepted on submission, {@link MpesaResult#SUCCESS} on the next query — modelled. */
+    /** Accepted on submission, {@link MpesaResult#SUCCESS} on the next query. The timing is modelled. */
     public static MpesaScenario happyPath() {
         return new MpesaScenario(DEFAULT_NAME, null, null, null);
     }

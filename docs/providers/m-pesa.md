@@ -39,11 +39,89 @@ for someone else:
   kit's rules**.
 
 **No real M-Pesa payment has ever been made through any of it.** Everything certified is
-certified against `simulator-mpesa`, and that simulator's success path is modelled, because
-the sandbox payer can never be reached and no success has been observed. *Still unknown*,
-below, is not shortened by any of this. `CHANGELOG.md` and the issues hold the detail.
-Passages below that were written before these dates stay as written, and each one says where
-this section overtakes it.
+certified against `simulator-mpesa`. *Stated 2026-09-24, and overtaken on 2026-10-02:* this
+paragraph went on to say that the simulator's success path is modelled because the sandbox
+payer can never be reached and no success has been observed. A success has been observed
+since, by hand and not through the adapter (*The first successful STK Push, 2026-10-02*,
+below). The adapter still has never been handed a real payment, and the callback's success
+prose is still the simulator's own. `CHANGELOG.md` and the issues hold the detail. Passages
+below that were written before these dates stay as written, and each one says where this
+section overtakes it.
+
+**Safaricom support's advice about the number to use is *stated*, and the 2026-10-02 run
+bears it out.** Support's reply of 2026-09-26 advised sending the prompt to a valid Safaricom
+number (*Still unknown*, below). That is **stated by Safaricom support**, in the page's own
+words. On 2026-10-02 a *real* Safaricom MSISDN was sent a prompt from this project's sandbox
+account and answered it, twice (*The first successful STK Push, 2026-10-02*, below), and a
+success followed. The run followed the advice and the advice worked.
+
+*Not confirmed.* The maintainer's own notes record a stronger sentence as having been said,
+that a *test* MSISDN will not work on STK Push sandbox testing. Its original wording was not
+confirmed against the mail, so this page does not quote it or attribute it to Safaricom.
+Nothing here measured a test MSISDN's behaviour beyond what the earlier runs recorded: its
+prompt is never answered (*Still unknown*, below).
+
+## The first successful STK Push, 2026-10-02
+
+Every line of this section is **observed, 2026-10-02**, from two run logs and two M-Pesa SMS
+read off the payer's phone. The logs are kept off this repository, on the maintainer's machine
+(`~/.nkap/probe-*.log`).
+
+**How the line was obtained.** A prompt was sent from this project's Daraja sandbox account
+(the shortcode and passkey of the sandbox, not a production shortcode) to a real Safaricom
+line in Kenya, `2541819…`. The SIM was bought by the maintainer and is registered to a friend,
+who answered the prompt. `0181…` is a Safaricom line: Safaricom opened the prefixes `0118`,
+`0119`, `0140`–`0143` and `0180`–`0182` in August 2026, and an earlier draft of this material
+got that wrong. The prefix list is context for why the number is Safaricom's, not something
+these runs measured; what they measured is that the line received the prompt.
+
+**Run 1** — T0 `15:05:06Z`, `CheckoutRequestID` `ws_CO_021020261805069181954437`, submission
+`ResponseCode 0`. The payer dismissed the prompt.
+
+| t | HTTP | body |
+| --- | --- | --- |
+| +1s | 200 | `errorCode 500.001.1001`, `errorMessage` **empty** |
+| +13s | 200 | `errorCode 500.001.1001`, `errorMessage` empty |
+| +27s | 200 | `ResultCode 1032`, `ResultDesc "Request Cancelled by user."` |
+| +33s … +65s | 200 | `1032`, unchanged on every later answer |
+
+**Run 2** — T0 `15:10:45Z`, `CheckoutRequestID` `ws_CO_021020261810465181954437`, submission
+`ResponseCode 0`. The payer approved the prompt.
+
+| t | HTTP | body |
+| --- | --- | --- |
+| +1s | 200 | `ResultCode 4999`, `"The transaction is still under processing"` |
+| +10s | 200 | `4999`, same prose |
+| +17s | 200 | **`ResultCode 0`**, `"The service request is processed successfully."` |
+| +27s | 200 | `0`, unchanged |
+
+**The payer's two SMS**, same minute, 6:11 PM Nairobi, which matches `15:11:02Z`:
+
+> `UJ22T8IYOU` Confirmed. KSH1.00 sent to Daraja-Sandbox for account `nkap-live-1` on 2/10/26
+> at 6:11 PM New M-PESA balance is KSH9.00.
+
+> Transaction cost, KSH0.00. Amount you can transact within the day is 499,999.00.
+
+**What came out of the two runs**, each new to this page:
+
+1. **A successful STK Push exists**, end to end: `ResultCode 0`, 17 seconds after submission.
+2. **`1032`, "Request Cancelled by user."** is a code this page had never recorded. The payer
+   dismissed the prompt. It is conclusive in the way `1037` is: the operator answered.
+3. **The in-flight answer is not one shape.** The same state, a prompt on the phone that nobody
+   has answered yet, was `500.001.1001` with an empty message in run 1 and `4999` in run 2,
+   one second after submission in both. Neither is a failure. This is the second time
+   `500.001.1001` has answered a payment that existed (*Correction, 2026-09-23*, below).
+4. **The sandbox shortcode moves real money.** The payer's balance went from KSH 10 to KSH 9,
+   at a transaction cost of KSH 0.00.
+5. **`AccountReference` is printed on the payer's phone.** `nkap-live-1` is in the SMS
+   verbatim (*Authentication and submission*, below, is corrected to say so).
+6. **The query's success prose is what the simulator had guessed**: "The service request is
+   processed successfully." The *callback's* prose for `0` is still unobserved: nothing was
+   listening for it.
+
+**What these runs do not say.** Two runs, one payer, one day, the sandbox shortcode, STK Push
+only. Nothing here says anything about **production**, about a **production shortcode**, or
+about whether `stkpushquery` is enabled on one.
 
 ## Getting into the sandbox
 
@@ -111,7 +189,14 @@ match.
 
 The response carries `MerchantRequestID`, `CheckoutRequestID`, `ResponseCode: 0`,
 `ResponseDescription`, `CustomerMessage`. **`AccountReference` — the only field the caller
-chooses — is not echoed.**
+chooses — is not echoed in any API response.**
+
+**But it reaches the payer's phone. Observed 2026-10-02.** The M-Pesa SMS for a successful
+payment names it verbatim: "sent to Daraja-Sandbox for account `nkap-live-1`" (*The first
+successful STK Push, 2026-10-02*, above). This page used to say Safaricom echoes it nowhere.
+That is true of the API and false of the SMS. It is a privacy surface: whatever a gateway
+puts in `AccountReference` is printed on a stranger's phone, so it is user-visible text, not
+an internal key.
 
 **`CheckoutRequestID` encodes Nairobi local time.** `ws_CO_180920261803512708374149` for a
 submission this recorder timestamped `15:03` UTC: the identifier reads `18:03:51`, UTC+3.
@@ -175,9 +260,9 @@ non-terminal state. Before the payment concluded, Safaricom answered `HTTP 200` 
 that says *not finished yet*. It did not answer with an error. That matters beyond M-Pesa. A
 reconciler that polls has to handle an operator that errors on "not finished yet" separately,
 and this operator does not do that. The window was short here, two answers and gone by
-fourteen seconds. But this run's payer is the sandbox's, who can never be reached. How long
-`4999` lasts for a payer who has a prompt to answer is not something this run shows (see
-*Still unknown*).
+fourteen seconds. But this run's payer is the sandbox's test MSISDN, which does not answer. How long
+`4999` lasts for a payer who has a prompt to answer is not something this run shows; the run
+of 2026-10-02 does (*Answered on 2026-10-02*, below).
 
 **What this means for whoever writes the adapter.** This is what the observation implies, not
 something already built, because there is no M-Pesa adapter in this repository. A
@@ -383,7 +468,8 @@ punishes.
 
 **The limits of these runs, in the same breath rather than left for a reader to assume past
 them:** two samples, sandbox, STK Push only, one path shape, and the timeout outcome only —
-the sandbox payer never approves a payment, so nothing here says what a *successful*
+the sandbox test MSISDN never approves a payment (a real MSISDN did, on 2026-10-02, and
+nothing was listening for its callback), so nothing here says what a *successful*
 payment's callback carries, or how a success is handled once acknowledged first. Two failure
 modes were tried (an explicit `500`, a failed delivery); nothing says whether a different
 non-2xx status, or a wait longer than three-quarters of an hour, would change the answer. The
@@ -457,7 +543,9 @@ Left open deliberately rather than guessed. Each is worth a pull request adding 
   as the leading hypothesis for the one rejection seen, but no sample varied case alone while
   holding the subdomain's existence constant, or the reverse — see *The callback* above.
 - **What a successful payment's callback carries** (`CallbackMetadata`, receipt number, payer
-  MSISDN) — everything above is the timeout path, because the sandbox payer never answers.
+  MSISDN) — still unobserved. A success exists as of 2026-10-02 (*The first successful STK
+  Push, 2026-10-02*, above), but it was read from the query and the payer's SMS; no callback
+  receiver was listening. Everything from the callback above is the timeout path.
 
   **Narrowed, not closed: Safaricom's own two artefacts disagree about `CallbackMetadata`,
   and one of them cannot work.** This is not an observation of traffic. It was read on
@@ -513,9 +601,11 @@ Left open deliberately rather than guessed. Each is worth a pull request adding 
   - **The documentation does not say.** The M-Pesa Express page lists the result codes and the
     `CallbackMetadata` items, without stating whether the table is exhaustive or which items
     are guaranteed. That is what started this section.
-  - **The sandbox cannot show.** Its test MSISDN never answers the prompt, so no successful
-    callback is ever produced there. Every observation on this page above is the timeout path
-    for that reason.
+  - **The sandbox cannot show** *(stated 2026-09-25, overtaken 2026-10-02)*. Its test MSISDN
+    never answers the prompt, so no successful callback is ever produced there. That is true of
+    the test MSISDN, and every observation on this page before 2026-10-02 is the timeout path
+    for that reason. A real MSISDN sent a prompt from the same sandbox account did answer it
+    (*The first successful STK Push, 2026-10-02*, above).
   - **Support did not answer.** A message went to `APIFeedback@safaricom.co.ke` on
     **2026-09-25** asking whether `ResultCode 4999` is intended and whether the documented
     table is exhaustive, which `CallbackMetadata` items are guaranteed, and whether
@@ -523,7 +613,9 @@ Left open deliberately rather than guessed. Each is worth a pull request adding 
     recorded above, since that one runs the other way. API Support replied on **2026-09-26**
     asking for the request payload, advising a valid Safaricom number to receive the STK
     prompt, and advising small test amounts. It addressed none of the three questions and did
-    not mention `500.001.1001`. A follow-up went back the same day with the payload and **one**
+    not mention `500.001.1001`. That advice, about the number to use, is **stated by Safaricom
+    support**, and *Since this page was written*, above, records that the 2026-10-02 run
+    bears it out. A follow-up went back the same day with the payload and **one**
     question, the `4999` one, on the reasoning that a single yes-or-no question is harder to
     close as incomplete.
   - **Stack Overflow had not been asked.** The success-case questions were posted on
@@ -563,21 +655,15 @@ Left open deliberately rather than guessed. Each is worth a pull request adding 
   it. Beyond that one line, the answers would change what this page may assert, not what the
   code does. That is what [ADR 0014](../adr/0014-resolvable-not-queryable.md)'s shape is for:
   ignorance is a state the gateway holds, not a hole it has to fill.
-- **Whether the in-flight window looks the same for a payer who can be reached.** What a
-  genuinely in-flight query answers is no longer unknown: `HTTP 200`, `ResultCode 4999`, "The
-  transaction is still under processing". This was seen in one run, on 2026-09-23 (*A query in
-  flight*, above). That run's `4999` window was short, but its payer can never be reached.
-  Nothing yet observed shows how long `4999` lasts for a payer who has a prompt to answer, or
-  whether it is the only answer an in-flight query gives.
 - **The complete `ResultCode` vocabulary**, and what an unrecognised one looks like —
-  narrowed, not closed. `1037` ("No response from user") is now confirmed across three
-  observations on two days (2026-09-18's query; 2026-09-22's callback and its own status
-  query), and it was answered again by 2026-09-23's query. `4999` ("The transaction is still
-  under processing") was observed once, on 2026-09-23. That makes two members out of an
-  unknown total, and two members of a vocabulary are not the vocabulary. Every other code,
-  and what an unrecognised one looks like, is unknown. See *`ResultCode` is the contract;
-  `ResultDesc` is not*, above, for a second thing those three observations settle: the code
-  is stable across channels, the prose describing it is not.
+  narrowed, not closed. Four members are now observed: `1037` ("No response from user"; three
+  observations on two days in September), `4999` ("The transaction is still under
+  processing"; 2026-09-23 and again 2026-10-02), `1032` ("Request Cancelled by user."; once,
+  2026-10-02) and `0` ("The service request is processed successfully."; 2026-10-02, on the
+  query only). Four members of a vocabulary are not the vocabulary. Every other code, and what
+  an unrecognised one looks like, is unknown. See *`ResultCode` is the contract; `ResultDesc`
+  is not*, above, for a second thing the `1037` observations settle: the code is stable across
+  channels, the prose describing it is not.
 - **Whether a non-2xx answer, or a failed delivery, makes Safaricom retry the callback —
   narrowed, not answered.** The September run only had a `200` to look back on. Two runs on
   2026-09-22 tried both remaining shapes: an explicit `500` (nothing further in the following
@@ -595,6 +681,24 @@ Left open deliberately rather than guessed. Each is worth a pull request adding 
   `openapiportal.m-pesa.com`'s URL, not from a source that actually names it that. If a
   second API family really does sit under one commercial name, one adapter per operator
   (ADR 0009's shape) stops describing what is being built.
+
+### Answered on 2026-10-02
+
+Moved here from the list above rather than edited in place, each with where it was answered
+(*The first successful STK Push, 2026-10-02*, above). All **observed, 2026-10-02**:
+
+- **How long `4999` lasts for a payer who has a prompt to answer.** 10 seconds in run 2, which
+  was still `4999` at +10s and `0` by +17s. One run. Run 1, with a payer who dismissed the
+  prompt, answered `500.001.1001` at +1s and +13s instead, so `4999` is not the only answer an
+  in-flight query gives either.
+- **Whether a successful payment can be observed at all.** Yes: `ResultCode 0`, 17 seconds
+  after submission, with a receipt SMS the same minute.
+- **Whether the sandbox shortcode debits.** Yes, a real balance, KSH 10 to KSH 9, and the
+  transaction cost is KSH 0.00.
+
+What remains unknown, stated precisely: nothing on this page says anything about
+**production**, about a **production shortcode**, or about whether `stkpushquery` is enabled
+on one. Everything above was measured with the sandbox shortcode.
 
 ## Sources
 

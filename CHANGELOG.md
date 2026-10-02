@@ -4,6 +4,18 @@ All notable changes to Nkap are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/); versioning follows
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- **A payment the M-Pesa payer cancelled now reaches `FAILED`.** Safaricom answers a query
+  with `ResultCode 1032`, "Request Cancelled by user.", when the payer dismisses the prompt.
+  The adapter did not know the code, so the payment stayed `UNKNOWN`, was claimed by the
+  reconciler until its window was spent, and was then escalated to a human as
+  `window_exhausted`. It is now `FAILED` at once, for the reason `1037` already is: the
+  operator answered. The simulator plays `1032` too, as `CANCELLED_BY_USER`. Observed against
+  Safaricom's sandbox on 2026-10-02.
+
 ## [2.1.0] - 2026-09-27
 
 ### Added
@@ -494,7 +506,8 @@ worse than one that promises nothing.
   constraint an operator relies on, not as something this project is promising to enforce
   for every migration to come.
 
-[Unreleased]: https://github.com/deval123/nkap/compare/v2.0.0...HEAD
+[Unreleased]: https://github.com/deval123/nkap/compare/v2.1.0...HEAD
+[2.1.0]: https://github.com/deval123/nkap/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/deval123/nkap/compare/v1.2.0...v2.0.0
 [1.2.0]: https://github.com/deval123/nkap/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/deval123/nkap/compare/v1.0.0...v1.1.0

@@ -51,8 +51,10 @@ import java.util.function.Supplier;
  * <ul>
  *   <li>Safaricom mints the payment's identity, the {@code CheckoutRequestID}, and returns it
  *       in the submission's answer. The reference Nkap chose travels as
- *       {@code AccountReference} and is a key to nothing: Safaricom echoes it nowhere and does
- *       not deduplicate on it.</li>
+ *       {@code AccountReference} and is a key to nothing: Safaricom echoes it nowhere in any
+ *       API response and does not deduplicate on it. It is not private, though: the payer's
+ *       M-Pesa SMS prints it verbatim (<strong>observed</strong> 2026-10-02), so it is
+ *       user-visible text.</li>
  *   <li>The only synchronous query demands that {@code CheckoutRequestID}, so a submission
  *       whose answer was lost cannot be queried at all: {@link #resolves()} is
  *       {@link Resolution#CALLBACK} alone (ADR 0014).</li>

@@ -23,13 +23,19 @@ class MpesaStatusMapTest {
     }
 
     @Test
-    @DisplayName("0 is SUCCEEDED -- modelled, never observed")
+    @DisplayName("1032 is FAILED: the payer dismissed the prompt, the operator's conclusive verdict that the payment will not happen")
+    void cancelled_by_user_is_failed() {
+        assertThat(MpesaStatusMap.stateFor(1032)).isEqualTo(PaymentState.FAILED);
+    }
+
+    @Test
+    @DisplayName("0 is SUCCEEDED -- observed on the query, 2026-10-02")
     void success_is_succeeded() {
         assertThat(MpesaStatusMap.stateFor(0)).isEqualTo(PaymentState.SUCCEEDED);
     }
 
     @ParameterizedTest
-    @ValueSource(ints = {1, 1032, 2001, 500, -1, 987654})
+    @ValueSource(ints = {1, 2001, 500, -1, 987654})
     @DisplayName("any other ResultCode is UNKNOWN, never FAILED")
     void anything_else_is_unknown(int code) {
         assertThat(MpesaStatusMap.stateFor(code)).isEqualTo(PaymentState.UNKNOWN);

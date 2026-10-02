@@ -8,7 +8,7 @@ import dev.nkap.core.payment.PaymentState;
  * with different prose on the query and the callback, and on the query across days
  * ({@code docs/providers/m-pesa.md}, "ResultCode is the contract; ResultDesc is not").
  *
- * <p>Three codes, each labelled with how it is known. Every other code is
+ * <p>Four codes, each labelled with how it is known. Every other code is
  * {@link PaymentState#UNKNOWN}: two members of a vocabulary are not the vocabulary, and a code
  * this table has never seen is not a failure it can assert.
  */
@@ -19,6 +19,13 @@ final class MpesaStatusMap {
 
     /** The payer never answered the prompt. <strong>Observed</strong> 2026-09-18, 09-22 and 09-23. */
     static final int NO_RESPONSE_FROM_USER = 1037;
+
+    /**
+     * The payer dismissed the prompt. <strong>Observed</strong> 2026-10-02 on the query, 27
+     * seconds after submission ({@code ws_CO_021020261805069181954437}), "Request Cancelled by
+     * user.", unchanged on every later answer.
+     */
+    static final int CANCELLED_BY_USER = 1032;
 
     /** Success. <strong>Modelled, never observed</strong>: see {@link #stateFor(int)}. */
     static final int SUCCESS = 0;
@@ -47,6 +54,12 @@ final class MpesaStatusMap {
             // would break the invariant outright; those raise ProviderUnavailableException in
             // MpesaAdapter and never reach this table.
             case NO_RESPONSE_FROM_USER -> PaymentState.FAILED;
+
+            // FAILED, for the reason 1037 gives above and not repeated: the operator answered, and
+            // what it said is that the payment will not happen. Observed 2026-10-02. Left to the
+            // default, a payment its payer cancelled would stay unresolved, be claimed by the
+            // reconciler until its window was spent, and then be escalated to a human.
+            case CANCELLED_BY_USER -> PaymentState.FAILED;
 
             // MODELLED, NEVER OBSERVED. This project's sandbox payer can never be reached, so no
             // successful STK Push has been seen: 0 is the code this adapter expects success to

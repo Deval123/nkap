@@ -48,16 +48,18 @@ prose is still the simulator's own. `CHANGELOG.md` and the issues hold the detai
 below that were written before these dates stay as written, and each one says where this
 section overtakes it.
 
-**Safaricom support's advice about the test MSISDN is *stated*, and one real run is in
-tension with it.** Support's reply of 2026-09-26 advised sending the prompt to a valid
-Safaricom number rather than a test one (*Still unknown*, below). That is kept here as
-**stated by Safaricom support**, not deleted, and in the page's own words, because the
-original wording of any sentence of it has not been confirmed. On 2026-10-02 a *real* MSISDN
-was sent a prompt from this project's sandbox account and answered it, twice (*The first
-successful STK Push, 2026-10-02*, below). Support was answering about a *test* MSISDN, and
-what was tested is a real one, so this is not a contradiction of what they were asked, only
-of the part of their advice that matters to anyone hoping to see a success. Nothing more than
-that is claimed.
+**Safaricom support's advice about the number to use is *stated*, and the 2026-10-02 run
+bears it out.** Support's reply of 2026-09-26 advised sending the prompt to a valid Safaricom
+number (*Still unknown*, below). That is **stated by Safaricom support**, in the page's own
+words. On 2026-10-02 a *real* Safaricom MSISDN was sent a prompt from this project's sandbox
+account and answered it, twice (*The first successful STK Push, 2026-10-02*, below), and a
+success followed. The run followed the advice and the advice worked.
+
+*Not confirmed.* The maintainer's own notes record a stronger sentence as having been said,
+that a *test* MSISDN will not work on STK Push sandbox testing. Its original wording was not
+confirmed against the mail, so this page does not quote it or attribute it to Safaricom.
+Nothing here measured a test MSISDN's behaviour beyond what the earlier runs recorded: its
+prompt is never answered (*Still unknown*, below).
 
 ## The first successful STK Push, 2026-10-02
 
@@ -612,8 +614,8 @@ Left open deliberately rather than guessed. Each is worth a pull request adding 
     asking for the request payload, advising a valid Safaricom number to receive the STK
     prompt, and advising small test amounts. It addressed none of the three questions and did
     not mention `500.001.1001`. That advice, about the number to use, is **stated by Safaricom
-    support**, and *Since this page was written*, above, names the tension with the
-    2026-10-02 run. A follow-up went back the same day with the payload and **one**
+    support**, and *Since this page was written*, above, records that the 2026-10-02 run
+    bears it out. A follow-up went back the same day with the payload and **one**
     question, the `4999` one, on the reasoning that a single yes-or-no question is harder to
     close as incomplete.
   - **Stack Overflow had not been asked.** The success-case questions were posted on

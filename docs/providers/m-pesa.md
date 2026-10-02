@@ -49,13 +49,15 @@ below that were written before these dates stay as written, and each one says wh
 section overtakes it.
 
 **Safaricom support's advice about the test MSISDN is *stated*, and one real run is in
-tension with it.** Support's reply (*Still unknown*, below) said "A test MSISDN will not work
-on STK Push sandbox testing". That is kept here as **stated by Safaricom support**, not
-deleted. On 2026-10-02 a *real* MSISDN was sent a prompt from this project's sandbox account
-and answered it, twice (*The first successful STK Push, 2026-10-02*, below). Support was
-answering about a *test* MSISDN, and what was tested is a real one, so this is not a
-contradiction of what they were asked, only of the part of their advice that matters to
-anyone hoping to see a success. Nothing more than that is claimed.
+tension with it.** Support's reply of 2026-09-26 advised sending the prompt to a valid
+Safaricom number rather than a test one (*Still unknown*, below). That is kept here as
+**stated by Safaricom support**, not deleted, and in the page's own words, because the
+original wording of any sentence of it has not been confirmed. On 2026-10-02 a *real* MSISDN
+was sent a prompt from this project's sandbox account and answered it, twice (*The first
+successful STK Push, 2026-10-02*, below). Support was answering about a *test* MSISDN, and
+what was tested is a real one, so this is not a contradiction of what they were asked, only
+of the part of their advice that matters to anyone hoping to see a success. Nothing more than
+that is claimed.
 
 ## The first successful STK Push, 2026-10-02
 
@@ -106,11 +108,11 @@ these runs measured; what they measured is that the line received the prompt.
 3. **The in-flight answer is not one shape.** The same state, a prompt on the phone that nobody
    has answered yet, was `500.001.1001` with an empty message in run 1 and `4999` in run 2,
    one second after submission in both. Neither is a failure. This is the second time
-   `500.001.1001` has answered a payment that existed (*Correction, 2026-09-23*, above).
+   `500.001.1001` has answered a payment that existed (*Correction, 2026-09-23*, below).
 4. **The sandbox shortcode moves real money.** The payer's balance went from KSH 10 to KSH 9,
    at a transaction cost of KSH 0.00.
 5. **`AccountReference` is printed on the payer's phone.** `nkap-live-1` is in the SMS
-   verbatim (*Authentication and submission*, above, is corrected to say so).
+   verbatim (*Authentication and submission*, below, is corrected to say so).
 6. **The query's success prose is what the simulator had guessed**: "The service request is
    processed successfully." The *callback's* prose for `0` is still unobserved: nothing was
    listening for it.
@@ -609,9 +611,8 @@ Left open deliberately rather than guessed. Each is worth a pull request adding 
     recorded above, since that one runs the other way. API Support replied on **2026-09-26**
     asking for the request payload, advising a valid Safaricom number to receive the STK
     prompt, and advising small test amounts. It addressed none of the three questions and did
-    not mention `500.001.1001`. The maintainer's notes record one sentence of the exchange as
-    "A test MSISDN will not work on STK Push sandbox testing"; it is kept here as **stated by
-    Safaricom support**, and *Since this page was written*, above, names the tension with the
+    not mention `500.001.1001`. That advice, about the number to use, is **stated by Safaricom
+    support**, and *Since this page was written*, above, names the tension with the
     2026-10-02 run. A follow-up went back the same day with the payload and **one**
     question, the `4999` one, on the reasoning that a single yes-or-no question is harder to
     close as incomplete.

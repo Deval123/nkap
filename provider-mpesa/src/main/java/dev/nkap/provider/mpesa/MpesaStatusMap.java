@@ -27,7 +27,10 @@ final class MpesaStatusMap {
      */
     static final int CANCELLED_BY_USER = 1032;
 
-    /** Success. <strong>Modelled, never observed</strong>: see {@link #stateFor(int)}. */
+    /**
+     * Success. <strong>Observed</strong> 2026-10-02 on the query, 17 seconds after submission
+     * ({@code ws_CO_021020261810465181954437}): see {@link #stateFor(int)}.
+     */
     static final int SUCCESS = 0;
 
     private MpesaStatusMap() {
@@ -61,10 +64,11 @@ final class MpesaStatusMap {
             // reconciler until its window was spent, and then be escalated to a human.
             case CANCELLED_BY_USER -> PaymentState.FAILED;
 
-            // MODELLED, NEVER OBSERVED. This project's sandbox payer can never be reached, so no
-            // successful STK Push has been seen: 0 is the code this adapter expects success to
-            // carry, and nothing more. The simulator plays the same model, labelled the same
-            // way, so a green test here proves agreement with the model, not with Safaricom.
+            // OBSERVED 2026-10-02 on the query, by hand with a real Safaricom line and not through
+            // this adapter: 0, 17 seconds after submission (ws_CO_021020261810465181954437), with
+            // the payer's receipt SMS the same minute. What a callback carries for it is still
+            // unobserved, and the simulator's callback prose for 0 is still its own choice, so a
+            // green callback test here proves agreement with the model, not with Safaricom.
             case SUCCESS -> PaymentState.SUCCEEDED;
 
             default -> PaymentState.UNKNOWN;

@@ -210,7 +210,7 @@ class StkPushTest {
     // --- the status query -------------------------------------------------------------------
 
     @Test
-    @DisplayName("the default scenario answers ResultCode 0 on the first query -- a modelled success, since none has been observed")
+    @DisplayName("the default scenario answers ResultCode 0 on the first query -- the code is observed, answering at once is modelled")
     void the_default_scenario_succeeds() {
         String checkoutRequestId = read(submit("order-happy", PHONE, null, null)).get("CheckoutRequestID").asText();
 

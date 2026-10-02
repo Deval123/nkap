@@ -29,7 +29,7 @@ class MpesaStatusMapTest {
     }
 
     @Test
-    @DisplayName("0 is SUCCEEDED -- modelled, never observed")
+    @DisplayName("0 is SUCCEEDED -- observed on the query, 2026-10-02")
     void success_is_succeeded() {
         assertThat(MpesaStatusMap.stateFor(0)).isEqualTo(PaymentState.SUCCEEDED);
     }

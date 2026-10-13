@@ -86,7 +86,7 @@ public class AdjustmentService {
     }
 
     public Adjustment propose(ApiCredential caller, NewAdjustment request) {
-        requireEnabled();
+        ensureEnabled();
         Hypothesis hypothesis = Hypothesis.fromCode(request.hypothesis() == null ? "" : request.hypothesis())
                 .orElseThrow(() -> invalid("hypothesis must be one of " + hypothesisCodes() + ", was '"
                         + request.hypothesis() + "'"));
@@ -109,7 +109,7 @@ public class AdjustmentService {
      * transaction.
      */
     public Adjustment approve(ApiCredential caller, UUID id, String reason) {
-        requireEnabled();
+        ensureEnabled();
         Adjustment proposal = visibleProposal(caller, id);
         refuseSelfDecision(caller, proposal);
 
@@ -140,7 +140,7 @@ public class AdjustmentService {
 
     /** Rejects: records the decision and writes nothing to the ledger. */
     public Adjustment reject(ApiCredential caller, UUID id, String reason) {
-        requireEnabled();
+        ensureEnabled();
         Adjustment proposal = visibleProposal(caller, id);
         refuseSelfDecision(caller, proposal);
         try {
@@ -152,19 +152,24 @@ public class AdjustmentService {
     }
 
     public Adjustment get(ApiCredential caller, UUID id) {
-        requireEnabled();
+        ensureEnabled();
         return visibleProposal(caller, id);
     }
 
     /** The caller's merchant's proposals, newest first; an admin key sees every merchant's. */
     public List<Adjustment> list(ApiCredential caller) {
-        requireEnabled();
+        ensureEnabled();
         return store.list(caller.admin() ? Optional.empty() : Optional.of(caller.merchantId()));
     }
 
     // ---- the checks ----
 
-    private void requireEnabled() {
+    /**
+     * Refuses with {@code adjustment-not-enabled} unless the feature is on. Public so the web
+     * layer can ask before it parses anything: a switched-off deployment answers 501 to every
+     * request, including one that would otherwise have been a 400 or a 404.
+     */
+    public void ensureEnabled() {
         if (!policy.enabled()) {
             throw new ApiException(HttpStatus.NOT_IMPLEMENTED, ProblemTypes.ADJUSTMENT_NOT_ENABLED,
                     "Adjustments are not enabled on this deployment",

@@ -5,6 +5,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.nkap.provider.ProviderId;
+import dev.nkap.server.adjustment.AdjustmentPosting;
+import dev.nkap.server.adjustment.AdjustmentStore;
+import dev.nkap.server.adjustment.Hypothesis;
 import dev.nkap.server.auth.ApiKeyStore;
 import dev.nkap.server.outbox.Outbox;
 import dev.nkap.server.outbox.OutboxEvent;
@@ -108,7 +111,12 @@ class OpenApiSpecIT extends PostgresSpringBootIT {
      */
     static final Map<String, String> PROVED_ELSEWHERE = Map.of(
             "GET /balance 501", "FeatureNotOfferedApiIT",
-            "GET /account-holders/{msisdn} 501", "FeatureNotOfferedApiIT");
+            "GET /account-holders/{msisdn} 501", "FeatureNotOfferedApiIT",
+            "POST /adjustments 501", "AdjustmentApiIT",
+            "GET /adjustments 501", "AdjustmentApiIT",
+            "GET /adjustments/{id} 501", "AdjustmentApiIT",
+            "POST /adjustments/{id}/approve 501", "AdjustmentApiIT",
+            "POST /adjustments/{id}/reject 501", "AdjustmentApiIT");
 
     /** Every {@code (method, path, status)} {@link #assertStatusDocumented} saw produced in this run. */
     private static final Set<String> OBSERVED = new ConcurrentSkipListSet<>();
@@ -132,6 +140,10 @@ class OpenApiSpecIT extends PostgresSpringBootIT {
         registry.add("nkap.provider.mtn.installations[0].disbursement.api-key", () -> "disbursement-key");
         registry.add("nkap.provider.default", () -> "mtn-sandbox");
         registry.add("nkap.webhooks.allow-insecure-endpoint-url", () -> "true");
+        // Switched on so the adjustment routes can produce every status but one. The 501 they
+        // answer while switched off, the default, needs a context where it is off:
+        // AdjustmentApiIT (see PROVED_ELSEWHERE).
+        registry.add("nkap.adjustments.enabled", () -> "true");
     }
 
     @BeforeAll
@@ -173,13 +185,23 @@ class OpenApiSpecIT extends PostgresSpringBootIT {
     @Autowired
     WebhookEndpointStore endpoints;
 
+    @Autowired
+    AdjustmentStore adjustmentStore;
+
+    private String merchantId;
+    private UUID merchantKeyId;
     private String merchantKey;
+    private String secondMerchantKey;
     private String adminKey;
 
     @BeforeEach
     void setUp() {
         SIMULATOR.reset();
-        merchantKey = apiKeys.provision("merchant-" + System.nanoTime(), false, "OpenApiSpecIT").token();
+        merchantId = "merchant-" + System.nanoTime();
+        var provisioned = apiKeys.provision(merchantId, false, "OpenApiSpecIT");
+        merchantKey = provisioned.token();
+        merchantKeyId = provisioned.credential().keyId();
+        secondMerchantKey = apiKeys.provision(merchantId, false, "OpenApiSpecIT").token();
         adminKey = apiKeys.provision("ops-" + System.nanoTime(), true, "OpenApiSpecIT").token();
     }
 
@@ -764,5 +786,228 @@ class OpenApiSpecIT extends PostgresSpringBootIT {
 
         assertThat(response.getStatusCode().value()).isEqualTo(202);
         assertThat(getPayment(reference, merchantKey).getBody()).contains("\"state\":\"SUCCEEDED\"");
+    }
+
+    // --- /adjustments --------------------------------------------------------------------
+
+    private ResponseEntity<String> adjustmentRequest(HttpMethod method, String path, String key, String body) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        if (key != null) {
+            headers.setBearerAuth(key);
+        }
+        return http.exchange(path, method, new HttpEntity<>(body, headers), String.class);
+    }
+
+    private String paymentReference() {
+        return body(postPayment(UUID.randomUUID().toString(), paymentBody(5000))).get("reference").asText();
+    }
+
+    private static String adjustmentBody(String paymentReference, long creditSide) {
+        return """
+            {"paymentReference":"%s","hypothesis":"unrecorded_fee",
+             "postings":[{"account":"fees:platform:EUR","amountMinor":150,"currency":"EUR"},
+                         {"account":"provider:mtn-sandbox:float:EUR","amountMinor":%d,"currency":"EUR"}],
+             "evidence":{"statement-line":"line 42: fee 150"},"cites":["statement-line"],
+             "explanation":"The operator charged a fee the ledger never recorded."}"""
+                .formatted(paymentReference, creditSide);
+    }
+
+    /** Proposes with {@link #merchantKey} and returns the new adjustment's id. */
+    private String proposeAdjustment() {
+        ResponseEntity<String> created = adjustmentRequest(HttpMethod.POST, "/adjustments", merchantKey,
+                adjustmentBody(paymentReference(), -150));
+        assertThat(created.getStatusCode().value()).isEqualTo(201);
+        return body(created).get("id").asText();
+    }
+
+    @Test
+    @DisplayName("POST /adjustments: 201, recorded and pending, nothing written to the ledger")
+    void post_adjustments_201() {
+        ResponseEntity<String> response = adjustmentRequest(HttpMethod.POST, "/adjustments", merchantKey,
+                adjustmentBody(paymentReference(), -150));
+
+        check("/adjustments", "post", 201, response, "AdjustmentResponse");
+        assertThat(body(response).get("status").asText()).isEqualTo("pending");
+        assertThat(response.getHeaders().getLocation().toString()).isEqualTo("/adjustments/" + body(response).get("id").asText());
+    }
+
+    @Test
+    @DisplayName("POST /adjustments: 400, the postings do not balance")
+    void post_adjustments_400() {
+        ResponseEntity<String> response = adjustmentRequest(HttpMethod.POST, "/adjustments", merchantKey,
+                adjustmentBody(paymentReference(), -100));
+
+        check("/adjustments", "post", 400, response, "Problem");
+        assertThat(body(response).get("type").asText()).endsWith("/adjustment-unbalanced");
+    }
+
+    @Test
+    @DisplayName("POST /adjustments: 401, no key")
+    void post_adjustments_401() {
+        check("/adjustments", "post", 401,
+                adjustmentRequest(HttpMethod.POST, "/adjustments", null, adjustmentBody(UUID.randomUUID().toString(), -150)),
+                "Problem");
+    }
+
+    @Test
+    @DisplayName("POST /adjustments: 404, no such payment")
+    void post_adjustments_404() {
+        check("/adjustments", "post", 404,
+                adjustmentRequest(HttpMethod.POST, "/adjustments", merchantKey,
+                        adjustmentBody(UUID.randomUUID().toString(), -150)),
+                "Problem");
+    }
+
+    @Test
+    @DisplayName("GET /adjustments: 200, the merchant's own proposals")
+    void get_adjustments_200() {
+        String id = proposeAdjustment();
+
+        ResponseEntity<String> response = adjustmentRequest(HttpMethod.GET, "/adjustments", merchantKey, null);
+
+        check("/adjustments", "get", 200, response, null);
+        assertThat(body(response)).anySatisfy(item -> assertThat(item.get("id").asText()).isEqualTo(id));
+        body(response).forEach(item -> assertRequired(item, "AdjustmentResponse"));
+    }
+
+    @Test
+    @DisplayName("GET /adjustments: 401, no key")
+    void get_adjustments_401() {
+        check("/adjustments", "get", 401, adjustmentRequest(HttpMethod.GET, "/adjustments", null, null), "Problem");
+    }
+
+    @Test
+    @DisplayName("GET /adjustments/{id}: 200")
+    void get_adjustment_200() {
+        check("/adjustments/{id}", "get", 200,
+                adjustmentRequest(HttpMethod.GET, "/adjustments/" + proposeAdjustment(), merchantKey, null),
+                "AdjustmentResponse");
+    }
+
+    @Test
+    @DisplayName("GET /adjustments/{id}: 401, no key")
+    void get_adjustment_401() {
+        check("/adjustments/{id}", "get", 401,
+                adjustmentRequest(HttpMethod.GET, "/adjustments/" + UUID.randomUUID(), null, null), "Problem");
+    }
+
+    @Test
+    @DisplayName("GET /adjustments/{id}: 404, no such adjustment")
+    void get_adjustment_404() {
+        check("/adjustments/{id}", "get", 404,
+                adjustmentRequest(HttpMethod.GET, "/adjustments/" + UUID.randomUUID(), merchantKey, null), "Problem");
+    }
+
+    @Test
+    @DisplayName("POST /adjustments/{id}/approve: 200, a different key approves and the server names the entry it wrote")
+    void post_adjustment_approve_200() {
+        String id = proposeAdjustment();
+
+        ResponseEntity<String> response = adjustmentRequest(
+                HttpMethod.POST, "/adjustments/" + id + "/approve", secondMerchantKey, "{\"reason\":\"matches\"}");
+
+        check("/adjustments/{id}/approve", "post", 200, response, "AdjustmentResponse");
+        assertThat(body(response).get("status").asText()).isEqualTo("approved");
+        assertThat(body(response).get("ledgerEntryId").asText()).isEqualTo("adjustment:" + id);
+    }
+
+    @Test
+    @DisplayName("POST /adjustments/{id}/approve: 400, no longer allowed at approval, and recorded as rejected")
+    void post_adjustment_approve_400() {
+        // Stored directly, as a proposal made when the ceiling was higher would be: the
+        // ceiling of this context is 100000 minor units, and this one moves 1000000.
+        UUID id = UUID.randomUUID();
+        adjustmentStore.insertProposal(id, UUID.fromString(paymentReference()), Hypothesis.UNRECORDED_FEE,
+                List.of(new AdjustmentPosting("fees:platform:EUR", 1_000_000, "EUR"),
+                        new AdjustmentPosting("provider:mtn-sandbox:float:EUR", -1_000_000, "EUR")),
+                Map.of("k", "v"), List.of("k"), "A large fee.", merchantKeyId, Instant.now());
+
+        ResponseEntity<String> response = adjustmentRequest(
+                HttpMethod.POST, "/adjustments/" + id + "/approve", secondMerchantKey, null);
+
+        check("/adjustments/{id}/approve", "post", 400, response, "Problem");
+        assertThat(body(response).get("type").asText()).endsWith("/adjustment-over-ceiling");
+        assertThat(body(adjustmentRequest(HttpMethod.GET, "/adjustments/" + id, merchantKey, null)).get("status").asText())
+                .isEqualTo("rejected");
+    }
+
+    @Test
+    @DisplayName("POST /adjustments/{id}/approve: 401, no key")
+    void post_adjustment_approve_401() {
+        check("/adjustments/{id}/approve", "post", 401,
+                adjustmentRequest(HttpMethod.POST, "/adjustments/" + UUID.randomUUID() + "/approve", null, null), "Problem");
+    }
+
+    @Test
+    @DisplayName("POST /adjustments/{id}/approve: 403, the proposing key cannot approve its own proposal")
+    void post_adjustment_approve_403() {
+        ResponseEntity<String> response = adjustmentRequest(
+                HttpMethod.POST, "/adjustments/" + proposeAdjustment() + "/approve", merchantKey, null);
+
+        check("/adjustments/{id}/approve", "post", 403, response, "Problem");
+        assertThat(body(response).get("type").asText()).endsWith("/adjustment-self-approval");
+    }
+
+    @Test
+    @DisplayName("POST /adjustments/{id}/approve: 404, no such adjustment")
+    void post_adjustment_approve_404() {
+        check("/adjustments/{id}/approve", "post", 404,
+                adjustmentRequest(HttpMethod.POST, "/adjustments/" + UUID.randomUUID() + "/approve", secondMerchantKey, null),
+                "Problem");
+    }
+
+    @Test
+    @DisplayName("POST /adjustments/{id}/approve: 409, already approved")
+    void post_adjustment_approve_409() {
+        String id = proposeAdjustment();
+        adjustmentRequest(HttpMethod.POST, "/adjustments/" + id + "/approve", secondMerchantKey, null);
+
+        check("/adjustments/{id}/approve", "post", 409,
+                adjustmentRequest(HttpMethod.POST, "/adjustments/" + id + "/approve", secondMerchantKey, null), "Problem");
+    }
+
+    @Test
+    @DisplayName("POST /adjustments/{id}/reject: 200, a different key rejects and nothing is written")
+    void post_adjustment_reject_200() {
+        ResponseEntity<String> response = adjustmentRequest(
+                HttpMethod.POST, "/adjustments/" + proposeAdjustment() + "/reject", secondMerchantKey, "{\"reason\":\"no\"}");
+
+        check("/adjustments/{id}/reject", "post", 200, response, "AdjustmentResponse");
+        assertThat(body(response).get("status").asText()).isEqualTo("rejected");
+        assertThat(body(response).has("ledgerEntryId")).isFalse();
+    }
+
+    @Test
+    @DisplayName("POST /adjustments/{id}/reject: 401, no key")
+    void post_adjustment_reject_401() {
+        check("/adjustments/{id}/reject", "post", 401,
+                adjustmentRequest(HttpMethod.POST, "/adjustments/" + UUID.randomUUID() + "/reject", null, null), "Problem");
+    }
+
+    @Test
+    @DisplayName("POST /adjustments/{id}/reject: 403, the proposing key cannot reject its own proposal")
+    void post_adjustment_reject_403() {
+        check("/adjustments/{id}/reject", "post", 403,
+                adjustmentRequest(HttpMethod.POST, "/adjustments/" + proposeAdjustment() + "/reject", merchantKey, null),
+                "Problem");
+    }
+
+    @Test
+    @DisplayName("POST /adjustments/{id}/reject: 404, no such adjustment")
+    void post_adjustment_reject_404() {
+        check("/adjustments/{id}/reject", "post", 404,
+                adjustmentRequest(HttpMethod.POST, "/adjustments/" + UUID.randomUUID() + "/reject", secondMerchantKey, null),
+                "Problem");
+    }
+
+    @Test
+    @DisplayName("POST /adjustments/{id}/reject: 409, already decided")
+    void post_adjustment_reject_409() {
+        String id = proposeAdjustment();
+        adjustmentRequest(HttpMethod.POST, "/adjustments/" + id + "/reject", secondMerchantKey, null);
+
+        check("/adjustments/{id}/reject", "post", 409,
+                adjustmentRequest(HttpMethod.POST, "/adjustments/" + id + "/reject", secondMerchantKey, null), "Problem");
     }
 }

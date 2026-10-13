@@ -6,6 +6,21 @@ All notable changes to Nkap are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **A human can now finish what the reconciler could not, by proposal and approval.** An
+  escalated payment used to be a dead end for the ledger: nothing let a person put it right
+  except SQL. `POST /adjustments` records a proposal, and `POST /adjustments/{id}/approve`,
+  with a **different** API key, makes the server write the ledger entry; `.../reject` writes
+  nothing. A proposal may name only the payment's own provider's suspense, fee and provider-float
+  accounts, never a
+  merchant's payable; it must balance, stay in the payment's currency, stay under a ceiling
+  and cite evidence it carries. **Off by default**: until `nkap.adjustments.enabled` is
+  `true`, all five routes answer `501 adjustment-not-enabled`. The separation of duties rests
+  on key identity, not on a permission; scopes would be stronger and are a later slice. An
+  approval does not un-escalate the payment or change its state. See ADR 0017 and
+  `server/README.md`. Schema migration `V13`.
+
 ### Changed
 
 - **A payment the M-Pesa payer cancelled now reaches `FAILED`.** Safaricom answers a query

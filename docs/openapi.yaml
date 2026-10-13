@@ -75,6 +75,11 @@ tags:
       `docs/webhooks.md` — so it has no path here.
   - name: statements
     description: The read side of statement reconciliation. There is no write route; see the path's own description for why.
+  - name: adjustments
+    description: >
+      A human finishing what the reconciler could not: one key proposes a ledger adjustment, a
+      different key approves it, and the server writes the entry (ADR 0017). Off unless the
+      operator switches it on; every route answers `501 adjustment-not-enabled` until then.
   - name: operator callbacks
     description: >
       Where the operator, not a merchant, sends requests. Unauthenticated by design; see the
@@ -587,6 +592,183 @@ paths:
             application/problem+json:
               schema: { $ref: "#/components/schemas/Problem" }
 
+  /adjustments:
+    post:
+      operationId: proposeAdjustment
+      tags: [adjustments]
+      summary: Propose a ledger adjustment for a payment a human has looked into
+      description: |
+        Records a proposal and **writes nothing to the ledger**. A proposal is data until a
+        different key approves it (ADR 0017). Use it for what the reconciler could not finish:
+        a fee the operator charged that the ledger never recorded, a movement no payment
+        accounts for, float that drifted. It does not un-escalate the payment, re-queue it for
+        the reconciler or change its state; it only lets a balanced entry be written, by the
+        server, once a second key agrees.
+
+        **Off unless the operator switched it on** (`nkap.adjustments.enabled`). While off,
+        every `/adjustments` route answers `501 adjustment-not-enabled`.
+
+        **What a proposal may say.** `postings` are signed minor-unit amounts, debit positive
+        and credit negative, in one currency — the payment's — summing to zero. They may name
+        only `suspense:<provider>:<CUR>`, `fees:<provider>:<CUR>` and
+        `provider:<provider>:float:<CUR>` accounts of **the payment's own provider**, never a
+        merchant's payable and never another provider's. The debits may
+        not total more than `nkap.adjustments.max-amount-minor`. `cites` names the `evidence`
+        entries the proposal relies on, and each must be present with a value. A proposal that
+        fails any of this is refused and **not stored**.
+
+        **What it cannot say.** The ledger entry's id, its time, and the proposing key are the
+        server's: the entry is `adjustment:<id>`, stamped when it is approved.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AdjustmentRequest" }
+      responses:
+        "201":
+          description: Recorded, and pending. Nothing has reached the ledger.
+          headers:
+            Location:
+              description: "`/adjustments/{id}` — the new proposal."
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdjustmentResponse" }
+        "400":
+          description: >
+            `invalid-request` (an unknown `hypothesis`, a missing `explanation`, fewer than two
+            postings, a malformed account or an unknown currency); `malformed-reference`;
+            `adjustment-unbalanced`; `adjustment-account-not-allowed`;
+            `adjustment-over-ceiling`; `adjustment-evidence-missing`; or
+            `adjustment-currency-mismatch`.
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404":
+          description: "`payment-not-found` — no such payment, or it belongs to another merchant and this is not an admin key."
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+        "501": { $ref: "#/components/responses/AdjustmentNotEnabled" }
+    get:
+      operationId: listAdjustments
+      tags: [adjustments]
+      summary: The proposals about this merchant's payments, newest first
+      description: |
+        Scoped the way every read is: the key's merchant sees the proposals about its own
+        payments, and an **admin** key sees every merchant's.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Every visible proposal, pending or decided.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/AdjustmentResponse" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "501": { $ref: "#/components/responses/AdjustmentNotEnabled" }
+
+  /adjustments/{id}:
+    get:
+      operationId: getAdjustment
+      tags: [adjustments]
+      summary: One proposal, with its decision if it has one
+      description: Scoped like the list; a proposal this key may not see is a `404`, not a `403`.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/AdjustmentIdPath"
+      responses:
+        "200":
+          description: The proposal.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdjustmentResponse" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/AdjustmentNotFound" }
+        "501": { $ref: "#/components/responses/AdjustmentNotEnabled" }
+
+  /adjustments/{id}/approve:
+    post:
+      operationId: approveAdjustment
+      tags: [adjustments]
+      summary: Approve a proposal, which writes its ledger entry
+      description: |
+        The only call that writes to the ledger. It must be made with **a different key** than
+        the one that proposed: separation of duties rests on the two keys' identities, not on a
+        permission (ADR 0017), so a deployment with one key cannot approve anything.
+
+        The server appends the entry `adjustment:<id>` and records the decision in one
+        transaction. The entry's id makes a second approval impossible: the ledger refuses a
+        repeated entry id, and that refusal is the `409`. The checks that matter for money are
+        made again here, so a proposal that stopped being allowed since it was made (the
+        ceiling was lowered, say) is **recorded as rejected, with the reason**, and the `400`
+        names it.
+
+        The payment's own state does not change, and it stays escalated.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/AdjustmentIdPath"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AdjustmentDecisionRequest" }
+      responses:
+        "200":
+          description: Approved. `ledgerEntryId` names the entry the server wrote.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdjustmentResponse" }
+        "400":
+          description: >
+            The proposal is no longer allowed: `adjustment-unbalanced`,
+            `adjustment-account-not-allowed`, `adjustment-over-ceiling` or
+            `adjustment-currency-mismatch`. It is recorded as rejected with that reason.
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/AdjustmentSelfApproval" }
+        "404": { $ref: "#/components/responses/AdjustmentNotFound" }
+        "409": { $ref: "#/components/responses/AdjustmentAlreadyDecided" }
+        "501": { $ref: "#/components/responses/AdjustmentNotEnabled" }
+
+  /adjustments/{id}/reject:
+    post:
+      operationId: rejectAdjustment
+      tags: [adjustments]
+      summary: Reject a proposal, which writes nothing to the ledger
+      description: >
+        Records the decision and its reason and nothing else. Like approval it must be made with
+        a different key than the proposer's.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/AdjustmentIdPath"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AdjustmentDecisionRequest" }
+      responses:
+        "200":
+          description: Rejected.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdjustmentResponse" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/AdjustmentSelfApproval" }
+        "404": { $ref: "#/components/responses/AdjustmentNotFound" }
+        "409": { $ref: "#/components/responses/AdjustmentAlreadyDecided" }
+        "501": { $ref: "#/components/responses/AdjustmentNotEnabled" }
+
 components:
   securitySchemes:
     bearerAuth:
@@ -617,6 +799,13 @@ components:
       in: path
       required: true
       description: A payment's reference, returned by `POST /payments` or `POST /payments/{reference}/refunds`.
+      schema: { type: string, format: uuid }
+
+    AdjustmentIdPath:
+      name: id
+      in: path
+      required: true
+      description: An adjustment's id, returned by `POST /adjustments`.
       schema: { type: string, format: uuid }
 
   headers:
@@ -654,6 +843,40 @@ components:
         nothing for the caller to correct, and the same request is refused until the
         deployment is configured differently. The message names the provider and what it
         does declare; the operator was not asked.
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+
+    AdjustmentNotEnabled:
+      description: >
+        `adjustment-not-enabled` — the operator has not switched adjustments on
+        (`nkap.adjustments.enabled`, off by default). A `501`, for the reason
+        `feature-not-offered` is: the same request is refused until the deployment changes.
+        Not that type, because the cause is another one: `feature-not-offered` says the
+        provider's adapter cannot do something, this says the operator turned the feature
+        off. Not a `404`, because the route exists.
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    AdjustmentNotFound:
+      description: >
+        `adjustment-not-found` — no such adjustment, the path segment is not an id, or it
+        concerns another merchant's payment and this is not an admin key.
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    AdjustmentSelfApproval:
+      description: >
+        `adjustment-self-approval` — this is the key that proposed the adjustment. A different
+        key must decide it. The refusal is not a decision: it does not use up the proposal's
+        one, and another key can still approve or reject.
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    AdjustmentAlreadyDecided:
+      description: >
+        `adjustment-already-decided` — the proposal has a decision already, or its ledger entry
+        is already recorded. A decision is final; correct a mistake with a new proposal.
       content:
         application/problem+json:
           schema: { $ref: "#/components/schemas/Problem" }
@@ -905,3 +1128,80 @@ components:
         operatorTransactionId: { type: [string, "null"], description: "`null` for a finding with no statement line (`MISSING_FROM_STATEMENT`)." }
         paymentReference: { type: [string, "null"], description: "`null` for a finding with no matching payment (`SUSPENSE_POSTED`, `SUSPENSE_ALREADY_POSTED`)." }
         detail: { type: string }
+
+    AdjustmentRequest:
+      description: >
+        The body of `POST /adjustments`. There is no ledger entry id, timestamp or proposing
+        key: the server derives all three.
+      type: object
+      required: [paymentReference, hypothesis, postings, evidence, cites, explanation]
+      properties:
+        paymentReference: { type: string, format: uuid, description: The payment this concerns. }
+        hypothesis:
+          type: string
+          enum: [unrecorded_fee, unattributed_movement, float_drift, duplicate_posting]
+          description: What the proposer believes happened. A closed set; the database enforces it too.
+        postings:
+          type: array
+          minItems: 2
+          items: { $ref: "#/components/schemas/AdjustmentPosting" }
+        evidence:
+          type: object
+          additionalProperties: { type: string }
+          description: What the proposer looked at, by name.
+        cites:
+          type: array
+          minItems: 1
+          items: { type: string }
+          description: The `evidence` names this relies on. Each must be present with a value.
+        explanation: { type: string, description: In words, why the entry is right. }
+
+    AdjustmentPosting:
+      type: object
+      required: [account, amountMinor, currency]
+      properties:
+        account:
+          type: string
+          description: "`suspense:<provider>:<CUR>`, `fees:<provider>:<CUR>` or `provider:<provider>:float:<CUR>`, where `<provider>` is the payment's own. Never a merchant's payable."
+        amountMinor:
+          type: integer
+          format: int64
+          description: Signed minor units. Debit positive, credit negative. The postings sum to zero.
+        currency: { type: string, description: The payment's currency. }
+
+    AdjustmentDecisionRequest:
+      type: object
+      properties:
+        reason: { type: string, description: Optional, and worth giving: it is what the next reader of the record sees. }
+
+    AdjustmentResponse:
+      type: object
+      required: [id, status, paymentReference, hypothesis, postings, evidence, cites, explanation, proposedBy, proposedAt]
+      properties:
+        id: { type: string, format: uuid }
+        status:
+          type: string
+          enum: [pending, approved, rejected]
+          description: "`rejected` also covers a proposal refused at approval, with the reason in `decision.reason`."
+        paymentReference: { type: string, format: uuid }
+        hypothesis: { type: string }
+        postings:
+          type: array
+          items: { $ref: "#/components/schemas/AdjustmentPosting" }
+        evidence: { type: object, additionalProperties: { type: string } }
+        cites: { type: array, items: { type: string } }
+        explanation: { type: string }
+        proposedBy: { type: string, format: uuid, description: The proposing key's id. }
+        proposedAt: { type: string, format: date-time }
+        decision:
+          type: object
+          description: Absent while the proposal is pending.
+          required: [approved, decidedBy, decidedAt, reason]
+          properties:
+            approved: { type: boolean }
+            decidedBy: { type: string, format: uuid, description: The deciding key's id. Never equal to `proposedBy`. }
+            decidedAt: { type: string, format: date-time }
+            reason: { type: string }
+        ledgerEntryId:
+          type: string
+          description: "`adjustment:<id>`. Present only once approved: the entry the server wrote."

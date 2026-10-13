@@ -56,6 +56,18 @@ and refund outcomes; `docs/webhooks.md` is the contract it delivers under.
 | `nkap.webhooks.signature-tolerance` | `5m` | The gateway itself never reads this value back — it only signs, and only documents this number for whoever implements the receiving side (`docs/webhooks.md`'s verification recipe). A value here that does not match what `docs/webhooks.md` tells integrators to trust is a pure documentation-versus-reality gap: an integrator implementing the freshness check exactly as documented would reject genuinely fresh retries, or accept ones that are stale by Nkap's own standard, purely because the number they were told differs from the one actually configured. |
 | `nkap.webhooks.allow-insecure-endpoint-url` | `false` | `true` lets an operator provision a webhook endpoint over plain `http`. The signature still protects the body's integrity, but the amount, the reference and the merchant become readable in clear text to anything on the path — acceptable for a local demo or a TLS-less test, never for a real deployment. |
 
+## Adjustments (`nkap.adjustments.*`)
+
+Not part of a `@ConfigurationProperties` record: `AdjustmentConfiguration` reads both directly
+with `@Value`. They gate `POST /adjustments`, `POST /adjustments/{id}/approve`,
+`POST /adjustments/{id}/reject`, `GET /adjustments` and `GET /adjustments/{id}`, which let one
+API key propose a ledger adjustment and a different one approve it (ADR 0017).
+
+| Property | Default | What happens when it's wrong |
+| --- | --- | --- |
+| `nkap.adjustments.enabled` | `false` | Off, all five routes answer `501` with the problem type `adjustment-not-enabled`, and nothing a person proposed can reach the ledger. Turning it on opens a third way into the ledger, after payments and statement imports. It needs two API keys: the one that proposed an adjustment can never decide it. |
+| `nkap.adjustments.max-amount-minor` | `100000` | The most one proposal may move, as the sum of its debits, in minor units. Too low and a legitimate adjustment is refused with `adjustment-over-ceiling`; the remedy is to raise it, knowing the next proposal is bounded by the new number. Too high and it stops bounding anything. It is one number across currencies, so in a currency with two decimals it is a hundredth of what it is in XAF or XOF. It must be positive; zero or negative fails the application at startup. |
+
 ## The default provider (`nkap.provider.default`)
 
 Not part of a `@ConfigurationProperties` record — read directly with `@Value` by
@@ -180,7 +192,8 @@ in the second installation, which sets no `request-timeout` key of its own).
 Two things it deliberately does not do, stated here rather than left to be discovered:
 
 - **`nkap.reconciler.enabled`, `nkap.webhooks.enabled`, `nkap.webhooks.allow-insecure-endpoint-url`,
-  `nkap.provider.default` and `nkap.scenario.file`** are not part of any
+  `nkap.adjustments.enabled`, `nkap.adjustments.max-amount-minor`, `nkap.provider.default`
+  and `nkap.scenario.file`** are not part of any
   `@ConfigurationProperties` record — the first two are read with `@ConditionalOnProperty`,
   the rest with `@Value`. There is no single class to reflect on for these the way there is
   for the four records above, so the test finds them the way it finds everything not in a

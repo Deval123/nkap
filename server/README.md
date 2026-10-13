@@ -121,6 +121,54 @@ or neither does. Exactly-once is the row lock plus the entry id derived from the
 so a repeat is refused by the primary key — as `DuplicateLedgerEntryException`, which the
 settlement path swallows while every other integrity error aborts the transaction.
 
+### Adjustments — finishing what the reconciler could not
+
+ADR 0016 leaves an escalated payment with nothing a human can do about the ledger; ADR 0017
+adds it. One key **proposes** an adjustment, a **different** key approves or rejects it, and
+only an approval writes to the ledger, as an entry the server derives (`adjustment:<id>`). It
+does not un-escalate the payment, re-queue it or change its state: the payment stays listed at
+`GET /actuator/escalatedPayments`.
+
+**It is off.** While `nkap.adjustments.enabled` is `false`, the default, all five routes answer
+`501 adjustment-not-enabled`. To switch it on, set `nkap.adjustments.enabled=true`, for example
+`--nkap.adjustments.enabled=true`. `nkap.adjustments.max-amount-minor` (default `100000`) bounds
+what one proposal may move; both are in `docs/configuration-reference.md`.
+
+**It needs two keys.** Separation of duties rests on the keys' identities, not on a permission
+(`api_key` is unchanged: a merchant and an `admin` flag, nothing more), so one key can never
+approve what it proposed, and a deployment with a single key cannot approve anything. Mint two
+the usual way, for the same merchant or for the operator:
+
+```bash
+docker compose run --rm gateway --nkap.apikey.create --nkap.apikey.merchant=acme --nkap.apikey.label=proposer
+docker compose run --rm gateway --nkap.apikey.create --nkap.apikey.merchant=acme --nkap.apikey.label=approver
+```
+
+They are two keys, not two people: whoever holds both can approve their own proposal, and
+issuing keys is the control on that. Scopes are the stronger answer and a later slice.
+
+```bash
+# Proposer: record it. Nothing reaches the ledger.
+curl -s -X POST http://localhost:8080/adjustments -H "Authorization: Bearer $PROPOSER_KEY" \
+  -H 'Content-Type: application/json' -d '{
+    "paymentReference": "<escalated payment reference>",
+    "hypothesis": "unrecorded_fee",
+    "postings": [
+      {"account": "fees:mtn-cm:XAF", "amountMinor": 150, "currency": "XAF"},
+      {"account": "provider:mtn-cm:float:XAF", "amountMinor": -150, "currency": "XAF"}],
+    "evidence": {"statement-line": "line 42: fee 150"},
+    "cites": ["statement-line"],
+    "explanation": "The operator charged a fee the ledger never recorded."}'
+
+# Approver: write the entry. The proposer's own key gets 403 adjustment-self-approval.
+curl -s -X POST http://localhost:8080/adjustments/<id>/approve -H "Authorization: Bearer $APPROVER_KEY"
+```
+
+A proposal may name only the payment's own provider's suspense, fee and provider-float accounts, never a merchant's payable;
+it must balance, stay in the payment's currency, stay under the ceiling and cite evidence it
+carries. One that fails is refused with its own problem type and **not stored**. See
+`docs/openapi.yaml` for every status.
+
 ## The database
 
 The schema is `server/src/main/resources/db/migration`, plain SQL, run by Flyway at

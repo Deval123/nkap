@@ -35,7 +35,8 @@ class MigrationRollbackIT {
             "V1__initial_schema", "V2__reconciler_schedule", "V3__reconciler_window_is_a_duration",
             "V4__reconciler_chases_unresolved", "V5__statement_reconciliation", "V6__api_keys",
             "V7__webhooks_and_outbox", "V8__refunds", "V9__settlement_provenance",
-            "V10__api_key_revocation", "V11__provider_reference_lookup", "V12__escalation_reason");
+            "V10__api_key_revocation", "V11__provider_reference_lookup", "V12__escalation_reason",
+            "V13__adjustment_proposals");
 
     @Test
     @DisplayName("running every inverse newest-first returns the schema to empty, and the database is migratable again")
@@ -76,6 +77,7 @@ class MigrationRollbackIT {
 
             migrate(postgres);
             // Peel back to V2 first, so this test is about the V2 inverse alone.
+            jdbc.execute(inverseOf("V13__adjustment_proposals"));
             jdbc.execute(inverseOf("V12__escalation_reason"));
             jdbc.execute(inverseOf("V11__provider_reference_lookup"));
             jdbc.execute(inverseOf("V10__api_key_revocation"));
@@ -117,6 +119,7 @@ class MigrationRollbackIT {
 
             migrate(postgres);
             // Peel back to V3 first, so this test is about the V3 inverse alone.
+            jdbc.execute(inverseOf("V13__adjustment_proposals"));
             jdbc.execute(inverseOf("V12__escalation_reason"));
             jdbc.execute(inverseOf("V11__provider_reference_lookup"));
             jdbc.execute(inverseOf("V10__api_key_revocation"));
@@ -154,6 +157,7 @@ class MigrationRollbackIT {
             assertThat(userTables(jdbc)).contains("api_key");
 
             // Peel back to V6 first, so this test is about the V6 inverse alone.
+            jdbc.execute(inverseOf("V13__adjustment_proposals"));
             jdbc.execute(inverseOf("V12__escalation_reason"));
             jdbc.execute(inverseOf("V11__provider_reference_lookup"));
             jdbc.execute(inverseOf("V10__api_key_revocation"));
@@ -187,6 +191,7 @@ class MigrationRollbackIT {
             assertThat(columnsOf(jdbc, "payment")).contains("refund_of", "refunded_minor");
             assertThat(indexesOf(jdbc, "payment")).contains("payment_refund_of_idx");
 
+            jdbc.execute(inverseOf("V13__adjustment_proposals"));
             jdbc.execute(inverseOf("V12__escalation_reason"));
             jdbc.execute(inverseOf("V11__provider_reference_lookup"));
             jdbc.execute(inverseOf("V10__api_key_revocation"));
@@ -217,6 +222,7 @@ class MigrationRollbackIT {
             migrate(postgres);
             assertThat(userTables(jdbc)).contains("outbox_event", "webhook_endpoint");
 
+            jdbc.execute(inverseOf("V13__adjustment_proposals"));
             jdbc.execute(inverseOf("V12__escalation_reason"));
             jdbc.execute(inverseOf("V11__provider_reference_lookup"));
             jdbc.execute(inverseOf("V10__api_key_revocation"));
@@ -246,6 +252,7 @@ class MigrationRollbackIT {
             migrate(postgres);
             assertThat(userTables(jdbc)).contains("statement_import", "statement_line", "statement_finding");
 
+            jdbc.execute(inverseOf("V13__adjustment_proposals"));
             jdbc.execute(inverseOf("V12__escalation_reason"));
             jdbc.execute(inverseOf("V11__provider_reference_lookup"));
             jdbc.execute(inverseOf("V10__api_key_revocation"));
@@ -279,6 +286,7 @@ class MigrationRollbackIT {
             assertThat(columnsOf(jdbc, "payment")).contains("unresolved_since").doesNotContain("unknown_since");
 
             // Peel back to V4 first, so this test is about the V4 inverse alone.
+            jdbc.execute(inverseOf("V13__adjustment_proposals"));
             jdbc.execute(inverseOf("V12__escalation_reason"));
             jdbc.execute(inverseOf("V11__provider_reference_lookup"));
             jdbc.execute(inverseOf("V10__api_key_revocation"));
@@ -315,6 +323,7 @@ class MigrationRollbackIT {
             assertThat(schemaObjects(jdbc)).contains("payment_provider_base_url_is_final",
                     "nkap_payment_provider_base_url_is_final");
 
+            jdbc.execute(inverseOf("V13__adjustment_proposals"));
             jdbc.execute(inverseOf("V12__escalation_reason"));
             jdbc.execute(inverseOf("V11__provider_reference_lookup"));
             jdbc.execute(inverseOf("V10__api_key_revocation"));
@@ -323,7 +332,7 @@ class MigrationRollbackIT {
             assertThat(schemaObjects(jdbc)).isEqualTo(afterV8);
             assertThat(columnsOf(jdbc, "payment")).isEqualTo(paymentColumnsAfterV8);
 
-            // V9 to V12 forward again — every inverse removed its own history row.
+            // V9 to V13 forward again — every inverse removed its own history row.
             migrate(postgres);
             assertThat(columnsOf(jdbc, "payment")).contains("provider_base_url");
         }
@@ -344,6 +353,7 @@ class MigrationRollbackIT {
             migrate(postgres);
             assertThat(columnsOf(jdbc, "api_key")).contains("revoked_at");
 
+            jdbc.execute(inverseOf("V13__adjustment_proposals"));
             jdbc.execute(inverseOf("V12__escalation_reason"));
             jdbc.execute(inverseOf("V11__provider_reference_lookup"));
             jdbc.execute(inverseOf("V10__api_key_revocation"));
@@ -351,7 +361,7 @@ class MigrationRollbackIT {
             assertThat(schemaObjects(jdbc)).isEqualTo(afterV9);
             assertThat(columnsOf(jdbc, "api_key")).isEqualTo(apiKeyColumnsAfterV9);
 
-            // V10 to V12 forward again — every inverse removed its own history row.
+            // V10 to V13 forward again — every inverse removed its own history row.
             migrate(postgres);
             assertThat(columnsOf(jdbc, "api_key")).contains("revoked_at");
         }
@@ -371,13 +381,14 @@ class MigrationRollbackIT {
             migrate(postgres);
             assertThat(indexesOf(jdbc, "payment")).contains("payment_provider_reference_idx");
 
+            jdbc.execute(inverseOf("V13__adjustment_proposals"));
             jdbc.execute(inverseOf("V12__escalation_reason"));
             jdbc.execute(inverseOf("V11__provider_reference_lookup"));
 
             assertThat(schemaObjects(jdbc)).isEqualTo(afterV10);
             assertThat(indexesOf(jdbc, "payment")).doesNotContain("payment_provider_reference_idx");
 
-            // V11 and V12 forward again — both inverses removed their history rows.
+            // V11 to V13 forward again — every inverse removed their history rows.
             migrate(postgres);
             assertThat(indexesOf(jdbc, "payment")).contains("payment_provider_reference_idx");
         }
@@ -398,14 +409,40 @@ class MigrationRollbackIT {
             migrate(postgres);
             assertThat(columnsOf(jdbc, "payment")).contains("escalation_reason");
 
+            jdbc.execute(inverseOf("V13__adjustment_proposals"));
             jdbc.execute(inverseOf("V12__escalation_reason"));
 
             assertThat(schemaObjects(jdbc)).isEqualTo(afterV11);
             assertThat(columnsOf(jdbc, "payment")).isEqualTo(paymentColumnsAfterV11);
 
-            // V12 forward again — the inverse removed its history row.
+            // V12 and V13 forward again — both inverses removed their history rows.
             migrate(postgres);
             assertThat(columnsOf(jdbc, "payment")).contains("escalation_reason");
+        }
+    }
+
+    @Test
+    @DisplayName("the inverse of V13 drops exactly the adjustment tables, leaving the V12 schema intact")
+    void the_inverse_of_v13_returns_the_schema_to_v12() throws IOException {
+        try (PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>(PostgresDatabase.IMAGE)) {
+            postgres.start();
+            JdbcTemplate jdbc = jdbcFor(postgres);
+
+            migrateTo(postgres, "12");
+            Set<String> afterV12 = schemaObjects(jdbc);
+            assertThat(userTables(jdbc)).doesNotContain("adjustment_proposal", "adjustment_decision");
+
+            migrate(postgres);
+            assertThat(userTables(jdbc)).contains("adjustment_proposal", "adjustment_decision");
+
+            jdbc.execute(inverseOf("V13__adjustment_proposals"));
+
+            assertThat(schemaObjects(jdbc)).isEqualTo(afterV12);
+            assertThat(userTables(jdbc)).doesNotContain("adjustment_proposal", "adjustment_decision");
+
+            // V13 forward again — the inverse removed its history row.
+            migrate(postgres);
+            assertThat(userTables(jdbc)).contains("adjustment_proposal", "adjustment_decision");
         }
     }
 

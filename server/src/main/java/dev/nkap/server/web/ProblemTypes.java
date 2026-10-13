@@ -124,6 +124,48 @@ public final class ProblemTypes {
      */
     public static final URI REFUND_EXCEEDS_REMAINING = URI.create(BASE + "refund-exceeds-remaining");
 
+    /**
+     * Any of the five {@code /adjustments} routes was called while {@code nkap.adjustments.enabled}
+     * is {@code false}, which is its default. A {@code 501}, for the reason
+     * {@link #FEATURE_NOT_OFFERED} gives: the same request will be refused until the deployment
+     * changes. Not that type, because the cause is another one. {@code FEATURE_NOT_OFFERED} says
+     * the provider's adapter does not declare an operation (ADR 0013); this says the operator
+     * switched the feature off. A client can tell the two apart, and each has its own remedy.
+     * Not a {@code 404}: the route exists.
+     */
+    public static final URI ADJUSTMENT_NOT_ENABLED = URI.create(BASE + "adjustment-not-enabled");
+
+    /** No adjustment exists for the id in the path, or none this key may see. */
+    public static final URI ADJUSTMENT_NOT_FOUND = URI.create(BASE + "adjustment-not-found");
+
+    /** A proposal's postings do not sum to zero. The database refuses it too; this gives the readable error. */
+    public static final URI ADJUSTMENT_UNBALANCED = URI.create(BASE + "adjustment-unbalanced");
+
+    /**
+     * A proposal named an account other than a suspense, fee or provider-float account, or one of
+     * those in another currency than the posting's. In particular a merchant's payable account,
+     * which no adjustment may touch.
+     */
+    public static final URI ADJUSTMENT_ACCOUNT_NOT_ALLOWED = URI.create(BASE + "adjustment-account-not-allowed");
+
+    /** A proposal moves more than {@code nkap.adjustments.max-amount-minor}. */
+    public static final URI ADJUSTMENT_OVER_CEILING = URI.create(BASE + "adjustment-over-ceiling");
+
+    /** A proposal cites evidence it does not carry, or cites none. */
+    public static final URI ADJUSTMENT_EVIDENCE_MISSING = URI.create(BASE + "adjustment-evidence-missing");
+
+    /** A proposal's postings are not all in one currency, or not in the payment's. */
+    public static final URI ADJUSTMENT_CURRENCY_MISMATCH = URI.create(BASE + "adjustment-currency-mismatch");
+
+    /**
+     * The key that proposed an adjustment tried to decide it, approving or rejecting. The
+     * separation of duties rests on key identity (ADR 0017); a second key is needed.
+     */
+    public static final URI ADJUSTMENT_SELF_APPROVAL = URI.create(BASE + "adjustment-self-approval");
+
+    /** The proposal already has a decision, or its ledger entry is already recorded. A {@code 409}. */
+    public static final URI ADJUSTMENT_ALREADY_DECIDED = URI.create(BASE + "adjustment-already-decided");
+
     private ProblemTypes() {
     }
 }

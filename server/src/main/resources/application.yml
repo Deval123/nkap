@@ -159,6 +159,16 @@ nkap:
     # Set true only for a local demo or a test with no TLS in front of it; a real
     # deployment never sets this.
     allow-insecure-endpoint-url: false
+  adjustments:
+    # Proposed adjustments, approved by a second key (ADR 0017, issue #266). Off unless this is
+    # true: while it is false all five /adjustments routes answer 501 adjustment-not-enabled.
+    # It writes ledger entries a person proposed, so it is not on until an operator decides it
+    # should be.
+    enabled: false
+    # The most one proposal may move, as the sum of its debits, in minor units. One number
+    # across currencies: in a currency with two decimals it is a hundredth of what it is in
+    # XAF or XOF. Conservative on purpose; raise it when a real adjustment is refused.
+    max-amount-minor: 100000
   # The host this deployment is reachable at from the internet, so MTN's own callback (issue
   # #116) has somewhere real to reach. Nkap composes the rest itself: <public-base-url>
   # /callbacks/<providerId>, the path docs/openapi.yaml defines, so a deployment only ever

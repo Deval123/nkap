@@ -115,6 +115,8 @@ half of `cannot_query`, for the same reason.
   to this reason: a `window_exhausted` payment has it too. Closing it would mean clearing
   `escalated_at`, which changes what escalation means. It needs its own decision and is not
   made here.
+  ADR 0017 pays the other half of this cost, the ledger: a human can now propose a balanced
+  adjustment and a second key approve it. It still does not un-escalate the payment.
 - **Rows escalated before V12 have no stored reason.** The endpoint keeps deriving one for them,
   as it always did. That derivation reports `cannot_query` only for a payment with
   `reconcile_attempts` at 0. Every escalation follows a claim, and every claim counts toward

@@ -806,7 +806,7 @@ class OpenApiSpecIT extends PostgresSpringBootIT {
     private static String adjustmentBody(String paymentReference, long creditSide) {
         return """
             {"paymentReference":"%s","hypothesis":"unrecorded_fee",
-             "postings":[{"account":"fees:platform:EUR","amountMinor":150,"currency":"EUR"},
+             "postings":[{"account":"fees:mtn-sandbox:EUR","amountMinor":150,"currency":"EUR"},
                          {"account":"provider:mtn-sandbox:float:EUR","amountMinor":%d,"currency":"EUR"}],
              "evidence":{"statement-line":"line 42: fee 150"},"cites":["statement-line"],
              "explanation":"The operator charged a fee the ledger never recorded."}"""
@@ -919,7 +919,7 @@ class OpenApiSpecIT extends PostgresSpringBootIT {
         // ceiling of this context is 100000 minor units, and this one moves 1000000.
         UUID id = UUID.randomUUID();
         adjustmentStore.insertProposal(id, UUID.fromString(paymentReference()), Hypothesis.UNRECORDED_FEE,
-                List.of(new AdjustmentPosting("fees:platform:EUR", 1_000_000, "EUR"),
+                List.of(new AdjustmentPosting("fees:mtn-sandbox:EUR", 1_000_000, "EUR"),
                         new AdjustmentPosting("provider:mtn-sandbox:float:EUR", -1_000_000, "EUR")),
                 Map.of("k", "v"), List.of("k"), "A large fee.", merchantKeyId, Instant.now());
 

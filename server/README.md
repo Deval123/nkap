@@ -154,7 +154,7 @@ curl -s -X POST http://localhost:8080/adjustments -H "Authorization: Bearer $PRO
     "paymentReference": "<escalated payment reference>",
     "hypothesis": "unrecorded_fee",
     "postings": [
-      {"account": "fees:platform:XAF", "amountMinor": 150, "currency": "XAF"},
+      {"account": "fees:mtn-cm:XAF", "amountMinor": 150, "currency": "XAF"},
       {"account": "provider:mtn-cm:float:XAF", "amountMinor": -150, "currency": "XAF"}],
     "evidence": {"statement-line": "line 42: fee 150"},
     "cites": ["statement-line"],
@@ -164,7 +164,7 @@ curl -s -X POST http://localhost:8080/adjustments -H "Authorization: Bearer $PRO
 curl -s -X POST http://localhost:8080/adjustments/<id>/approve -H "Authorization: Bearer $APPROVER_KEY"
 ```
 
-A proposal may name only suspense, fee and provider-float accounts, never a merchant's payable;
+A proposal may name only the payment's own provider's suspense, fee and provider-float accounts, never a merchant's payable;
 it must balance, stay in the payment's currency, stay under the ceiling and cite evidence it
 carries. One that fails is refused with its own problem type and **not stored**. See
 `docs/openapi.yaml` for every status.

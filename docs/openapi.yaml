@@ -610,8 +610,9 @@ paths:
 
         **What a proposal may say.** `postings` are signed minor-unit amounts, debit positive
         and credit negative, in one currency — the payment's — summing to zero. They may name
-        only `suspense:<provider>:<CUR>`, `fees:<bucket>:<CUR>` and
-        `provider:<provider>:float:<CUR>` accounts, never a merchant's payable. The debits may
+        only `suspense:<provider>:<CUR>`, `fees:<provider>:<CUR>` and
+        `provider:<provider>:float:<CUR>` accounts of **the payment's own provider**, never a
+        merchant's payable and never another provider's. The debits may
         not total more than `nkap.adjustments.max-amount-minor`. `cites` names the `evidence`
         entries the proposal relies on, and each must be present with a value. A proposal that
         fails any of this is refused and **not stored**.
@@ -1161,7 +1162,7 @@ components:
       properties:
         account:
           type: string
-          description: "`suspense:<provider>:<CUR>`, `fees:<bucket>:<CUR>` or `provider:<provider>:float:<CUR>`. Never a merchant's payable."
+          description: "`suspense:<provider>:<CUR>`, `fees:<provider>:<CUR>` or `provider:<provider>:float:<CUR>`, where `<provider>` is the payment's own. Never a merchant's payable."
         amountMinor:
           type: integer
           format: int64

@@ -83,15 +83,20 @@ class AdjustmentPersistenceIT {
     /** A merchant, two keys of it, and a payment of its own, so tests never share a ledger account's history by accident. */
     private record Scene(String merchant, ApiCredential first, ApiCredential second, Payment payment) {
         String provider() {
-            return "p" + merchant.substring(merchant.length() - 8);
+            return providerFor(merchant);
         }
+    }
+
+    /** Each scene has a provider of its own, so no test's balances include another's. */
+    private static String providerFor(String merchant) {
+        return "p" + merchant.substring(merchant.length() - 8);
     }
 
     private static Scene scene() {
         String merchant = "acme-" + UUID.randomUUID().toString().substring(0, 8);
         ApiCredential first = keys.provision(merchant, false, "AdjustmentPersistenceIT").credential();
         ApiCredential second = keys.provision(merchant, false, "AdjustmentPersistenceIT").credential();
-        Payment payment = Payment.create(ReferenceId.newReference(), ProviderId.of("mtn-cm"), merchant,
+        Payment payment = Payment.create(ReferenceId.newReference(), ProviderId.of(providerFor(merchant)), merchant,
                 new PaymentIntent(Capability.Operation.COLLECT, Money.of(5_000, Currency.XAF), "237670000000",
                         "", "", Map.of()));
         payments.save(payment);

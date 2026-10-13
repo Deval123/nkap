@@ -81,7 +81,7 @@ class AdjustmentServiceTest {
 
     private NewAdjustment validProposal() {
         return proposal(List.of(
-                posting("fees:platform:XAF", 150),
+                posting("fees:mtn-cm:XAF", 150),
                 posting("provider:mtn-cm:float:XAF", -150)));
     }
 
@@ -101,7 +101,7 @@ class AdjustmentServiceTest {
     @DisplayName("an unbalanced proposal is refused with a readable error and stored nowhere")
     void an_unbalanced_proposal_is_refused_and_not_stored() {
         ApiException refusal = refused(() -> service.propose(proposer, proposal(List.of(
-                posting("fees:platform:XAF", 150), posting("provider:mtn-cm:float:XAF", -100)))));
+                posting("fees:mtn-cm:XAF", 150), posting("provider:mtn-cm:float:XAF", -100)))));
 
         assertRefusedWith(refusal, ProblemTypes.ADJUSTMENT_UNBALANCED, HttpStatus.BAD_REQUEST);
         assertThat(refusal.getMessage()).contains("sum to 50");
@@ -124,7 +124,7 @@ class AdjustmentServiceTest {
     @DisplayName("a proposal naming an account that is not suspense, fees or provider float is refused")
     void an_account_outside_suspense_fees_and_float_is_refused() {
         for (String account : List.of("equity:owner:XAF", "provider:mtn-cm:fx:XAF", "suspense:mtn-cm:XAF:extra",
-                "fees:platform:XOF", "merchant:acme:payable:XAF")) {
+                "fees:mtn-cm:XOF", "merchant:acme:payable:XAF")) {
             ApiException refusal = refused(() -> service.propose(proposer, proposal(List.of(
                     posting(account, 150), posting("provider:mtn-cm:float:XAF", -150)))));
 
@@ -136,11 +136,24 @@ class AdjustmentServiceTest {
     }
 
     @Test
+    @DisplayName("an account named after a provider that is not the payment's is refused, invented or real")
+    void an_account_of_another_provider_is_refused() {
+        for (String account : List.of("suspense:invented:XAF", "fees:invented:XAF", "provider:invented:float:XAF",
+                "provider:mtn-ke:float:XAF", "fees:platform:XAF")) {
+            ApiException refusal = refused(() -> service.propose(proposer, proposal(List.of(
+                    posting(account, 150), posting("provider:mtn-cm:float:XAF", -150)))));
+
+            assertRefusedWith(refusal, ProblemTypes.ADJUSTMENT_ACCOUNT_NOT_ALLOWED, HttpStatus.BAD_REQUEST);
+        }
+        assertThat(store.list(java.util.Optional.empty())).isEmpty();
+    }
+
+    @Test
     @DisplayName("suspense, fees and provider float, each in the posting's currency, are accepted")
     void the_three_allowed_kinds_are_accepted() {
         Adjustment stored = service.propose(proposer, proposal(List.of(
                 posting("suspense:mtn-cm:XAF", 300),
-                posting("fees:platform:XAF", -100),
+                posting("fees:mtn-cm:XAF", -100),
                 posting("provider:mtn-cm:float:XAF", -200))));
 
         assertThat(stored.decision()).isEmpty();
@@ -156,7 +169,7 @@ class AdjustmentServiceTest {
 
         assertThat(tight.propose(proposer, validProposal()).id()).isNotNull();
         ApiException refusal = refused(() -> tight.propose(proposer, proposal(List.of(
-                posting("fees:platform:XAF", 151), posting("provider:mtn-cm:float:XAF", -151)))));
+                posting("fees:mtn-cm:XAF", 151), posting("provider:mtn-cm:float:XAF", -151)))));
 
         assertRefusedWith(refusal, ProblemTypes.ADJUSTMENT_OVER_CEILING, HttpStatus.BAD_REQUEST);
     }
@@ -238,7 +251,7 @@ class AdjustmentServiceTest {
     @DisplayName("a proposal in a currency other than the payment's is refused")
     void a_currency_other_than_the_payments_is_refused() {
         ApiException refusal = refused(() -> service.propose(proposer, proposal(List.of(
-                new AdjustmentPosting("fees:platform:XOF", 150, "XOF"),
+                new AdjustmentPosting("fees:mtn-cm:XOF", 150, "XOF"),
                 new AdjustmentPosting("provider:mtn-cm:float:XOF", -150, "XOF")))));
 
         assertRefusedWith(refusal, ProblemTypes.ADJUSTMENT_CURRENCY_MISMATCH, HttpStatus.BAD_REQUEST);
@@ -248,7 +261,7 @@ class AdjustmentServiceTest {
     @DisplayName("a proposal mixing two currencies is refused, even when one of them is the payment's")
     void two_currencies_in_one_proposal_are_refused() {
         ApiException refusal = refused(() -> service.propose(proposer, proposal(List.of(
-                posting("fees:platform:XAF", 150),
+                posting("fees:mtn-cm:XAF", 150),
                 new AdjustmentPosting("provider:mtn-cm:float:XOF", -150, "XOF")))));
 
         assertRefusedWith(refusal, ProblemTypes.ADJUSTMENT_CURRENCY_MISMATCH, HttpStatus.BAD_REQUEST);
@@ -291,7 +304,7 @@ class AdjustmentServiceTest {
         assertThat(entry.occurredAt()).isEqualTo(NOW);
         assertThat(entry.reference()).isEqualTo(payment.reference().toString());
         assertThat(entry.currency()).isEqualTo(Currency.XAF);
-        assertThat(ledger.balance(AccountId.fees("platform", Currency.XAF), Currency.XAF))
+        assertThat(ledger.balance(AccountId.fees("mtn-cm", Currency.XAF), Currency.XAF))
                 .isEqualTo(Money.of(150, Currency.XAF));
     }
 

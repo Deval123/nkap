@@ -40,7 +40,9 @@ operator said. This is a third, and it is the first whose postings come from a p
 
 4. **Seven checks stand between a proposal and the ledger:** the postings balance (the deferred
    constraint trigger is the guarantee, the Java check only gives a readable error); only
-   suspense, fee and provider-float accounts are named, never a merchant's payable; the amount
+   only the payment's own provider's suspense, fee and provider-float accounts are named (the
+   provider comes from the payment, never from the account string the caller wrote, so a proposal
+   cannot mint an account this deployment never configured), never a merchant's payable; the amount
    is under a configured ceiling; the deciding key is not the proposing key; every value the
    proposal cites is present in its evidence; one currency, the payment's; and the whole feature
    is off unless configuration turns it on.
@@ -85,8 +87,10 @@ it may not name, an amount over the ceiling, a citation with nothing behind it, 
 is not the payment's) is answered with its problem type and writes no row. The row would be
 data that a later approval could act on. A refusal at decision time, such as a ceiling lowered
 since the proposal was made, is recorded as a rejection with its reason. A self-approval is
-refused and not recorded: recording it would use up the proposal's one decision and let a
-proposer lock out every other key.
+refused and not recorded. A decision is final: the unique constraint allows one per proposal and
+the table is append-only, so nothing can take it back. Recording the refusal would therefore
+spend that one decision, and a proposer could lock every other key out of the proposal by
+approving it themselves, with no way to undo it.
 
 **The ceiling is a number, not a judgement.** It bounds a single proposal and does not bound how
 many are made. A run of small proposals approved one by one is limited only by the approver.

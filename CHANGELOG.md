@@ -12,7 +12,8 @@ All notable changes to Nkap are documented here. The format follows
   escalated payment used to be a dead end for the ledger: nothing let a person put it right
   except SQL. `POST /adjustments` records a proposal, and `POST /adjustments/{id}/approve`,
   with a **different** API key, makes the server write the ledger entry; `.../reject` writes
-  nothing. A proposal may name only suspense, fee and provider-float accounts, never a
+  nothing. A proposal may name only the payment's own provider's suspense, fee and provider-float
+  accounts, never a
   merchant's payable; it must balance, stay in the payment's currency, stay under a ceiling
   and cite evidence it carries. **Off by default**: until `nkap.adjustments.enabled` is
   `true`, all five routes answer `501 adjustment-not-enabled`. The separation of duties rests

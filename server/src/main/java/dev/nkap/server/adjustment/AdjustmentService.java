@@ -36,8 +36,10 @@ import org.springframework.transaction.support.TransactionTemplate;
  * <ol>
  *   <li><b>Balance.</b> Checked here for a readable error, and by the deferred constraint
  *       trigger of V1 whatever this class does. That trigger is the guarantee.</li>
- *   <li><b>Allowed accounts.</b> Suspense, fees and provider float, in the posting's currency.
- *       Never a merchant's payable.</li>
+ *   <li><b>Allowed accounts.</b> Suspense, fees and provider float, in the posting's currency,
+ *       and of the payment's own provider: the name in the account is never the caller's to
+ *       choose, so a proposal cannot mint an account this deployment never configured. Never a
+ *       merchant's payable.</li>
  *   <li><b>Ceiling.</b> The sum of the debits, against {@link AdjustmentPolicy#maxAmountMinor()}.</li>
  *   <li><b>No self-decision.</b> The deciding {@code keyId} differs from the proposing one.</li>
  *   <li><b>Evidence.</b> Every cited entry is present in the evidence the proposal carries.</li>
@@ -95,7 +97,7 @@ public class AdjustmentService {
         }
         Payment payment = visiblePayment(caller, request.paymentReference());
 
-        validatePostings(request.postings(), currencyOf(payment));
+        validatePostings(request.postings(), payment);
         validateEvidence(request.evidence(), request.cites());
 
         UUID id = UUID.randomUUID();
@@ -118,7 +120,7 @@ public class AdjustmentService {
             Payment payment = payments.findByReference(ReferenceId.of(proposal.paymentReference()))
                     .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, ProblemTypes.PAYMENT_NOT_FOUND,
                             "No such payment", "No payment exists for reference " + proposal.paymentReference() + "."));
-            entry = entryFor(proposal, validatePostings(proposal.postings(), currencyOf(payment)));
+            entry = entryFor(proposal, validatePostings(proposal.postings(), payment));
         } catch (ApiException refusal) {
             recordRefusal(caller, proposal, refusal);
             throw refusal;
@@ -187,7 +189,8 @@ public class AdjustmentService {
     }
 
     /** Checks 6, 2, 1 and 3, in that order, and returns the postings as the ledger's own type. */
-    private List<Posting> validatePostings(List<AdjustmentPosting> proposed, Currency paymentCurrency) {
+    private List<Posting> validatePostings(List<AdjustmentPosting> proposed, Payment payment) {
+        Currency paymentCurrency = currencyOf(payment);
         if (proposed == null || proposed.size() < 2) {
             throw invalid("an adjustment needs at least two postings: a movement always has two sides");
         }
@@ -202,7 +205,7 @@ public class AdjustmentService {
                         "A posting is in " + currency + " and the payment is in " + paymentCurrency + ".");
             }
             AccountId account = parseAccount(posting.account());
-            requireAllowed(account, currency);
+            requireAllowed(account, payment.provider().toString(), currency);
             if (posting.amountMinor() == 0L) {
                 throw invalid("a posting to " + account + " has a zero amount: it records nothing");
             }
@@ -230,26 +233,24 @@ public class AdjustmentService {
     }
 
     /**
-     * Suspense, fees and provider float, built through {@link AccountId}'s own factories so that
-     * the answer is "equal to what the factory makes" rather than a prefix test a crafted
-     * segment could slip past. A merchant's payable is none of the three.
+     * Suspense, fees and provider float of the payment's own provider, built through
+     * {@link AccountId}'s own factories so that the answer is "equal to what the factory makes"
+     * rather than a prefix test a crafted segment could slip past. The provider is the
+     * payment's, not read out of the account string: a caller cannot name one this deployment
+     * never configured, which would show up in balances and could mask a drift. The fee account
+     * is named after the provider, as statement reconciliation names it. A merchant's payable is
+     * none of the three.
      */
-    private static void requireAllowed(AccountId account, Currency currency) {
-        String[] segments = account.value().split(":");
-        if (segments.length >= 2) {
-            String name = segments[1];
-            Set<AccountId> allowed = Set.of(
-                    AccountId.suspense(name, currency), AccountId.fees(name, currency),
-                    AccountId.providerFloat(name, currency));
-            if (allowed.contains(account)) {
-                return;
-            }
+    private static void requireAllowed(AccountId account, String provider, Currency currency) {
+        Set<AccountId> allowed = Set.of(
+                AccountId.suspense(provider, currency), AccountId.fees(provider, currency),
+                AccountId.providerFloat(provider, currency));
+        if (!allowed.contains(account)) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, ProblemTypes.ADJUSTMENT_ACCOUNT_NOT_ALLOWED,
+                    "An adjustment may only touch the payment's provider's suspense, fee and float accounts",
+                    "Account " + account + " is not one of " + allowed.stream().map(AccountId::value).sorted().toList()
+                            + ". A merchant's payable account is never allowed, and neither is another provider's.");
         }
-        throw new ApiException(HttpStatus.BAD_REQUEST, ProblemTypes.ADJUSTMENT_ACCOUNT_NOT_ALLOWED,
-                "An adjustment may only touch suspense, fee and provider-float accounts",
-                "Account " + account + " is not one of suspense:<provider>:" + currency + ", fees:<bucket>:"
-                        + currency + " or provider:<provider>:float:" + currency
-                        + ". A merchant's payable account is never allowed.");
     }
 
     private static void validateEvidence(Map<String, String> evidence, List<String> cites) {

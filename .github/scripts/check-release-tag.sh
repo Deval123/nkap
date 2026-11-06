@@ -29,6 +29,10 @@ set -euo pipefail
 #   2. CHANGELOG.md has a heading that starts "## [<version>]" -- the repository writes
 #      "## [2.2.0] - 2026-11-06", and an "## [Unreleased]" heading is not one.
 #
+# What it deliberately does not check: that the tagged commit is on main, the
+# `git merge-base --is-ancestor` check in CONTRIBUTING.md step 3. A tag push cannot cheaply
+# know what main looked like at the moment it was pushed, so that one stays the maintainer's.
+#
 # Output: one line on stdout and exit 0 when every check that applies passes. Otherwise one
 # line per failure on stderr, each saying what was found against what was expected, and
 # exit 1. Every failure is reported, not only the first.

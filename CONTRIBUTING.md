@@ -156,7 +156,8 @@ passes, in exactly this order:
    `git show v<version>:pom.xml | grep -m1 '<version>'` must print the released version, not
    `-SNAPSHOT`, and `git show v<version>:CHANGELOG.md | grep -m1 '^## \['` its dated heading.
    The release workflow now refuses a tag whose POM version or changelog heading does not
-   match it, so this check is no longer the only thing between a mistyped tag and a publish.
+   match it, so those two checks are no longer the only thing between a mistyped tag and a
+   publish; it does not check that the commit is on `main`, which stays yours to verify.
    Push the tag the same day the release commit merges: the download URL it moved,
    `raw.githubusercontent.com/deval123/nkap/v<version>/...`, 404s until the tag exists —
    minutes apart if the two are done together, a day if the tag waits.

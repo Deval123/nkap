@@ -76,6 +76,18 @@ jobs:
       - uses: actions/checkout@v5
       - run: ./.github/scripts/compute-release-tags.test.sh
 
+  # The guard release.yml's first job runs, .github/scripts/check-release-tag.sh (issue
+  # #270), refuses a v* tag whose commit does not carry the same POM version and changelog
+  # heading -- the way 2.2.0 was published from a tree still reading 2.2.0-SNAPSHOT. It only
+  # ever runs on a real tag push, so like `release-tags` above this is the test that
+  # exercises it on every push and pull request instead: no tag, no registry, no Docker,
+  # just the script's own rule asserted against small checkouts.
+  release-tag-guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - run: ./.github/scripts/check-release-tag.test.sh
+
   # ADR 0012 and CONTRIBUTING.md's License section both say every commit is certified by the
   # DCO ("git commit -s") -- a rule written down in two places and, until now, checked in
   # neither: one of the four outside contributions merged so far carries no Signed-off-by

@@ -155,11 +155,14 @@ passes, in exactly this order:
    `on main` (otherwise it prints nothing). Before pushing the tag, check what it points at:
    `git show v<version>:pom.xml | grep -m1 '<version>'` must print the released version, not
    `-SNAPSHOT`, and `git show v<version>:CHANGELOG.md | grep -m1 '^## \['` its dated heading.
+   The release workflow now refuses a tag whose POM version or changelog heading does not
+   match it, so this check is no longer the only thing between a mistyped tag and a publish.
    Push the tag the same day the release commit merges: the download URL it moved,
    `raw.githubusercontent.com/deval123/nkap/v<version>/...`, 404s until the tag exists —
    minutes apart if the two are done together, a day if the tag waits.
 4. **The workflow runs itself.** Pushing the tag triggers `.github/workflows/release.yml`
-   with nobody doing anything: the full reactor build, then the images published, then
+   with nobody doing anything: a first check that the tag matches the commit it tags, the
+   full reactor build, then the images published, then
    pulled back down with no credentials and run through the demo to prove the publish
    actually works. See below for exactly what it does, including the one manual step
    inside it.
@@ -180,7 +183,9 @@ passes, in exactly this order:
   it is a test-scope dependency, so breaking it fails a contributor's build loudly, before
   anything runs, and never makes an adapter misbehave where money moves. A minor release
   may break it, and its release note must say so.
-- Step 4, in full: the workflow runs the full reactor build, then publishes
+- Step 4, in full: the workflow first refuses a tag whose POM version or changelog heading
+  does not match it (`.github/scripts/check-release-tag.sh`, which says why a pre-release tag
+  needs only the POM), runs the full reactor build, then publishes
   `ghcr.io/deval123/nkap-gateway`, `ghcr.io/deval123/nkap-simulator` and
   `ghcr.io/deval123/nkap-simulator-mpesa` for `linux/amd64` and `linux/arm64`, tagged
   `X.Y.Z` and the moving `latest` — never on a push to `main`, and never a rolling `X.Y` or

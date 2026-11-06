@@ -34,10 +34,32 @@ env:
   SIMULATOR_MPESA_IMAGE: ghcr.io/deval123/nkap-simulator-mpesa
 
 jobs:
+  # Refuses a tag whose commit does not carry the same POM version and changelog heading, in
+  # seconds and before the reactor build: 2.1.0 and 2.2.0 were both tagged at a commit that was
+  # not the release commit, and 2.2.0 published 2.2.0 and latest from a tree reading
+  # 2.2.0-SNAPSHOT (issue #270). Tag pushes only: a workflow_dispatch run has no tag, so this
+  # job is skipped there, which is why `test` below does not wait on it with a plain `needs`.
+  # The rule, and why a pre-release tag needs no changelog heading, are in the script.
+  check-tag:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - env:
+          REF_NAME: ${{ github.ref_name }}
+        run: .github/scripts/check-release-tag.sh
+
   # The conformance kit and the full reactor are what CONTRIBUTING.md says a release may be
   # cut from ("only when the conformance kit passes"); this job makes that a check rather
   # than a promise, in case a tag is ever pushed at a commit build.yml never ran against.
+  #
+  # `needs: check-tag` with this condition, not the default: a job that needs a skipped job is
+  # skipped too, and check-tag is skipped on every workflow_dispatch run. `!failure()` lets a
+  # skipped guard through and still stops on a failed one, and so does everything after it,
+  # since `publish` needs this job.
   test:
+    needs: check-tag
+    if: ${{ !cancelled() && !failure() }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5

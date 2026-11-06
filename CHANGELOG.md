@@ -30,6 +30,15 @@ All notable changes to Nkap are documented here. The format follows
   `window_exhausted`. It is now `FAILED` at once, for the reason `1037` already is: the
   operator answered. The simulator plays `1032` too, as `CANCELLED_BY_USER`. Observed against
   Safaricom's sandbox on 2026-10-02.
+- **`ResultCode 0` is no longer modelled: a successful M-Pesa payment has been observed.** On
+  2026-10-02 a one-shilling STK Push went from this project's Daraja sandbox account to a real
+  Safaricom line in Kenya, and the payer approved it: the status query answered `ResultCode 0`
+  seventeen seconds after submission (`ws_CO_021020261810465181954437`), and the payer's own
+  M-Pesa receipt confirmed the debit, at a transaction cost of zero. No behaviour changes —
+  `0` was already mapped to `SUCCEEDED` — but every comment and page that called that mapping
+  "modelled, never observed" now says observed, with its date. The run was made by hand and
+  not through the adapter, and no successful callback was received: `MpesaAdapter.resolves()`
+  is still `CALLBACK` alone, and what a success callback carries remains unobserved.
 
 ## [2.1.0] - 2026-09-27
 

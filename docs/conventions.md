@@ -56,20 +56,31 @@ released from.
 
 ## The four rules that do not bend
 
-These are enforced by tests, and a change that breaks one of them is a bug in the change,
-not in the test.
+A change that breaks one of these is a bug in the change, not in the check. Each is checked,
+but not to the same depth, and the sentence below each rule says how far. The page
+[`rules-and-their-instruments.md`](rules-and-their-instruments.md) has the detail and names what
+nothing checks.
 
 1. **The ledger is append-only.** No `UPDATE`, no `DELETE` on entries. A mistake is
    corrected by a reversing entry, so the original stays in the record.
+   *Checked:* the database refuses an `UPDATE` or a `DELETE` on the ledger tables, and an
+   integration test attempts both.
 2. **A timeout is never a failure.** No code path may conclude that a payment failed
    without an explicit statement from the operator. A missing, unreadable or unrecognised
    response maps to `UNKNOWN`, which is not terminal.
+   *Checked in part:* tests cover the payment state machine in `core` and every adapter's
+   mapping, through the conformance kit. A new code path elsewhere is covered only if a test
+   happens to exercise it.
 3. **`core` has no dependencies.** No Spring, no web, no JSON library, no ORM. If a change
    to `core` needs a dependency, the change belongs in another module. `provider-api`
    depends only on `core`.
+   *Checked:* the build fails if `core` gains any dependency that is not test scope, or
+   `provider-api` any but `core`.
 4. **Money is an integer count of minor units.** No `double`, no `float`, one currency per
    ledger entry, and no currency conversion outside a position account. XAF and XOF have
    zero minor units — code that assumes two decimals everywhere is wrong.
+   *Checked in part:* `Money` and the amount columns are tested, and so is every currency's
+   minor units. Nothing scans new code for a `double` or a `float`.
 
 ## Module boundaries
 

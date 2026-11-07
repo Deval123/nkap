@@ -18,12 +18,13 @@
 #     .github/scripts/check-trivy-ignore-expiry.sh refuses that, and an entry with no statement
 #     or a date that is today or past, naming it; image-scan.yml runs it before every scan, and
 #     check-trivy-ignore-expiry.test.sh, run by the `trivy-ignore-expiry` job in build.yml,
-#     asserts it. That job is not a required check yet.
+#     asserts it. Whether that job is a required check is a repository setting, not something
+#     this file can say; docs/rules-and-their-instruments.md records what it was read as, and when.
 #   - `purls` scopes the entry to the exact package and version, so a bump of that jar makes the
 #     finding visible again instead of staying quietly ignored.
 #
 # Renewing an entry means a pull request that changes the date AND says why, not a date edited
-# alone. The owner of the two entries below is #303.
+# alone. The owner of the entries below is #303.
 vulnerabilities:
   - id: CVE-2026-47884
     purls:

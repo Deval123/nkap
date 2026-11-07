@@ -33,7 +33,7 @@
 -->
 <suppressions xmlns="https://jeremylong.github.io/DependencyCheck/dependency-suppression.1.4.xsd">
 
-  <!-- spring-core: twelve findings at 7 or above. One entry each, because each is its own CVE with
+  <!-- spring-core: the findings at 7 or above. One entry each, because each is its own CVE with
        its own reason; the facts they share are repeated in every entry so each stands alone. -->
   <suppress until="2027-02-07Z">
     <notes><![CDATA[
@@ -48,8 +48,8 @@
     spring-webflux, spring-websocket, spring-messaging, reactor, Aalto, RSocket or Jetty.
     The scan matches the CPE spring_framework to every Spring jar at 6.2.19 and reports the
     finding on whichever it groups first: spring-core, then spring-tx, then spring-jcl, as
-    each was suppressed in turn. So each entry covers the ten Spring jars this project ships,
-    listed in its pattern, and not an eleventh that someone adds later. The code each CVE describes lives
+    each was suppressed in turn. So each entry covers the Spring jars this project ships,
+    listed in its pattern, and not one that someone adds later. The code each CVE describes lives
     in a module or a feature this project does not ship or does not use.
     Until 2027-02-07Z: re-evaluate at the next Spring Boot upgrade, or on this date if there is
     none. The entry is pinned to 6.2.19 of the Spring jars this project ships, so any Spring bump on the Boot 3.5 line
@@ -73,8 +73,8 @@
     spring-webflux, spring-websocket, spring-messaging, reactor, Aalto, RSocket or Jetty.
     The scan matches the CPE spring_framework to every Spring jar at 6.2.19 and reports the
     finding on whichever it groups first: spring-core, then spring-tx, then spring-jcl, as
-    each was suppressed in turn. So each entry covers the ten Spring jars this project ships,
-    listed in its pattern, and not an eleventh that someone adds later. The code each CVE describes lives
+    each was suppressed in turn. So each entry covers the Spring jars this project ships,
+    listed in its pattern, and not one that someone adds later. The code each CVE describes lives
     in a module or a feature this project does not ship or does not use.
     Until 2027-02-07Z: re-evaluate at the next Spring Boot upgrade, or on this date if there is
     none. The entry is pinned to 6.2.19 of the Spring jars this project ships, so any Spring bump on the Boot 3.5 line
@@ -98,8 +98,8 @@
     spring-webflux, spring-websocket, spring-messaging, reactor, Aalto, RSocket or Jetty.
     The scan matches the CPE spring_framework to every Spring jar at 6.2.19 and reports the
     finding on whichever it groups first: spring-core, then spring-tx, then spring-jcl, as
-    each was suppressed in turn. So each entry covers the ten Spring jars this project ships,
-    listed in its pattern, and not an eleventh that someone adds later. The code each CVE describes lives
+    each was suppressed in turn. So each entry covers the Spring jars this project ships,
+    listed in its pattern, and not one that someone adds later. The code each CVE describes lives
     in a module or a feature this project does not ship or does not use.
     Until 2027-02-07Z: re-evaluate at the next Spring Boot upgrade, or on this date if there is
     none. The entry is pinned to 6.2.19 of the Spring jars this project ships, so any Spring bump on the Boot 3.5 line
@@ -123,8 +123,8 @@
     spring-webflux, spring-websocket, spring-messaging, reactor, Aalto, RSocket or Jetty.
     The scan matches the CPE spring_framework to every Spring jar at 6.2.19 and reports the
     finding on whichever it groups first: spring-core, then spring-tx, then spring-jcl, as
-    each was suppressed in turn. So each entry covers the ten Spring jars this project ships,
-    listed in its pattern, and not an eleventh that someone adds later. The code each CVE describes lives
+    each was suppressed in turn. So each entry covers the Spring jars this project ships,
+    listed in its pattern, and not one that someone adds later. The code each CVE describes lives
     in a module or a feature this project does not ship or does not use.
     Until 2027-02-07Z: re-evaluate at the next Spring Boot upgrade, or on this date if there is
     none. The entry is pinned to 6.2.19 of the Spring jars this project ships, so any Spring bump on the Boot 3.5 line
@@ -148,8 +148,8 @@
     spring-webflux, spring-websocket, spring-messaging, reactor, Aalto, RSocket or Jetty.
     The scan matches the CPE spring_framework to every Spring jar at 6.2.19 and reports the
     finding on whichever it groups first: spring-core, then spring-tx, then spring-jcl, as
-    each was suppressed in turn. So each entry covers the ten Spring jars this project ships,
-    listed in its pattern, and not an eleventh that someone adds later. The code each CVE describes lives
+    each was suppressed in turn. So each entry covers the Spring jars this project ships,
+    listed in its pattern, and not one that someone adds later. The code each CVE describes lives
     in a module or a feature this project does not ship or does not use.
     Until 2027-02-07Z: re-evaluate at the next Spring Boot upgrade, or on this date if there is
     none. The entry is pinned to 6.2.19 of the Spring jars this project ships, so any Spring bump on the Boot 3.5 line
@@ -173,8 +173,8 @@
     spring-webflux, spring-websocket, spring-messaging, reactor, Aalto, RSocket or Jetty.
     The scan matches the CPE spring_framework to every Spring jar at 6.2.19 and reports the
     finding on whichever it groups first: spring-core, then spring-tx, then spring-jcl, as
-    each was suppressed in turn. So each entry covers the ten Spring jars this project ships,
-    listed in its pattern, and not an eleventh that someone adds later. The code each CVE describes lives
+    each was suppressed in turn. So each entry covers the Spring jars this project ships,
+    listed in its pattern, and not one that someone adds later. The code each CVE describes lives
     in a module or a feature this project does not ship or does not use.
     Until 2027-02-07Z: re-evaluate at the next Spring Boot upgrade, or on this date if there is
     none. The entry is pinned to 6.2.19 of the Spring jars this project ships, so any Spring bump on the Boot 3.5 line
@@ -198,8 +198,8 @@
     spring-webflux, spring-websocket, spring-messaging, reactor, Aalto, RSocket or Jetty.
     The scan matches the CPE spring_framework to every Spring jar at 6.2.19 and reports the
     finding on whichever it groups first: spring-core, then spring-tx, then spring-jcl, as
-    each was suppressed in turn. So each entry covers the ten Spring jars this project ships,
-    listed in its pattern, and not an eleventh that someone adds later. The code each CVE describes lives
+    each was suppressed in turn. So each entry covers the Spring jars this project ships,
+    listed in its pattern, and not one that someone adds later. The code each CVE describes lives
     in a module or a feature this project does not ship or does not use.
     Until 2027-02-07Z: re-evaluate at the next Spring Boot upgrade, or on this date if there is
     none. The entry is pinned to 6.2.19 of the Spring jars this project ships, so any Spring bump on the Boot 3.5 line
@@ -223,8 +223,8 @@
     spring-webflux, spring-websocket, spring-messaging, reactor, Aalto, RSocket or Jetty.
     The scan matches the CPE spring_framework to every Spring jar at 6.2.19 and reports the
     finding on whichever it groups first: spring-core, then spring-tx, then spring-jcl, as
-    each was suppressed in turn. So each entry covers the ten Spring jars this project ships,
-    listed in its pattern, and not an eleventh that someone adds later. The code each CVE describes lives
+    each was suppressed in turn. So each entry covers the Spring jars this project ships,
+    listed in its pattern, and not one that someone adds later. The code each CVE describes lives
     in a module or a feature this project does not ship or does not use.
     Until 2027-02-07Z: re-evaluate at the next Spring Boot upgrade, or on this date if there is
     none. The entry is pinned to 6.2.19 of the Spring jars this project ships, so any Spring bump on the Boot 3.5 line
@@ -248,8 +248,8 @@
     spring-webflux, spring-websocket, spring-messaging, reactor, Aalto, RSocket or Jetty.
     The scan matches the CPE spring_framework to every Spring jar at 6.2.19 and reports the
     finding on whichever it groups first: spring-core, then spring-tx, then spring-jcl, as
-    each was suppressed in turn. So each entry covers the ten Spring jars this project ships,
-    listed in its pattern, and not an eleventh that someone adds later. The code each CVE describes lives
+    each was suppressed in turn. So each entry covers the Spring jars this project ships,
+    listed in its pattern, and not one that someone adds later. The code each CVE describes lives
     in a module or a feature this project does not ship or does not use.
     Until 2027-02-07Z: re-evaluate at the next Spring Boot upgrade, or on this date if there is
     none. The entry is pinned to 6.2.19 of the Spring jars this project ships, so any Spring bump on the Boot 3.5 line
@@ -273,8 +273,8 @@
     spring-webflux, spring-websocket, spring-messaging, reactor, Aalto, RSocket or Jetty.
     The scan matches the CPE spring_framework to every Spring jar at 6.2.19 and reports the
     finding on whichever it groups first: spring-core, then spring-tx, then spring-jcl, as
-    each was suppressed in turn. So each entry covers the ten Spring jars this project ships,
-    listed in its pattern, and not an eleventh that someone adds later. The code each CVE describes lives
+    each was suppressed in turn. So each entry covers the Spring jars this project ships,
+    listed in its pattern, and not one that someone adds later. The code each CVE describes lives
     in a module or a feature this project does not ship or does not use.
     Until 2027-02-07Z: re-evaluate at the next Spring Boot upgrade, or on this date if there is
     none. The entry is pinned to 6.2.19 of the Spring jars this project ships, so any Spring bump on the Boot 3.5 line
@@ -298,8 +298,8 @@
     spring-webflux, spring-websocket, spring-messaging, reactor, Aalto, RSocket or Jetty.
     The scan matches the CPE spring_framework to every Spring jar at 6.2.19 and reports the
     finding on whichever it groups first: spring-core, then spring-tx, then spring-jcl, as
-    each was suppressed in turn. So each entry covers the ten Spring jars this project ships,
-    listed in its pattern, and not an eleventh that someone adds later. The code each CVE describes lives
+    each was suppressed in turn. So each entry covers the Spring jars this project ships,
+    listed in its pattern, and not one that someone adds later. The code each CVE describes lives
     in a module or a feature this project does not ship or does not use.
     Until 2027-02-07Z: re-evaluate at the next Spring Boot upgrade, or on this date if there is
     none. The entry is pinned to 6.2.19 of the Spring jars this project ships, so any Spring bump on the Boot 3.5 line
@@ -323,8 +323,8 @@
     spring-webflux, spring-websocket, spring-messaging, reactor, Aalto, RSocket or Jetty.
     The scan matches the CPE spring_framework to every Spring jar at 6.2.19 and reports the
     finding on whichever it groups first: spring-core, then spring-tx, then spring-jcl, as
-    each was suppressed in turn. So each entry covers the ten Spring jars this project ships,
-    listed in its pattern, and not an eleventh that someone adds later. The code each CVE describes lives
+    each was suppressed in turn. So each entry covers the Spring jars this project ships,
+    listed in its pattern, and not one that someone adds later. The code each CVE describes lives
     in a module or a feature this project does not ship or does not use.
     Until 2027-02-07Z: re-evaluate at the next Spring Boot upgrade, or on this date if there is
     none. The entry is pinned to 6.2.19 of the Spring jars this project ships, so any Spring bump on the Boot 3.5 line

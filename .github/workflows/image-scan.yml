@@ -54,10 +54,10 @@ name: image-scan
 # expiry is to be called out. Trivy's `.trivyignore.yaml` carries `expired_at` on each entry, so
 # the discipline the dependency scan's suppression file has can be written down in the scanner's
 # own format. Grype's ignore rules have no expiry, which would leave dates nobody enforces.
-# The ignore file is trivy-ignore.yaml (issue #301). It holds two entries, for two CRITICAL
-# findings in spring-webmvc 6.2.19 whose only named fix is Spring Framework 7. Each carries its
+# The ignore file is trivy-ignore.yaml (issue #301). It was written for CRITICAL findings in
+# spring-webmvc 6.2.19 whose only named fix is Spring Framework 7. Each entry carries its
 # reason in full, says plainly that it accepts a known finding with no available fix, names its
-# owner (#303, the Spring Boot 4 upgrade) and expires on 2027-02-07, like the twelve entries of
+# owner (#303, the Spring Boot 4 upgrade) and expires on the date it carries, like the entries of
 # dependency-check-suppressions.xml it matches. The scan runs once with --show-suppressed, so an
 # ignored finding is not dropped: it stays in the report, and the job summary names it and counts
 # it in a column of its own. A format that can express a date does not enforce it, so

@@ -79,7 +79,7 @@ jobs:
       - uses: actions/checkout@v5
       - run: ./.github/scripts/compute-release-tags.test.sh
 
-  # The guard release.yml's first job runs, .github/scripts/check-release-tag.sh (issues
+  # The guard release.yml's `check-tag` job runs, .github/scripts/check-release-tag.sh (issues
   # #270 and #277), refuses a v* tag that is lightweight, or whose commit does not carry the
   # same POM version and changelog heading -- the way 2.2.0 was published from a tree still
   # reading 2.2.0-SNAPSHOT. It only
@@ -172,9 +172,9 @@ jobs:
   # #301). .github/scripts/check-trivy-ignore-expiry.sh is the check, and image-scan.yml runs it on
   # the real file before every scan; this is its test, run on every push and pull request: no scan
   # and no network, just the rule asserted against small files, including each shape it must
-  # refuse. Like `image-scan-verdict`, it starts unconditionally and is not in the ruleset's
-  # required checks yet, so until the maintainer adds it in the repository settings it reports and
-  # blocks nothing.
+  # refuse. Like `image-scan-verdict`, it starts unconditionally. Whether it is a required check
+  # is a repository setting and not something this file can say; docs/rules-and-their-instruments.md
+  # records what it was read as, and when.
   trivy-ignore-expiry:
     runs-on: ubuntu-latest
     steps:

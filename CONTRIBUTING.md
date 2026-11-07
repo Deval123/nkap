@@ -29,7 +29,7 @@ If your change to `core` needs a dependency, the change belongs in another modul
 **Money is an integer.** Any pull request introducing `double`, `float`, or a currency
 conversion outside a position account will be declined with a link to this paragraph.
 
-These four are enforced by tests. [`docs/conventions.md`](docs/conventions.md) states them
+These four are checked, each to its own depth. [`docs/conventions.md`](docs/conventions.md) states them
 alongside the module boundaries, the branch, commit and pull request conventions, and the
 build commands — read it before opening a first pull request. Which of the rules in these
 two files something actually checks, and which rest on a person, is set out in

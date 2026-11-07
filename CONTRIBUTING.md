@@ -31,7 +31,9 @@ conversion outside a position account will be declined with a link to this parag
 
 These four are enforced by tests. [`docs/conventions.md`](docs/conventions.md) states them
 alongside the module boundaries, the branch, commit and pull request conventions, and the
-build commands — read it before opening a first pull request.
+build commands — read it before opening a first pull request. Which of the rules in these
+two files something actually checks, and which rest on a person, is set out in
+[`docs/rules-and-their-instruments.md`](docs/rules-and-their-instruments.md).
 
 ## Adding an operator
 

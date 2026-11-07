@@ -19,9 +19,10 @@
 #
 # Exit status: 0 when no image has a HIGH or CRITICAL finding with a fix available; 1 when one
 # has, and also when there is no answer for an image (a report that is missing, cannot be read
-# as JSON, names another image, or shows no operating system or no Java archive). The two kinds
-# of 1 are told apart by what is printed: a `::error::` line naming the image and why there was
-# no answer, as opposed to the one saying a finding has a fix. A finding is fixable when the
+# as JSON, names another image, or shows no operating system or no Java archive), and when no
+# image was given at all. The two kinds of 1 are told apart by what is printed: a `::error::`
+# line saying why there was no answer (and naming the image, when there is one), as opposed to
+# the one saying a finding has a fix. A finding is fixable when the
 # report gives it a non-empty FixedVersion.
 #
 # This was the body of the workflow's heredoc, moved without a change in behaviour. Three things
@@ -42,6 +43,13 @@ summary = ["| image | OS | fixable HIGH/CRITICAL (the gate reads this) | unfixab
 problems, red = [], False
 unfixable_total = 0
 ignored_all = []
+
+# No images is no answer. The per-image checks below cannot say so: with an empty list the loop
+# never runs, so nothing is appended to `problems` and the run would end as a clean one. The
+# message goes into the same list the loop's own failures go into, so the log line, the summary
+# line and the exit code are produced by the code below and not by a second path.
+if not images:
+    problems.append("no images were given to judge: this was run with the tag " + repr(tag) + " and no image names")
 
 for image in images:
     ref, path = image + ":" + tag, "reports/" + image.rsplit("/", 1)[-1] + ".json"

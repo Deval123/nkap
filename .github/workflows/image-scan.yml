@@ -20,7 +20,8 @@ name: image-scan
 #   - It is not a required check, here or in the repository settings. It reports on something
 #     outside this repository's control (a CVE published tonight against Alpine), and a red day
 #     must not be able to block an unrelated merge.
-#   - It is red whenever an image has a HIGH or CRITICAL finding that has a fix, and after a
+#   - It is red whenever an image has a HIGH or CRITICAL finding that has a fix and that
+#     trivy-ignore.yaml does not accept, and after a
 #     base-image bump merges it stays red until the next release ships, because the published
 #     images still carry the old base. That is the instrument working: it reports what operators
 #     have, not what `main` contains. A finding with no fix available does not turn it red, and
@@ -53,9 +54,21 @@ name: image-scan
 # expiry is to be called out. Trivy's `.trivyignore.yaml` carries `expired_at` on each entry, so
 # the discipline the dependency scan's suppression file has can be written down in the scanner's
 # own format. Grype's ignore rules have no expiry, which would leave dates nobody enforces.
-# There is no ignore file yet: nothing has been judged unfixable, and none is added before the
-# first findings are triaged. When one is, an expiry check beside check-suppression-expiry.sh
-# is part of that change, since a format that can express a date does not enforce it.
+# The ignore file is trivy-ignore.yaml (issue #301). It holds two entries, for two CRITICAL
+# findings in spring-webmvc 6.2.19 whose only named fix is Spring Framework 7. Each carries its
+# reason in full, says plainly that it accepts a known finding with no available fix, names its
+# owner (#303, the Spring Boot 4 upgrade) and expires on 2027-02-07, like the twelve entries of
+# dependency-check-suppressions.xml it matches. The scan runs once with --show-suppressed, so an
+# ignored finding is not dropped: it stays in the report, and the job summary names it and counts
+# it in a column of its own. A format that can express a date does not enforce it, so
+# .github/scripts/check-trivy-ignore-expiry.sh refuses an entry with no date, no reason, or a
+# date that has passed, and runs below before every scan.
+#
+# What "fixable" means in the gate is the word's limit, now known: a finding is fixable when the
+# report names a fixed version, and that does not say whether the fix is a patch or a major
+# upgrade. The two Spring findings name only 7.0.9, so they would be red every day for a fix this
+# project cannot take as a patch. The ignore entries are how that is handled, in the open and with
+# an end, and not by loosening the gate.
 on:
   schedule:
     - cron: "41 4 * * *"
@@ -80,6 +93,12 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v5
+
+      # Before anything is pulled, so an entry that never lapses, or says nothing, is named as that
+      # in seconds. Trivy's own format makes `expired_at` optional; this is what makes it required
+      # (issue #301). Its test is the `trivy-ignore-expiry` job in build.yml.
+      - name: Check every ignore entry expires
+        run: .github/scripts/check-trivy-ignore-expiry.sh
 
       - name: Pull and scan the published images
         env:
@@ -120,15 +139,18 @@ jobs:
             # rate-limits. Three failures is a failure; there is no flag here that skips the
             # database or tolerates its absence.
             # One scan, and no `--ignore-unfixed`: that flag removes findings from the report,
-            # and the report is the record. The verdict below reads this same file.
+            # and the report is the record. --show-suppressed does the same job for the findings
+            # trivy-ignore.yaml accepts: they stay in the report, as ExperimentalModifiedFindings,
+            # and the verdict below, which reads this same file, counts and names them.
             scanned=0
             for attempt in 1 2 3; do
               if docker run --rm \
                    -v /var/run/docker.sock:/var/run/docker.sock \
                    -v "${PWD}/reports:/reports" \
+                   -v "${PWD}/trivy-ignore.yaml:/trivy-ignore.yaml:ro" \
                    -v "${RUNNER_TEMP}/trivy-cache:/root/.cache/trivy" \
                    "$TRIVY_IMAGE" image --quiet --scanners vuln --list-all-pkgs \
-                   --severity HIGH,CRITICAL --format json \
+                   --severity HIGH,CRITICAL --ignorefile /trivy-ignore.yaml --show-suppressed --format json \
                    --output "/reports/${name}.json" "$ref"; then
                 scanned=1
                 break

@@ -1,0 +1,58 @@
+# What the image scan (.github/workflows/image-scan.yml) is told to accept (issue #301). This is
+# the Trivy counterpart of dependency-check-suppressions.xml, and it is held to the same standard:
+# every entry says WHY in full, names who owns ending it, and carries an expiry.
+#
+# An ignored finding is not hidden. The scan runs once with --show-suppressed, so the uploaded
+# report lists every ignored finding with its statement, and the job summary prints how many were
+# ignored and which. A green run with an ignored finding says so on its own summary page.
+#
+# The rules for an entry:
+#
+#   - `statement` is the reason, the evidence and the owner, written so that someone who was not
+#     there can judge it. "Not reachable" without evidence is not a reason.
+#   - `expired_at` is mandatory in practice. On that date Trivy stops applying the entry, and
+#     the job turns red again until someone has decided. Tried with the pinned Trivy against a
+#     published image: 96 findings with no ignore, 95 with an entry and no date, 95 with an entry
+#     dated 2099, and 96 again with an entry dated 2020. The boundary day itself was not tried.
+#     Trivy's format makes `expired_at` optional, so an entry without one would never lapse.
+#     .github/scripts/check-trivy-ignore-expiry.sh refuses that, and an entry with no statement
+#     or a date that is today or past, naming it; image-scan.yml runs it before every scan, and
+#     check-trivy-ignore-expiry.test.sh, run by the `trivy-ignore-expiry` job in build.yml,
+#     asserts it. That job is not a required check yet.
+#   - `purls` scopes the entry to the exact package and version, so a bump of that jar makes the
+#     finding visible again instead of staying quietly ignored.
+#
+# Renewing an entry means a pull request that changes the date AND says why, not a date edited
+# alone. The owner of the two entries below is #303.
+vulnerabilities:
+  - id: CVE-2026-47884
+    purls:
+      - "pkg:maven/org.springframework/spring-webmvc@6.2.19"
+    statement: >-
+      ACCEPTED, NOT FIXED: a known CRITICAL finding (CVSS 9.8, SSRF and RCE through Spring MVC's
+      XsltView) stays in the shipped images until the date below. No fix is available to us.
+      Trivy names 7.0.9 as the fixed version and nothing else, and nothing above 6.2.19 exists
+      on the Spring Framework 6.2 line on Maven Central (checked 2026-11-07), so the fix is a
+      major upgrade, Spring Framework 7 and with it Spring Boot 4, and not a patch. Why it is
+      judged not reachable from this project: it renders no views at all. It is a JSON API and a
+      set of fake operators, every controller is a @RestController, and nothing resolves a view
+      name, let alone an XSLT one (the evidence is in the matching entry of
+      dependency-check-suppressions.xml, which expires on the same date). Owner and end: issue
+      #303, the Spring Boot 4 upgrade. When it lands, delete this entry and that one.
+    expired_at: 2027-02-07
+
+  - id: CVE-2026-47890
+    purls:
+      - "pkg:maven/org.springframework/spring-webmvc@6.2.19"
+    statement: >-
+      ACCEPTED, NOT FIXED: a known CRITICAL finding (CVSS 9.8, stream corruption when
+      server-sent events are used together with view fragments, in Spring MVC and WebFlux) stays
+      in the shipped images until the date below. No fix is available to us. Trivy names 7.0.9 as
+      the fixed version and nothing else, and nothing above 6.2.19 exists on the Spring Framework
+      6.2 line on Maven Central (checked 2026-11-07), so the fix is a major upgrade, Spring
+      Framework 7 and with it Spring Boot 4, and not a patch. Why it is judged not reachable
+      from this project: there is no SseEmitter, no text/event-stream and no view technology in
+      any src/main, and spring-webflux is in no runtime tree (the evidence is in the matching
+      entry of dependency-check-suppressions.xml, which expires on the same date). Owner and
+      end: issue #303, the Spring Boot 4 upgrade. When it lands, delete this entry and that one.
+    expired_at: 2027-02-07

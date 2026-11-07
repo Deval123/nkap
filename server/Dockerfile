@@ -21,7 +21,7 @@ RUN --mount=type=cache,target=/root/.m2 \
  && java -Djarmode=tools -jar app.jar extract --layers --destination extracted
 
 # ---- run ----------------------------------------------------------------------------
-FROM eclipse-temurin:21.0.5_11-jre-alpine
+FROM eclipse-temurin:21.0.13_9-jre-alpine
 
 # Set by the release workflow (--build-arg), empty on a local `docker build` -- a label with
 # an empty value is still valid OCI, just not useful, which is the correct fallback for a

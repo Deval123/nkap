@@ -41,6 +41,11 @@ set -euo pipefail
 #
 #   15  the same findings ignored in two images: counted once per image, named once
 #
+# One more, for #302. Numbered 16 because 13 to 15 were taken above, though the issue calls it the
+# thirteenth:
+#
+#   16  a tag and no image names: exit 1, no answer, and no sentence about findings at all
+#
 # And one assertion that is not a case: the summary file is required.
 
 cd "$(dirname "${BASH_SOURCE[0]}")"
@@ -83,7 +88,7 @@ run_verdict() {
     fi
   done
   CODE=0
-  OUT="$(cd "$dir" && GITHUB_STEP_SUMMARY="${dir}/summary.md" python3 -I "$script" latest "${images[@]}" 2>&1)" || CODE=$?
+  OUT="$(cd "$dir" && GITHUB_STEP_SUMMARY="${dir}/summary.md" python3 -I "$script" latest ${images[@]+"${images[@]}"} 2>&1)" || CODE=$?
   SUMMARY="$(cat "${dir}/summary.md")"
 }
 
@@ -290,6 +295,19 @@ run_verdict "${IGNORED}=ignored-only.json" "${FIXABLE_IGNORED}=fixable-and-ignor
 exit_is 1
 summary_has "4 HIGH or CRITICAL finding(s) are ignored by \`trivy-ignore.yaml\`:** CVE-2026-47884, CVE-2026-47890."
 summary_lacks "CVE-2026-47884, CVE-2026-47884"
+
+# --- 16: nothing to judge is no answer ----------------------------------------------------------------
+
+begin "16. a tag and no image names is no answer, and the summary says nothing about findings"
+run_verdict
+exit_is 1
+out_has "::error::no images were given to judge: this was run with the tag 'latest' and no image names"
+summary_has "**No answer:** no images were given to judge: this was run with the tag 'latest' and no image names"
+out_lacks "$FIX_ERROR"
+out_lacks "Traceback"
+summary_lacks "$NO_FINDINGS"    # a clean verdict
+summary_lacks "$CAUTION"        # the "green is not clean" line
+summary_lacks "HIGH or CRITICAL finding"   # no sentence about findings of any kind (the table header names the column)
 
 # --- what must not change quietly ---------------------------------------------------------------------
 

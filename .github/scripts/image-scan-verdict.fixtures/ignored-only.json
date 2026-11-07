@@ -1,0 +1,542 @@
+{
+  "SchemaVersion": 2,
+  "Trivy": {
+    "Version": "0.76.2"
+  },
+  "ReportID": "01a1b7b9-cded-7678-a166-8e1fa347f84f",
+  "CreatedAt": "2026-11-07T20:36:09.837426007Z",
+  "ArtifactID": "sha256:3a0bb88a2e40204df4e9133402be0657b69081d0b7b382daa222375b3319899d",
+  "ArtifactName": "nkap-fixture-ignored:latest",
+  "ArtifactType": "container_image",
+  "Metadata": {
+    "Size": 239664640,
+    "OS": {
+      "Family": "alpine",
+      "Name": "3.24.4"
+    },
+    "ImageID": "sha256:56865f442498d9ebaa3850f0fa78879f9a5b7664c48c2095417c245bd6ce5f28",
+    "DiffIDs": [
+      "sha256:3d971ddbca237031066ab6609a11ae2e9e5b109da24d5c5d94d2e584dd94bd54",
+      "sha256:d307255dff9c60ea872845ceabf27346ad564be981e0c194ba98688dcc4c2e19",
+      "sha256:112e37db4c319d06f3d776995202111662e2b60ec550be1fb664201f1b47640a",
+      "sha256:e0096ed79db64f8ae0ab98b6bc13eb55127f48cf710e341f1f934e9acb098da6",
+      "sha256:ac92f20ebd76ab761b58190e72925c9be859f64882f876f8f1e2292e876286a4",
+      "sha256:b2c9629b32a34fdc8a73dc8b612da10980df3759f1034c3f143893c0c40aa508",
+      "sha256:b210bb6b4b19e626331ca7c0608a5bb51e84a47dc1f96e449d3fed6b7a80bd25",
+      "sha256:474a6df90cbaede5283cf9df8ef3e0a741178b1362f445fd668b1a1291d69c80",
+      "sha256:474a6df90cbaede5283cf9df8ef3e0a741178b1362f445fd668b1a1291d69c80",
+      "sha256:96b9cf037cca18f9cdb514fd601cf5908a943defe2605f9a0f5790efff3f5065"
+    ],
+    "RepoTags": [
+      "nkap-fixture-ignored:latest",
+      "scratch301b-gateway:branch"
+    ],
+    "Reference": "nkap-fixture-ignored:latest",
+    "ImageConfig": {
+      "architecture": "arm64",
+      "created": "2026-11-07T20:34:00.076788294Z",
+      "history": [
+        {
+          "created": "2026-11-05T18:00:31Z",
+          "created_by": "ADD alpine-minirootfs-3.24.4-aarch64.tar.gz / # buildkit",
+          "comment": "buildkit.dockerfile.v0"
+        },
+        {
+          "created": "2026-11-05T18:00:31Z",
+          "created_by": "CMD [\"/bin/sh\"]",
+          "comment": "buildkit.dockerfile.v0",
+          "empty_layer": true
+        },
+        {
+          "created": "2026-11-05T19:12:54Z",
+          "created_by": "ENV JAVA_HOME=/opt/java/openjdk",
+          "comment": "buildkit.dockerfile.v0",
+          "empty_layer": true
+        },
+        {
+          "created": "2026-11-05T19:12:54Z",
+          "created_by": "ENV PATH=/opt/java/openjdk/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+          "comment": "buildkit.dockerfile.v0",
+          "empty_layer": true
+        },
+        {
+          "created": "2026-11-05T19:12:54Z",
+          "created_by": "ENV LANG=en_US.UTF-8 LANGUAGE=en_US:en LC_ALL=en_US.UTF-8",
+          "comment": "buildkit.dockerfile.v0",
+          "empty_layer": true
+        },
+        {
+          "created": "2026-11-05T19:12:54Z",
+          "created_by": "RUN /bin/sh -c set -eux;     apk add --no-cache         fontconfig ttf-dejavu         gnupg         ca-certificates p11-kit-trust         musl-locales musl-locales-lang         tzdata         coreutils         openssl     ;     rm -rf /var/cache/apk/* # buildkit",
+          "comment": "buildkit.dockerfile.v0"
+        },
+        {
+          "created": "2026-11-05T19:12:54Z",
+          "created_by": "ENV JAVA_VERSION=jdk-21.0.13+9",
+          "comment": "buildkit.dockerfile.v0",
+          "empty_layer": true
+        },
+        {
+          "created": "2026-11-05T19:13:19Z",
+          "created_by": "RUN /bin/sh -c set -eux;     ARCH=\"$(apk --print-arch)\";     case \"${ARCH}\" in        aarch64)          ESUM='382633eb2ba28cc5b97be1446eb1dd8d2a60a3795be0166a030e4cda338c490e';          BINARY_URL='https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.13%2B9/OpenJDK21U-jre_aarch64_alpine-linux_hotspot_21.0.13_9.tar.gz';          ;;        x86_64)          ESUM='9138eab0f7d230e17163953f015ec9ae2431dbc49069c658b7f991e45b54fb9b';          BINARY_URL='https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.13%2B9/OpenJDK21U-jre_x64_alpine-linux_hotspot_21.0.13_9.tar.gz';          ;;        *)          echo \"Unsupported arch: ${ARCH}\";          exit 1;          ;;     esac;     wget -O /tmp/openjdk.tar.gz ${BINARY_URL};     wget -O /tmp/openjdk.tar.gz.sig ${BINARY_URL}.sig;     export GNUPGHOME=\"$(mktemp -d)\";     gpg --batch --keyserver keyserver.ubuntu.com --recv-keys 3B04D753C9050D9A5D343F39843C48A565F8F04B;     gpg --batch --verify /tmp/openjdk.tar.gz.sig /tmp/openjdk.tar.gz;     rm -rf \"${GNUPGHOME}\" /tmp/openjdk.tar.gz.sig;     echo \"${ESUM} */tmp/openjdk.tar.gz\" | sha256sum -c -;     mkdir -p \"$JAVA_HOME\";     tar --extract         --file /tmp/openjdk.tar.gz         --directory \"$JAVA_HOME\"         --strip-components 1         --no-same-owner     ;     rm -f /tmp/openjdk.tar.gz; # buildkit",
+          "comment": "buildkit.dockerfile.v0"
+        },
+        {
+          "created": "2026-11-05T19:13:19Z",
+          "created_by": "RUN /bin/sh -c set -eux;     echo \"Verifying install ...\";     echo \"java --version\"; java --version;     echo \"Complete.\" # buildkit",
+          "comment": "buildkit.dockerfile.v0"
+        },
+        {
+          "created": "2026-11-05T19:13:19Z",
+          "created_by": "COPY --chmod=755 entrypoint.sh /__cacert_entrypoint.sh # buildkit",
+          "comment": "buildkit.dockerfile.v0"
+        },
+        {
+          "created": "2026-11-05T19:13:19Z",
+          "created_by": "ENTRYPOINT [\"/__cacert_entrypoint.sh\"]",
+          "comment": "buildkit.dockerfile.v0",
+          "empty_layer": true
+        },
+        {
+          "created": "2026-11-07T18:36:11Z",
+          "created_by": "ARG NKAP_VERSION=",
+          "comment": "buildkit.dockerfile.v0",
+          "empty_layer": true
+        },
+        {
+          "created": "2026-11-07T18:36:11Z",
+          "created_by": "ARG NKAP_REVISION=",
+          "comment": "buildkit.dockerfile.v0",
+          "empty_layer": true
+        },
+        {
+          "created": "2026-11-07T18:36:11Z",
+          "created_by": "LABEL org.opencontainers.image.source=https://github.com/deval123/nkap org.opencontainers.image.revision= org.opencontainers.image.version= org.opencontainers.image.licenses=Apache-2.0 org.opencontainers.image.description=Nkap gateway: REST API, ledger, reconciler and webhooks for MTN MoMo.",
+          "comment": "buildkit.dockerfile.v0",
+          "empty_layer": true
+        },
+        {
+          "created": "2026-11-07T18:36:11Z",
+          "created_by": "WORKDIR /app",
+          "comment": "buildkit.dockerfile.v0"
+        },
+        {
+          "created": "2026-11-07T20:34:00Z",
+          "created_by": "COPY /src/extracted/dependencies/ ./ # buildkit",
+          "comment": "buildkit.dockerfile.v0"
+        },
+        {
+          "created": "2026-11-07T20:34:00Z",
+          "created_by": "COPY /src/extracted/spring-boot-loader/ ./ # buildkit",
+          "comment": "buildkit.dockerfile.v0"
+        },
+        {
+          "created": "2026-11-07T20:34:00Z",
+          "created_by": "COPY /src/extracted/snapshot-dependencies/ ./ # buildkit",
+          "comment": "buildkit.dockerfile.v0"
+        },
+        {
+          "created": "2026-11-07T20:34:00Z",
+          "created_by": "COPY /src/extracted/application/ ./ # buildkit",
+          "comment": "buildkit.dockerfile.v0"
+        },
+        {
+          "created": "2026-11-07T20:34:00Z",
+          "created_by": "EXPOSE [8080/tcp]",
+          "comment": "buildkit.dockerfile.v0",
+          "empty_layer": true
+        },
+        {
+          "created": "2026-11-07T20:34:00Z",
+          "created_by": "ENTRYPOINT [\"java\" \"-jar\" \"app.jar\"]",
+          "comment": "buildkit.dockerfile.v0",
+          "empty_layer": true
+        }
+      ],
+      "os": "linux",
+      "rootfs": {
+        "type": "layers",
+        "diff_ids": [
+          "sha256:3d971ddbca237031066ab6609a11ae2e9e5b109da24d5c5d94d2e584dd94bd54",
+          "sha256:d307255dff9c60ea872845ceabf27346ad564be981e0c194ba98688dcc4c2e19",
+          "sha256:112e37db4c319d06f3d776995202111662e2b60ec550be1fb664201f1b47640a",
+          "sha256:e0096ed79db64f8ae0ab98b6bc13eb55127f48cf710e341f1f934e9acb098da6",
+          "sha256:ac92f20ebd76ab761b58190e72925c9be859f64882f876f8f1e2292e876286a4",
+          "sha256:b2c9629b32a34fdc8a73dc8b612da10980df3759f1034c3f143893c0c40aa508",
+          "sha256:b210bb6b4b19e626331ca7c0608a5bb51e84a47dc1f96e449d3fed6b7a80bd25",
+          "sha256:474a6df90cbaede5283cf9df8ef3e0a741178b1362f445fd668b1a1291d69c80",
+          "sha256:474a6df90cbaede5283cf9df8ef3e0a741178b1362f445fd668b1a1291d69c80",
+          "sha256:96b9cf037cca18f9cdb514fd601cf5908a943defe2605f9a0f5790efff3f5065"
+        ]
+      },
+      "config": {
+        "Entrypoint": [
+          "java",
+          "-jar",
+          "app.jar"
+        ],
+        "Env": [
+          "PATH=/opt/java/openjdk/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+          "JAVA_HOME=/opt/java/openjdk",
+          "LANG=en_US.UTF-8",
+          "LANGUAGE=en_US:en",
+          "LC_ALL=en_US.UTF-8",
+          "JAVA_VERSION=jdk-21.0.13+9"
+        ],
+        "Labels": {
+          "org.opencontainers.image.description": "Nkap gateway: REST API, ledger, reconciler and webhooks for MTN MoMo.",
+          "org.opencontainers.image.licenses": "Apache-2.0",
+          "org.opencontainers.image.revision": "",
+          "org.opencontainers.image.source": "https://github.com/deval123/nkap",
+          "org.opencontainers.image.version": ""
+        },
+        "WorkingDir": "/app",
+        "ExposedPorts": {
+          "8080/tcp": {}
+        }
+      }
+    },
+    "Layers": [
+      {
+        "Size": 8939008,
+        "DiffID": "sha256:3d971ddbca237031066ab6609a11ae2e9e5b109da24d5c5d94d2e584dd94bd54"
+      },
+      {
+        "Size": 38631936,
+        "DiffID": "sha256:d307255dff9c60ea872845ceabf27346ad564be981e0c194ba98688dcc4c2e19"
+      },
+      {
+        "Size": 162371072,
+        "DiffID": "sha256:112e37db4c319d06f3d776995202111662e2b60ec550be1fb664201f1b47640a"
+      },
+      {
+        "Size": 2048,
+        "DiffID": "sha256:e0096ed79db64f8ae0ab98b6bc13eb55127f48cf710e341f1f934e9acb098da6"
+      },
+      {
+        "Size": 7680,
+        "DiffID": "sha256:ac92f20ebd76ab761b58190e72925c9be859f64882f876f8f1e2292e876286a4"
+      },
+      {
+        "Size": 1536,
+        "DiffID": "sha256:b2c9629b32a34fdc8a73dc8b612da10980df3759f1034c3f143893c0c40aa508"
+      },
+      {
+        "Size": 29267456,
+        "DiffID": "sha256:b210bb6b4b19e626331ca7c0608a5bb51e84a47dc1f96e449d3fed6b7a80bd25"
+      },
+      {
+        "Size": 1536,
+        "DiffID": "sha256:474a6df90cbaede5283cf9df8ef3e0a741178b1362f445fd668b1a1291d69c80"
+      },
+      {
+        "Size": 1536,
+        "DiffID": "sha256:474a6df90cbaede5283cf9df8ef3e0a741178b1362f445fd668b1a1291d69c80"
+      },
+      {
+        "Size": 440832,
+        "DiffID": "sha256:96b9cf037cca18f9cdb514fd601cf5908a943defe2605f9a0f5790efff3f5065"
+      }
+    ]
+  },
+  "Results": [
+    {
+      "Target": "nkap-fixture-ignored:latest (alpine 3.24.4)",
+      "Class": "os-pkgs",
+      "Type": "alpine",
+      "Packages": [
+        {
+          "ID": "acl-libs@2.3.2-r1",
+          "Name": "acl-libs",
+          "Identifier": {
+            "PURL": "pkg:apk/alpine/acl-libs@2.3.2-r1?arch=aarch64&distro=3.24.4",
+            "UID": "d42e042091b9b2a8"
+          },
+          "Version": "2.3.2-r1",
+          "Arch": "aarch64",
+          "SrcName": "acl",
+          "SrcVersion": "2.3.2-r1",
+          "Licenses": [
+            "LGPL-2.1-or-later",
+            "GPL-2.0-or-later"
+          ],
+          "Maintainer": "Natanael Copa <ncopa@alpinelinux.org>",
+          "DependsOn": [
+            "musl@1.2.6-r3"
+          ],
+          "Layer": {
+            "DiffID": "sha256:d307255dff9c60ea872845ceabf27346ad564be981e0c194ba98688dcc4c2e19"
+          },
+          "Digest": "sha1:3f647a9e2d06f9600a7bfefdecb2a29af94eacd1",
+          "InstalledFiles": [
+            "usr/lib/libacl.so.1",
+            "usr/lib/libacl.so.1.1.2302"
+          ],
+          "AnalyzedBy": "apk"
+        },
+        {
+          "ID": "alpine-baselayout@3.7.2-r1",
+          "Name": "alpine-baselayout",
+          "Identifier": {
+            "PURL": "pkg:apk/alpine/alpine-baselayout@3.7.2-r1?arch=aarch64&distro=3.24.4",
+            "UID": "304a3a90fc88fa6b"
+          },
+          "Version": "3.7.2-r1",
+          "Arch": "aarch64",
+          "SrcName": "alpine-baselayout",
+          "SrcVersion": "3.7.2-r1",
+          "Licenses": [
+            "GPL-2.0-only"
+          ],
+          "Maintainer": "Natanael Copa <ncopa@alpinelinux.org>",
+          "DependsOn": [
+            "alpine-baselayout-data@3.7.2-r1",
+            "busybox-binsh@1.37.0-r31"
+          ],
+          "Layer": {
+            "DiffID": "sha256:3d971ddbca237031066ab6609a11ae2e9e5b109da24d5c5d94d2e584dd94bd54"
+          },
+          "Digest": "sha1:ee13a18ee7e29d75872017403d59c0484dacd963",
+          "InstalledFiles": [
+            "etc/motd",
+            "etc/crontabs/root",
+            "etc/modprobe.d/aliases.conf",
+            "etc/modprobe.d/blacklist.conf",
+            "etc/modprobe.d/i386.conf",
+            "etc/profile.d/20locale.sh",
+            "etc/profile.d/README",
+            "etc/profile.d/color_prompt.sh.disabled",
+            "usr/lib/sysctl.d/00-alpine.conf",
+            "var/lock",
+            "var/run",
+            "var/spool/mail",
+            "var/spool/cron/crontabs"
+          ],
+          "AnalyzedBy": "apk"
+        },
+        {
+          "ID": "alpine-baselayout-data@3.7.2-r1",
+          "Name": "alpine-baselayout-data",
+          "Identifier": {
+            "PURL": "pkg:apk/alpine/alpine-baselayout-data@3.7.2-r1?arch=aarch64&distro=3.24.4",
+            "UID": "9107750a7f29a381"
+          },
+          "Version": "3.7.2-r1",
+          "Arch": "aarch64",
+          "SrcName": "alpine-baselayout",
+          "SrcVersion": "3.7.2-r1",
+          "Licenses": [
+            "GPL-2.0-only"
+          ],
+          "Maintainer": "Natanael Copa <ncopa@alpinelinux.org>",
+          "Layer": {
+            "DiffID": "sha256:3d971ddbca237031066ab6609a11ae2e9e5b109da24d5c5d94d2e584dd94bd54"
+          },
+          "Digest": "sha1:3337c83d21c8eb114e0d4bb275e561dd3493bdb8",
+          "InstalledFiles": [
+            "etc/fstab",
+            "etc/group",
+            "etc/hostname",
+            "etc/hosts",
+            "etc/inittab",
+            "etc/modules",
+            "etc/mtab",
+            "etc/nsswitch.conf",
+            "etc/passwd",
+            "etc/profile",
+            "etc/protocols",
+            "etc/services",
+            "etc/shadow",
+            "etc/shells",
+            "etc/sysctl.conf"
+          ],
+          "AnalyzedBy": "apk"
+        }
+      ]
+    },
+    {
+      "Target": "Java",
+      "Class": "lang-pkgs",
+      "Type": "jar",
+      "Packages": [
+        {
+          "Name": "ch.qos.logback:logback-classic",
+          "Identifier": {
+            "PURL": "pkg:maven/ch.qos.logback/logback-classic@1.5.34",
+            "UID": "ea9933e2c11701ca"
+          },
+          "Version": "1.5.34",
+          "Licenses": [
+            "EPL-2.0",
+            "LGPL-2.1-only"
+          ],
+          "Layer": {
+            "DiffID": "sha256:b210bb6b4b19e626331ca7c0608a5bb51e84a47dc1f96e449d3fed6b7a80bd25"
+          },
+          "FilePath": "app/lib/logback-classic-1.5.34.jar",
+          "AnalyzedBy": "jar"
+        },
+        {
+          "Name": "ch.qos.logback:logback-core",
+          "Identifier": {
+            "PURL": "pkg:maven/ch.qos.logback/logback-core@1.5.34",
+            "UID": "4b085870dfb867b3"
+          },
+          "Version": "1.5.34",
+          "Licenses": [
+            "EPL-2.0",
+            "LGPL-2.1-only"
+          ],
+          "Layer": {
+            "DiffID": "sha256:b210bb6b4b19e626331ca7c0608a5bb51e84a47dc1f96e449d3fed6b7a80bd25"
+          },
+          "FilePath": "app/lib/logback-core-1.5.34.jar",
+          "AnalyzedBy": "jar"
+        },
+        {
+          "Name": "com.fasterxml.jackson.core:jackson-annotations",
+          "Identifier": {
+            "PURL": "pkg:maven/com.fasterxml.jackson.core/jackson-annotations@2.21",
+            "UID": "b4f46b7359ee483"
+          },
+          "Version": "2.21",
+          "Licenses": [
+            "Apache-2.0"
+          ],
+          "Layer": {
+            "DiffID": "sha256:b210bb6b4b19e626331ca7c0608a5bb51e84a47dc1f96e449d3fed6b7a80bd25"
+          },
+          "FilePath": "app/lib/jackson-annotations-2.21.jar",
+          "AnalyzedBy": "jar"
+        }
+      ],
+      "ExperimentalModifiedFindings": [
+        {
+          "Type": "vulnerability",
+          "Status": "ignored",
+          "Statement": "ACCEPTED, NOT FIXED: a known CRITICAL finding (CVSS 9.8, SSRF and RCE through Spring MVC's XsltView) stays in the shipped images until the date below. No fix is available to us. Trivy names 7.0.9 as the fixed version and nothing else, and nothing above 6.2.19 exists on the Spring Framework 6.2 line on Maven Central (checked 2026-11-07), so the fix is a major upgrade, Spring Framework 7 and with it Spring Boot 4, and not a patch. Why it is judged not reachable from this project: it renders no views at all. It is a JSON API and a set of fake operators, every controller is a @RestController, and nothing resolves a view name, let alone an XSLT one (the evidence is in the matching entry of dependency-check-suppressions.xml, which expires on the same date). Owner and end: issue #303, the Spring Boot 4 upgrade. When it lands, delete this entry and that one.",
+          "Source": "/ig/trivy-ignore.yaml",
+          "Finding": {
+            "VulnerabilityID": "CVE-2026-47884",
+            "VendorIDs": [
+              "GHSA-pc63-qcmh-9cmg"
+            ],
+            "PkgName": "org.springframework:spring-webmvc",
+            "PkgPath": "app/lib/spring-webmvc-6.2.19.jar",
+            "PkgIdentifier": {
+              "PURL": "pkg:maven/org.springframework/spring-webmvc@6.2.19",
+              "UID": "2880d37098bdc910"
+            },
+            "InstalledVersion": "6.2.19",
+            "FixedVersion": "7.0.9",
+            "Status": "fixed",
+            "Layer": {
+              "DiffID": "sha256:b210bb6b4b19e626331ca7c0608a5bb51e84a47dc1f96e449d3fed6b7a80bd25"
+            },
+            "SeveritySource": "ghsa",
+            "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-47884",
+            "DataSource": {
+              "ID": "ghsa",
+              "Name": "GitHub Security Advisory Maven",
+              "URL": "https://github.com/advisories?query=type%3Areviewed+ecosystem%3Amaven"
+            },
+            "Fingerprint": "sha256:7275079c1621d251ab87158ed51dd0e59c316baadca4078dab35b529f2a45163",
+            "Title": "org.springframework/spring-webmvc: Spring Framework: Remote Code Execution via improper path limitation in XsltView",
+            "Description": "Use of XsltView in a Spring MVC application can result in SSRF and RCE attack if the application has an \"/**\" mapping that results in view rendering, and where the view name is not explicitly specified.\nSpring Framework 7.0.0 - 7.0.8\nSpring Framework 6.2.0 - 6.2.19\nSpring Framework 6.1.0 - 6.1.28\nSpring Framework 6.0.0 - 6.0.30\nSpring Framework 5.3.0 - 5.3.49\nSpring Framework 5.2.25.RELEASE and earlier",
+            "Severity": "CRITICAL",
+            "CweIDs": [
+              "CWE-22"
+            ],
+            "VendorSeverity": {
+              "ghsa": 4,
+              "redhat": 4,
+              "ubuntu": 2
+            },
+            "CVSS": {
+              "ghsa": {
+                "V3Vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+                "V3Score": 9.8
+              },
+              "redhat": {
+                "V3Vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+                "V3Score": 9.8
+              }
+            },
+            "References": [
+              "https://access.redhat.com/security/cve/CVE-2026-47884",
+              "https://advisory.echohq.com/cve/CVE-2026-47884",
+              "https://github.com/spring-projects/spring-framework",
+              "https://github.com/spring-projects/spring-framework/commit/692dbc9160de3b5de50ccedeee014716d0cedb7b",
+              "https://nvd.nist.gov/vuln/detail/CVE-2026-47884",
+              "https://spring.io/security/cve-2026-47884",
+              "https://www.cve.org/CVERecord?id=CVE-2026-47884"
+            ],
+            "PublishedDate": "2026-08-27T06:17:18.507Z",
+            "LastModifiedDate": "2026-09-10T14:11:26.97Z"
+          }
+        },
+        {
+          "Type": "vulnerability",
+          "Status": "ignored",
+          "Statement": "ACCEPTED, NOT FIXED: a known CRITICAL finding (CVSS 9.8, stream corruption when server-sent events are used together with view fragments, in Spring MVC and WebFlux) stays in the shipped images until the date below. No fix is available to us. Trivy names 7.0.9 as the fixed version and nothing else, and nothing above 6.2.19 exists on the Spring Framework 6.2 line on Maven Central (checked 2026-11-07), so the fix is a major upgrade, Spring Framework 7 and with it Spring Boot 4, and not a patch. Why it is judged not reachable from this project: there is no SseEmitter, no text/event-stream and no view technology in any src/main, and spring-webflux is in no runtime tree (the evidence is in the matching entry of dependency-check-suppressions.xml, which expires on the same date). Owner and end: issue #303, the Spring Boot 4 upgrade. When it lands, delete this entry and that one.",
+          "Source": "/ig/trivy-ignore.yaml",
+          "Finding": {
+            "VulnerabilityID": "CVE-2026-47890",
+            "VendorIDs": [
+              "GHSA-j9f9-w8pj-32f8"
+            ],
+            "PkgName": "org.springframework:spring-webmvc",
+            "PkgPath": "app/lib/spring-webmvc-6.2.19.jar",
+            "PkgIdentifier": {
+              "PURL": "pkg:maven/org.springframework/spring-webmvc@6.2.19",
+              "UID": "2880d37098bdc910"
+            },
+            "InstalledVersion": "6.2.19",
+            "FixedVersion": "7.0.9",
+            "Status": "fixed",
+            "Layer": {
+              "DiffID": "sha256:b210bb6b4b19e626331ca7c0608a5bb51e84a47dc1f96e449d3fed6b7a80bd25"
+            },
+            "SeveritySource": "ghsa",
+            "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-47890",
+            "DataSource": {
+              "ID": "ghsa",
+              "Name": "GitHub Security Advisory Maven",
+              "URL": "https://github.com/advisories?query=type%3Areviewed+ecosystem%3Amaven"
+            },
+            "Fingerprint": "sha256:2151d277ae24626df419b730ddf40786265cab35c9253c0e88126545f8e2426c",
+            "Title": "org.springframework/spring-webmvc: org.springframework/spring-webflux: Spring Framework: Stream corruption in Server-Sent Events (SSE) with view fragments",
+            "Description": "Spring MVC and WebFlux applications are vulnerable to stream corruption when using Server-Sent Events (SSE) with view fragments.\nSpring Framework 7.0.0 - 7.0.8\nSpring Framework 6.2.0 - 6.2.19",
+            "Severity": "CRITICAL",
+            "CweIDs": [
+              "CWE-93"
+            ],
+            "VendorSeverity": {
+              "ghsa": 4,
+              "redhat": 2
+            },
+            "CVSS": {
+              "ghsa": {
+                "V3Vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+                "V3Score": 9.8
+              },
+              "redhat": {
+                "V3Vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:L/A:L",
+                "V3Score": 6.5
+              }
+            },
+            "References": [
+              "https://access.redhat.com/security/cve/CVE-2026-47890",
+              "https://github.com/spring-projects/spring-framework",
+              "https://nvd.nist.gov/vuln/detail/CVE-2026-47890",
+              "https://spring.io/security/cve-2026-47890",
+              "https://www.cve.org/CVERecord?id=CVE-2026-47890"
+            ],
+            "PublishedDate": "2026-08-27T06:17:20.12Z",
+            "LastModifiedDate": "2026-09-02T17:36:58.89Z"
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -146,8 +146,7 @@ jobs:
   # way javac does (comments and literals blanked) and refuses floating point outside a line
   # marked `allow-floating-point: <reason>`. This job runs its test, which feeds it each shape it
   # must refuse and each it must not, and then the check itself on this tree. No build, no
-  # network: it reads text. Not in the ruleset's required checks yet; adding it is a settings
-  # change the maintainer makes, and until then it reports and blocks nothing.
+  # network: it reads text. In the ruleset's required checks.
   no-floating-point-money:
     runs-on: ubuntu-latest
     steps:
@@ -161,13 +160,26 @@ jobs:
   # and what is written to the log and to the summary asserted for every one. No network and no
   # build; it reads fixtures. It starts unconditionally, with no `paths:` filter, so that selecting
   # it as a required check can never leave a pull request waiting for a report that will not
-  # come. Not in the ruleset's required checks yet: until the maintainer adds it in the
-  # repository settings, it reports and blocks nothing.
+  # come. In the ruleset's required checks.
   image-scan-verdict:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
       - run: ./.github/scripts/image-scan-verdict.test.sh
+
+  # trivy-ignore.yaml accepts findings the image scan would otherwise be red on, and Trivy's format
+  # makes `expired_at` optional, so without this nothing stopped an entry that never lapses (issue
+  # #301). .github/scripts/check-trivy-ignore-expiry.sh is the check, and image-scan.yml runs it on
+  # the real file before every scan; this is its test, run on every push and pull request: no scan
+  # and no network, just the rule asserted against small files, including each shape it must
+  # refuse. Like `image-scan-verdict`, it starts unconditionally and is not in the ruleset's
+  # required checks yet, so until the maintainer adds it in the repository settings it reports and
+  # blocks nothing.
+  trivy-ignore-expiry:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - run: ./.github/scripts/check-trivy-ignore-expiry.test.sh
 
   # Issue #123: compose.yaml and nkap-standalone.compose.yaml must never resolve to the same
   # Compose project, or a volume either declares can become the exact same volume. This is a

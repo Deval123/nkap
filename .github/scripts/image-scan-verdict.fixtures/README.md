@@ -20,6 +20,8 @@ has changed.
 | Published gateway | `ghcr.io/deval123/nkap-gateway:latest`, the 2.2.0 image, from the `image-scan-reports` artifact of workflow run 42403875845 (2026-11-07) | by `image-scan.yml` itself: `image --quiet --scanners vuln --list-all-pkgs --severity HIGH,CRITICAL --format json` |
 | Local gateway | `nkap-demo-gateway:latest`, built from `main` with the Java 21.0.13 / Alpine 3.24.4 base (2026-11-07) | the same flags, same digest, run by hand |
 | Debian | `debian:bookworm-slim` (2026-11-07) | same digest, `--scanners vuln --format json`, all severities, no `--list-all-pkgs` |
+| Ignored, clean | the gateway built from the branch of #301 (Jackson 2.21.8), temporarily tagged `nkap-fixture-ignored:latest` (2026-11-07) | same digest and flags as the workflow, plus `--ignorefile trivy-ignore.yaml --show-suppressed`, so ignored findings are reported and not dropped |
+| Ignored, with findings | the gateway built from `main` before #301 (Jackson 2.21.4), temporarily tagged `nkap-fixture-fixable-ignored:latest` (2026-11-07) | the same, with the same ignore file |
 
 ## What each fixture is
 
@@ -34,6 +36,8 @@ in the order Trivy wrote it, and only list elements dropped. Each result keeps i
 | `unfixable-only.json` | `none.json` | one finding added to the operating-system result: **copied untouched** from the Debian report (`CVE-2026-53613`, `bsdutils`, `HIGH`, `Status: affected`), which has no `FixedVersion` key. It is a real unfixed finding placed in an Alpine result, which Trivy would not do (its package is a Debian one); the verdict reads only `Severity` and `FixedVersion`. |
 | `both.json` | `fixable.json` | the same Debian finding appended to its operating-system result. |
 | `unfixable-empty-string.json` | `unfixable-only.json` | that finding's key set by hand to `"FixedVersion": ""`. **A hand edit, and the only fixture that is not a shape Trivy was seen to write.** See the next section. |
+| `ignored-only.json` | Ignored, clean | trimmed as above and nothing else. After the ignore, the jar result has no `Vulnerabilities` key and two entries in `ExperimentalModifiedFindings`, each with `Status: ignored`, the entry's `Statement`, and the finding untouched (`CVE-2026-47884`, `CVE-2026-47890`). Both entries are kept whole. |
+| `fixable-and-ignored.json` | Ignored, with findings | trimmed as above (one `HIGH` finding left, with a `FixedVersion`) and the same two ignored entries, kept whole. |
 | `no-os.json` | `none.json` | `Metadata.OS` removed. |
 | `no-jars.json` | `none.json` | the `lang-pkgs` result removed. |
 | `malformed.json` | `none.json` | its first 600 bytes, so it ends in the middle of a string. |

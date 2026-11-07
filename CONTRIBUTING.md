@@ -85,6 +85,15 @@ lapses on that date and the build fails again, and a check refuses an entry with
 file's header says why a date in a comment would not do. The scan is not yet a required check: it reports, and blocks no merge, until its
 first findings are triaged.
 
+The dependency scan fails on what the NVD has analysed. dependency-check matches a jar to a
+CVE by CPE, so a CVE whose NVD record has no CPE data yet (status "Awaiting Analysis" or
+"Deferred") cannot be matched, and the report does not say it exists. Five Jackson CVEs were
+absent from its report that way while the job was green (#301); the image scan, which reads
+GHSA, is what found them, so the two are not interchangeable. A finding that cannot be fixed
+as a patch is accepted in `dependency-check-suppressions.xml` and in `trivy-ignore.yaml`,
+each entry with its reason, an owner and an expiry, and a script refuses an entry of either
+that does not expire.
+
 The published images get a second, separate look. `.github/workflows/image-scan.yml` pulls
 the three images from GHCR every day with no credentials and scans the operating-system layer
 and the Java archives in them with Trivy; its report is the `image-scan-reports` artifact of

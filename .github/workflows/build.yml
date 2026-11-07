@@ -146,8 +146,7 @@ jobs:
   # way javac does (comments and literals blanked) and refuses floating point outside a line
   # marked `allow-floating-point: <reason>`. This job runs its test, which feeds it each shape it
   # must refuse and each it must not, and then the check itself on this tree. No build, no
-  # network: it reads text. Not in the ruleset's required checks yet; adding it is a settings
-  # change the maintainer makes, and until then it reports and blocks nothing.
+  # network: it reads text. In the ruleset's required checks.
   no-floating-point-money:
     runs-on: ubuntu-latest
     steps:
@@ -161,8 +160,7 @@ jobs:
   # and what is written to the log and to the summary asserted for every one. No network and no
   # build; it reads fixtures. It starts unconditionally, with no `paths:` filter, so that selecting
   # it as a required check can never leave a pull request waiting for a report that will not
-  # come. Not in the ruleset's required checks yet: until the maintainer adds it in the
-  # repository settings, it reports and blocks nothing.
+  # come. In the ruleset's required checks.
   image-scan-verdict:
     runs-on: ubuntu-latest
     steps:

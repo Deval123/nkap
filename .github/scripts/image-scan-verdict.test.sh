@@ -32,6 +32,15 @@ set -euo pipefail
 #   11  three images, one with a finding, one clean, one with no report: the missing report fails
 #       the job and hides neither of the others
 #
+# Two more, for #301, when trivy-ignore.yaml made it possible for the scanner to be told to leave a
+# finding out:
+#
+#   13  findings that are ignored and nothing else: exit 0, the ignored findings named in the log
+#       and in the summary, and the summary does NOT say there are no findings
+#   14  a fixable finding and ignored ones together: exit 1, and the ignored ones still reported
+#
+#   15  the same findings ignored in two images: counted once per image, named once
+#
 # And one assertion that is not a case: the summary file is required.
 
 cd "$(dirname "${BASH_SOURCE[0]}")"
@@ -48,6 +57,8 @@ failures=0
 # verdict refuses a report that names another, so a fixture is run under its own image.
 PUBLISHED="ghcr.io/deval123/nkap-gateway"   # fixable.json, both.json
 LOCAL="nkap-demo-gateway"                    # none.json and everything derived from it
+IGNORED="nkap-fixture-ignored"               # ignored-only.json
+FIXABLE_IGNORED="nkap-fixture-fixable-ignored" # fixable-and-ignored.json
 
 CASE=""
 CODE=0
@@ -135,6 +146,18 @@ assert len(empty) == 1 and empty[0].get("FixedVersion") == "", "unfixable-empty-
 
 both = findings("both.json")
 assert any("FixedVersion" not in v for v in both) and any(v.get("FixedVersion") for v in both), "both.json: fixable and unfixable"
+
+def modified(name):
+    report = json.load(open(d + "/" + name, encoding="utf-8"))
+    return [m for r in report["Results"] for m in (r.get("ExperimentalModifiedFindings") or [])]
+
+assert findings("ignored-only.json") == [], "ignored-only.json must have no findings left after the ignore"
+ig = modified("ignored-only.json")
+assert sorted(m["Finding"]["VulnerabilityID"] for m in ig) == ["CVE-2026-47884", "CVE-2026-47890"], "ignored-only.json: the two Spring findings"
+assert all(m["Status"] == "ignored" and m["Type"] == "vulnerability" for m in ig)
+fi = findings("fixable-and-ignored.json")
+assert fi and all(v.get("FixedVersion") for v in fi), "fixable-and-ignored.json: at least one fixable finding left"
+assert len(modified("fixable-and-ignored.json")) == 2, "fixable-and-ignored.json: the two ignored findings"
 PY
 
 # --- 1 to 4: what turns the job red, and what only gets reported ----------------------------------
@@ -236,6 +259,37 @@ out_has "FIXABLE   ${PUBLISHED}"
 out_has "clean     ${LOCAL}"
 summary_has "| \`${PUBLISHED}:latest\` |"
 summary_has "| \`${LOCAL}:latest\` |"
+
+# --- 13 and 14: what trivy-ignore.yaml accepted is reported, never dropped ------------------------------
+
+begin "13. ignored findings alone pass, are named in the log and the summary, and the summary does not claim there are none"
+run_verdict "${IGNORED}=ignored-only.json"
+exit_is 0
+out_has "IGNORED   ${IGNORED}"
+out_has "fixable 0 (OS 0, jar 0), unfixable 0 (OS 0, jar 0), ignored 2 (CVE-2026-47884, CVE-2026-47890)"
+out_has "::warning::2 HIGH or CRITICAL finding(s) are ignored by trivy-ignore.yaml (CVE-2026-47884, CVE-2026-47890)"
+out_lacks "::error::"
+summary_has "| 0 (OS 0, jar 0) | 0 (OS 0, jar 0) | 2 (CVE-2026-47884, CVE-2026-47890) |"
+summary_has "2 HIGH or CRITICAL finding(s) are ignored by \`trivy-ignore.yaml\`"
+summary_has "Accepted, not fixed"
+summary_lacks "$NO_FINDINGS"    # the sentence that would be false the moment something is ignored
+summary_lacks "$CAUTION"        # nothing is unfixable here; the ignored finding has its own sentence
+
+begin "14. a fixable finding fails the job even with ignored findings beside it, and the ignored ones are still reported"
+run_verdict "${FIXABLE_IGNORED}=fixable-and-ignored.json"
+exit_is 1
+out_has "::error::${FIX_ERROR}"
+out_has "FIXABLE   ${FIXABLE_IGNORED}"
+out_has "ignored 2 (CVE-2026-47884, CVE-2026-47890)"
+summary_has "2 (CVE-2026-47884, CVE-2026-47890) |"
+summary_has "are ignored by \`trivy-ignore.yaml\`"
+summary_lacks "$NO_FINDINGS"
+
+begin "15. the same finding ignored in two images is counted in each and named once"
+run_verdict "${IGNORED}=ignored-only.json" "${FIXABLE_IGNORED}=fixable-and-ignored.json"
+exit_is 1
+summary_has "4 HIGH or CRITICAL finding(s) are ignored by \`trivy-ignore.yaml\`:** CVE-2026-47884, CVE-2026-47890."
+summary_lacks "CVE-2026-47884, CVE-2026-47884"
 
 # --- what must not change quietly ---------------------------------------------------------------------
 

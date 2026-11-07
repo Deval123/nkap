@@ -24,10 +24,12 @@
 # no answer, as opposed to the one saying a finding has a fix. A finding is fixable when the
 # report gives it a non-empty FixedVersion.
 #
-# This was the body of the workflow's heredoc, moved without a change in behaviour. Two things
+# This was the body of the workflow's heredoc, moved without a change in behaviour. Three things
 # were then changed on purpose, and each has a case in the test: the "green does not mean clean"
-# line is written only when something unfixable is in the images, and a report that cannot be
-# read as JSON is reported as no answer for its image instead of ending the run in a traceback.
+# line is written only when something unfixable is in the images, a report that cannot be read as
+# JSON is reported as no answer for its image instead of ending the run in a traceback, and
+# findings that trivy-ignore.yaml told the scanner to leave out are counted, named and reported,
+# never dropped, and never make the summary say there are no findings.
 
 import collections
 import json
@@ -35,10 +37,11 @@ import os
 import sys
 
 tag, images = sys.argv[1], sys.argv[2:]
-summary = ["| image | OS | fixable HIGH/CRITICAL (the gate reads this) | unfixable HIGH/CRITICAL (the gate does not) |",
-           "| --- | --- | --- | --- |"]
+summary = ["| image | OS | fixable HIGH/CRITICAL (the gate reads this) | unfixable HIGH/CRITICAL (the gate does not) | ignored by trivy-ignore.yaml (accepted, dated) |",
+           "| --- | --- | --- | --- | --- |"]
 problems, red = [], False
 unfixable_total = 0
+ignored_all = []
 
 for image in images:
     ref, path = image + ":" + tag, "reports/" + image.rsplit("/", 1)[-1] + ".json"
@@ -86,6 +89,15 @@ for image in images:
                 bucket[kind] += 1
     fixable_n, unfixable_n = sum(fixable.values()), sum(unfixable.values())
     unfixable_total += unfixable_n
+    # What trivy-ignore.yaml told the scanner to leave out. The scan runs with --show-suppressed,
+    # which moves an ignored finding out of "Vulnerabilities" and into "ExperimentalModifiedFindings"
+    # instead of dropping it, so it can be counted and named here and is in the report itself. An
+    # ignored finding does not turn the job red, and it is never left out of what is said about it.
+    ignored = [m.get("Finding", {}).get("VulnerabilityID", "?")
+               for result in os_results + jar_results
+               for m in (result.get("ExperimentalModifiedFindings") or [])
+               if m.get("Type") == "vulnerability"]
+    ignored_all += ignored
     # The gate: an always-red job on findings nobody can act on teaches people to
     # ignore it, so only a finding with a fix turns this red.
     red = red or fixable_n > 0
@@ -93,12 +105,14 @@ for image in images:
     line = (image + " " + os_meta["Family"] + " " + os_meta.get("Name", "?") + eosl + ": " +
             str(os_packages) + " OS packages, " + str(jar_packages) + " jar packages; " +
             "fixable " + str(fixable_n) + " (OS " + str(fixable["os"]) + ", jar " + str(fixable["jar"]) + "), " +
-            "unfixable " + str(unfixable_n) + " (OS " + str(unfixable["os"]) + ", jar " + str(unfixable["jar"]) + ")")
-    label = "FIXABLE  " if fixable_n else ("UNFIXABLE" if unfixable_n else "clean    ")
+            "unfixable " + str(unfixable_n) + " (OS " + str(unfixable["os"]) + ", jar " + str(unfixable["jar"]) + "), " +
+            "ignored " + str(len(ignored)) + (" (" + ", ".join(sorted(ignored)) + ")" if ignored else ""))
+    label = ("FIXABLE  " if fixable_n else ("UNFIXABLE" if unfixable_n else ("IGNORED  " if ignored else "clean    ")))
     print(label + " " + line)
     summary.append("| `" + ref + "` | " + os_meta["Family"] + " " + os_meta.get("Name", "?") + eosl + " | " +
                    str(fixable_n) + " (OS " + str(fixable["os"]) + ", jar " + str(fixable["jar"]) + ") | " +
-                   str(unfixable_n) + " (OS " + str(unfixable["os"]) + ", jar " + str(unfixable["jar"]) + ") |")
+                   str(unfixable_n) + " (OS " + str(unfixable["os"]) + ", jar " + str(unfixable["jar"]) + ") | " +
+                   (str(len(ignored)) + " (" + ", ".join(sorted(ignored)) + ")" if ignored else "0") + " |")
 
 with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as out:
     out.write("## Published images, tag `" + tag + "`\n\n" + "\n".join(summary) + "\n")
@@ -109,7 +123,11 @@ with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as out:
             # it does not apply is one people learn to skip.
             out.write("\nThe job is red only for **fixable** HIGH or CRITICAL findings. **Green does not mean clean:** "
                       "the unfixable column is what is still in the image, and the uploaded report lists every one.\n")
-        elif not red:
+        if ignored_all:
+            out.write("\n**" + str(len(ignored_all)) + " HIGH or CRITICAL finding(s) are ignored by `trivy-ignore.yaml`:** "
+                      + ", ".join(sorted(set(ignored_all))) + ". Accepted, not fixed: each entry carries its reason and an "
+                      "expiry, after which Trivy stops ignoring it and this job turns red. They are in the uploaded report.\n")
+        if not red and not unfixable_total and not ignored_all:
             out.write("\nThere are no HIGH or CRITICAL findings in any image.\n")
     for problem in problems:
         out.write("\n**No answer:** " + problem + "\n")
@@ -120,5 +138,7 @@ if problems:
 if red:
     print("::error::at least one image has a HIGH or CRITICAL finding with a fix available; see the report artifact")
     sys.exit(1)
+if ignored_all:
+    print("::warning::" + str(len(ignored_all)) + " HIGH or CRITICAL finding(s) are ignored by trivy-ignore.yaml (" + ", ".join(sorted(set(ignored_all))) + "). Accepted, not fixed, until each entry's expiry; they are in the report artifact.")
 if unfixable_total:
     print("::warning::" + str(unfixable_total) + " HIGH or CRITICAL finding(s) have no fix available. They do not fail this job and are in the report artifact; green is not clean.")

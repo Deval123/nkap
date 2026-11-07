@@ -91,8 +91,12 @@ and the Java archives in them with Trivy; its report is the `image-scan-reports`
 the run. It reads what operators have downloaded, not what `main` contains, so after a fix
 merges it stays red until the next release ships. It runs on a schedule and on demand and
 never on a pull request, so a pull request that bumps a base image gets no verdict from it;
-that is deliberate. It is red only for HIGH or CRITICAL findings that have a fix available; findings with none are in the report and in the job summary, which prints both counts, so green does not mean clean. It is not a required check and it blocks no merge. The `docker` entry of
-`.github/dependabot.yml` is what raises base-image bumps in the first place.
+that is deliberate. It is red only for HIGH or CRITICAL findings that have a fix available;
+findings with none are in the report and in the job summary, which prints both counts, so
+green does not mean clean. It is not a required check and it blocks no merge. The `docker`
+entry of `.github/dependabot.yml` raises a newer 21.0.x release of the runtime base image,
+monthly, and nothing else: a move to another Java major or to the next LTS, and anything
+about the build-stage image, are decisions made by hand, and the file says why.
 
 ## Amending an ADR
 

@@ -85,8 +85,9 @@ nothing checks.
    - **No `double`, no `float`: checked.** `.github/scripts/check-no-floating-point-money.sh`
      refuses a floating-point type, literal or `Math` call in any module's main sources unless
      the line carries `// allow-floating-point: <reason>`. It reads text, not types, so a double
-     that is never named (`var x = f()`) is not seen, and it does not read test sources. Its job,
-     `no-floating-point-money`, is not yet a required check.
+     that is never named (`var x = f()`) is not seen, and it does not read test sources. Its job is
+     `no-floating-point-money`; whether a job is a required check is a repository setting, and
+     `docs/rules-and-their-instruments.md` records what it was read as, and when.
    - **One currency per ledger entry: checked.** `LedgerEntry` refuses an entry that mixes
      currencies, `Money` refuses to add two currencies, and the schema carries the currency on
      the entry, with none on a posting.

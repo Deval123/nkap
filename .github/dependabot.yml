@@ -27,3 +27,24 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 0
+
+  # The base images of the three published images, and the one entry in this file that is NOT
+  # security-only (issue #288). It uses version updates, monthly, with a small limit, because
+  # `open-pull-requests-limit: 0` would make it do nothing: a base image is not a package in the
+  # advisory database, so a security-only configuration never raises a base-image bump, and
+  # nothing else in this repository would ever raise one either. The pin is exact on purpose
+  # (a full `21.x.y_b-jre-alpine` tag), which means it only moves when something moves it, and
+  # this is that something. Do not "fix" the difference with its neighbours by setting this to 0.
+  #
+  # It reads every FROM line in these three Dockerfiles, so it will also propose a newer `maven:`
+  # build-stage image. That image does not ship; the pull request is a convenience, and it is
+  # reviewed like any other. A bump arrives with no vulnerability verdict before it merges,
+  # because .github/workflows/image-scan.yml reads published images and not branch builds.
+  - package-ecosystem: docker
+    directories:
+      - "/server"
+      - "/simulator"
+      - "/simulator-mpesa-app"
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 3

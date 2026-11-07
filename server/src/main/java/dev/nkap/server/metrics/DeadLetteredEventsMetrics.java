@@ -37,12 +37,12 @@ class DeadLetteredEventsMetrics {
                 .register(registry);
     }
 
-    private static double countDeadLettered(OutboxRelayStore store) {
+    private static double countDeadLettered(OutboxRelayStore store) { // allow-floating-point: Micrometer's gauge takes a double; a count, not money
         try {
             return store.countDeadLettered();
         } catch (RuntimeException computeFailed) {
             log.error("could not compute the dead-lettered event count; exporting NaN, not zero", computeFailed);
-            return Double.NaN;
+            return Double.NaN; // allow-floating-point: NaN is how a gauge says "unknown", which zero would not
         }
     }
 }

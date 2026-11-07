@@ -73,7 +73,7 @@ public class CallbackDispatcher<S> {
 
     /** Attempts keyed by the submitted payment's identity, bounded by MAX_REFERENCES. */
     private final Map<String, List<Attempt<S>>> attempts = Collections.synchronizedMap(
-            new LinkedHashMap<>(16, 0.75f, true) {
+            new LinkedHashMap<>(16, 0.75f, true) { // allow-floating-point: 0.75f is the standard load factor of an access-ordered LRU map; not money
                 @Override
                 protected boolean removeEldestEntry(Map.Entry<String, List<Attempt<S>>> eldest) {
                     return size() > MAX_REFERENCES;

@@ -91,7 +91,7 @@ and the Java archives in them with Trivy; its report is the `image-scan-reports`
 the run. It reads what operators have downloaded, not what `main` contains, so after a fix
 merges it stays red until the next release ships. It runs on a schedule and on demand and
 never on a pull request, so a pull request that bumps a base image gets no verdict from it;
-that is deliberate. It is not a required check and it blocks no merge. The `docker` entry of
+that is deliberate. It is red only for HIGH or CRITICAL findings that have a fix available; findings with none are in the report and in the job summary, which prints both counts, so green does not mean clean. It is not a required check and it blocks no merge. The `docker` entry of
 `.github/dependabot.yml` is what raises base-image bumps in the first place.
 
 ## Amending an ADR

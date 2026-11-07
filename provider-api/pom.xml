@@ -10,6 +10,45 @@
   </parent>
   <artifactId>nkap-provider-api</artifactId>
   <name>Nkap :: Provider API</name>
+
+  <!--
+    docs/conventions.md rule 3: `provider-api` depends only on `core`. Enforced for the reason
+    and by the means core/pom.xml explains (issue #276): every dependency other than
+    nkap-core is banned, test scope excepted.
+  -->
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-enforcer-plugin</artifactId>
+        <version>3.5.0</version>
+        <executions>
+          <execution>
+            <id>provider-api-depends-only-on-core</id>
+            <phase>validate</phase>
+            <goals>
+              <goal>enforce</goal>
+            </goals>
+            <configuration>
+              <rules>
+                <bannedDependencies>
+                  <excludes>
+                    <exclude>*</exclude>
+                  </excludes>
+                  <includes>
+                    <include>dev.nkap:nkap-core</include>
+                    <include>*:*:*:*:test</include>
+                  </includes>
+                  <message>provider-api may depend only on nkap-core, plus test scope (docs/conventions.md, rule 3). If this change needs another dependency, it belongs in another module.</message>
+                </bannedDependencies>
+              </rules>
+              <fail>true</fail>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
   <dependencies>
     <dependency>
       <groupId>dev.nkap</groupId>

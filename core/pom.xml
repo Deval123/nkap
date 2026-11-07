@@ -11,4 +11,51 @@
   <artifactId>nkap-core</artifactId>
   <name>Nkap :: Core</name>
 
+  <!--
+    docs/conventions.md rule 3: `core` has no dependencies. No Spring, no web, no JSON library,
+    no ORM. Until issue #276 this was kept by discipline alone, and a dependency added here
+    built and passed. This fails the build instead.
+
+    What it bans is every dependency that is not test scope, direct or transitive. Test scope
+    is allowed because the root POM gives every module junit-jupiter at test scope, which is
+    not what the rule is about; a guard that broke on JUnit would not last a week. `provided`
+    and `system` are banned with `compile` and `runtime`: they still put a library in front
+    of the code in this module.
+
+    Bound to `validate`, so any `mvn` build that reaches `core` runs it, including
+    `mvn -pl core test`. See docs/rules-and-their-instruments.md.
+  -->
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-enforcer-plugin</artifactId>
+        <version>3.5.0</version>
+        <executions>
+          <execution>
+            <id>core-has-no-dependencies</id>
+            <phase>validate</phase>
+            <goals>
+              <goal>enforce</goal>
+            </goals>
+            <configuration>
+              <rules>
+                <bannedDependencies>
+                  <excludes>
+                    <exclude>*</exclude>
+                  </excludes>
+                  <includes>
+                    <include>*:*:*:*:test</include>
+                  </includes>
+                  <message>core must have no dependencies other than test scope (docs/conventions.md, rule 3: no Spring, no web, no JSON library, no ORM). If this change needs one, it belongs in another module.</message>
+                </bannedDependencies>
+              </rules>
+              <fail>true</fail>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+
 </project>

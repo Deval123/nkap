@@ -81,8 +81,8 @@ yourself with `mvn -B -P security-check verify`: the first run downloads the NVD
 
 A finding is fixed, or suppressed in `dependency-check-suppressions.xml` with the maintainer's
 approval. Every suppression carries an `until` date as an attribute on `<suppress>`, so it
-lapses on that date and the build fails again; the file's header says why a date in a comment
-would not do. The scan is not yet a required check: it reports, and blocks no merge, until its
+lapses on that date and the build fails again, and a check refuses an entry without one; the
+file's header says why a date in a comment would not do. The scan is not yet a required check: it reports, and blocks no merge, until its
 first findings are triaged.
 
 ## Amending an ADR

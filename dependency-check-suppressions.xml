@@ -12,9 +12,11 @@
   in a comment or in <notes> would be a promise with nothing behind it: nothing would stop the
   suppression on that day, and the rule would be a sentence nobody reads then.
 
-  The plugin's schema makes `until` OPTIONAL, so this file cannot make it mandatory: an entry
-  without it never lapses, and nothing rejects it. Keep it on every entry, and review one
-  without it as a defect. The attribute goes on <suppress>, never only in <notes>:
+  The plugin's schema makes `until` OPTIONAL, so this file cannot make it mandatory. What does
+  is .github/scripts/check-suppression-expiry.sh, which refuses an entry with no `until`, one
+  whose date is not written YYYY-MM-DDZ, and one whose date is today or past, and which
+  vulnerability-check.yml runs before every scan (issue #282). The attribute goes on <suppress>,
+  never only in <notes>:
 
     <suppress until="2027-06-01Z">
       <notes><![CDATA[

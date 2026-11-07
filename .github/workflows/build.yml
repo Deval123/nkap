@@ -129,6 +129,18 @@ jobs:
       - run: ./.github/scripts/check-dco.test.sh
       - run: ./.github/scripts/check-dco.sh "origin/${{ github.event.pull_request.base.ref }}..${{ github.event.pull_request.head.sha }}"
 
+  # dependency-check-suppressions.xml says every suppression carries `until`, and the plugin's
+  # schema makes `until` optional, so without this nothing stopped an entry that never lapses
+  # (issue #282). .github/scripts/check-suppression-expiry.sh is the check, and
+  # vulnerability-check.yml runs it on the real file; this is its test, run on every push and
+  # pull request for the reason `release-tags` gives for its own: no scan, no network, just the
+  # script's rule asserted against small files, including each shape it must refuse.
+  suppression-expiry:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - run: ./.github/scripts/check-suppression-expiry.test.sh
+
   # Issue #123: compose.yaml and nkap-standalone.compose.yaml must never resolve to the same
   # Compose project, or a volume either declares can become the exact same volume. This is a
   # text-level fact about the two files, not a rule that needs `demo`'s built stack, so it

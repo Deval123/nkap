@@ -1,0 +1,19 @@
+{
+  "SchemaVersion": 2,
+  "Trivy": {
+    "Version": "0.76.2"
+  },
+  "ReportID": "01a1b771-49f0-7280-9851-682ad1f9468c",
+  "CreatedAt": "2026-11-07T19:16:57.456166877Z",
+  "ArtifactID": "sha256:acea8b4169b34d5321f5fb25f7633335df51d758cee334dd0b52fd85db1b961c",
+  "ArtifactName": "nkap-demo-gateway:latest",
+  "ArtifactType": "container_image",
+  "Metadata": {
+    "Size": 239647232,
+    "OS": {
+      "Family": "alpine",
+      "Name": "3.24.4"
+    },
+    "ImageID": "sha256:949f32fa79e03989108d60e391449d64f67fa3c70d5acfb96a95e053a67a022a",
+    "DiffIDs": [
+      "sha256:3d971ddbca237031066ab6609a11a

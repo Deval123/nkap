@@ -1,0 +1,855 @@
+{
+  "SchemaVersion": 2,
+  "Trivy": {
+    "Version": "0.76.2"
+  },
+  "ReportID": "01a1b760-8833-7d92-882a-cad497cb781c",
+  "CreatedAt": "2026-11-07T18:58:39.283890599Z",
+  "ArtifactID": "sha256:5553788780ac2331c18312592e2ef3b63380e1e49ca68847c02562974af49e03",
+  "ArtifactName": "ghcr.io/deval123/nkap-gateway:latest",
+  "ArtifactType": "container_image",
+  "Metadata": {
+    "Size": 235259904,
+    "OS": {
+      "Family": "alpine",
+      "Name": "3.21.2",
+      "EOSL": true
+    },
+    "ImageID": "sha256:42bd56b445c318acf21b354ae95aa502aee991c57d53c301d01b428989b66dcd",
+    "DiffIDs": [
+      "sha256:a0904247e36a7726c03c71ee48f3e64462021c88dafeb13f37fdaf613b27f11c",
+      "sha256:e78713086b10fe3416da8be03cbb14e40d045ed57ac346a7addd597821fe4d7e",
+      "sha256:46bb69e20eb4724d5e1ac4d4f99d8dff7372cb9a1a9b0f55ae2c736c08d0a7a0",
+      "sha256:a00de1d80251d4674f24d0fca36245ee152518c24ef687a0754a92c4972bd73d",
+      "sha256:ca7fbeb4bda18dc9418dd4dfc055bbda5c7c524777c70f7e6fc20e5582f57a7f",
+      "sha256:67a01b4d07a1abc7ec3c9c6f167f641f31cf57fb1bdf087e1974004932d0dc2f",
+      "sha256:7dd133b0b041c743c09a9f9f122c0baa29808dad798fe177c6f6efbd7fd2b7f6",
+      "sha256:5f70bf18a086007016e948b04aed3b82103a36bea41755b6cddfaf10ace3c6ef",
+      "sha256:5f70bf18a086007016e948b04aed3b82103a36bea41755b6cddfaf10ace3c6ef",
+      "sha256:6065e9664adb00e33eb73898fc254a3aadab1e38aa677569434d7f454eb86535"
+    ],
+    "RepoTags": [
+      "ghcr.io/deval123/nkap-gateway:latest"
+    ],
+    "RepoDigests": [
+      "ghcr.io/deval123/nkap-gateway@sha256:42bd56b445c318acf21b354ae95aa502aee991c57d53c301d01b428989b66dcd"
+    ],
+    "Reference": "ghcr.io/deval123/nkap-gateway:latest",
+    "ImageConfig": {
+      "architecture": "amd64",
+      "created": "2026-11-06T20:59:24.121878373Z",
+      "history": [
+        {
+          "created": "2025-01-08T12:07:30Z",
+          "created_by": "ADD alpine-minirootfs-3.21.2-x86_64.tar.gz / # buildkit",
+          "comment": "buildkit.dockerfile.v0"
+        },
+        {
+          "created": "2025-01-08T12:07:30Z",
+          "created_by": "CMD [\"/bin/sh\"]",
+          "comment": "buildkit.dockerfile.v0",
+          "empty_layer": true
+        },
+        {
+          "created": "2025-01-22T01:19:15Z",
+          "created_by": "ENV JAVA_HOME=/opt/java/openjdk",
+          "comment": "buildkit.dockerfile.v0",
+          "empty_layer": true
+        },
+        {
+          "created": "2025-01-22T01:19:15Z",
+          "created_by": "ENV PATH=/opt/java/openjdk/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+          "comment": "buildkit.dockerfile.v0",
+          "empty_layer": true
+        },
+        {
+          "created": "2025-01-22T01:19:15Z",
+          "created_by": "ENV LANG=en_US.UTF-8 LANGUAGE=en_US:en LC_ALL=en_US.UTF-8",
+          "comment": "buildkit.dockerfile.v0",
+          "empty_layer": true
+        },
+        {
+          "created": "2025-01-22T01:19:15Z",
+          "created_by": "RUN /bin/sh -c set -eux;     apk add --no-cache         fontconfig ttf-dejavu         gnupg         ca-certificates p11-kit-trust         musl-locales musl-locales-lang         tzdata         coreutils         openssl     ;     rm -rf /var/cache/apk/* # buildkit",
+          "comment": "buildkit.dockerfile.v0"
+        },
+        {
+          "created": "2025-01-22T01:19:15Z",
+          "created_by": "ENV JAVA_VERSION=jdk-21.0.5+11",
+          "comment": "buildkit.dockerfile.v0",
+          "empty_layer": true
+        },
+        {
+          "created": "2025-01-22T01:19:15Z",
+          "created_by": "RUN /bin/sh -c set -eux;     ARCH=\"$(apk --print-arch)\";     case \"${ARCH}\" in        aarch64)          ESUM='12b988a3d934e3eb89c6a981a93f8e2adf0a62cc9030487dee76c0c29b93714d';          BINARY_URL='https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.5%2B11/OpenJDK21U-jre_aarch64_alpine-linux_hotspot_21.0.5_11.tar.gz';          ;;        x86_64)          ESUM='2dfa33fb8e9474e6967c6cf17964abb5ddce9c17fa6a9f8d7aa221a0ae295df9';          BINARY_URL='https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.5%2B11/OpenJDK21U-jre_x64_alpine-linux_hotspot_21.0.5_11.tar.gz';          ;;        *)          echo \"Unsupported arch: ${ARCH}\";          exit 1;          ;;     esac;     wget -O /tmp/openjdk.tar.gz ${BINARY_URL};     wget -O /tmp/openjdk.tar.gz.sig ${BINARY_URL}.sig;     export GNUPGHOME=\"$(mktemp -d)\";     gpg --batch --keyserver keyserver.ubuntu.com --recv-keys 3B04D753C9050D9A5D343F39843C48A565F8F04B;     gpg --batch --verify /tmp/openjdk.tar.gz.sig /tmp/openjdk.tar.gz;     rm -rf \"${GNUPGHOME}\" /tmp/openjdk.tar.gz.sig;     echo \"${ESUM} */tmp/openjdk.tar.gz\" | sha256sum -c -;     mkdir -p \"$JAVA_HOME\";     tar --extract         --file /tmp/openjdk.tar.gz         --directory \"$JAVA_HOME\"         --strip-components 1         --no-same-owner     ;     rm -f /tmp/openjdk.tar.gz; # buildkit",
+          "comment": "buildkit.dockerfile.v0"
+        },
+        {
+          "created": "2025-01-22T01:19:15Z",
+          "created_by": "RUN /bin/sh -c set -eux;     echo \"Verifying install ...\";     echo \"java --version\"; java --version;     echo \"Complete.\" # buildkit",
+          "comment": "buildkit.dockerfile.v0"
+        },
+        {
+          "created": "2025-01-22T01:19:15Z",
+          "created_by": "COPY --chmod=755 entrypoint.sh /__cacert_entrypoint.sh # buildkit",
+          "comment": "buildkit.dockerfile.v0"
+        },
+        {
+          "created": "2025-01-22T01:19:15Z",
+          "created_by": "ENTRYPOINT [\"/__cacert_entrypoint.sh\"]",
+          "comment": "buildkit.dockerfile.v0",
+          "empty_layer": true
+        },
+        {
+          "created": "2026-11-06T20:58:44Z",
+          "created_by": "ARG NKAP_VERSION=2.2.0",
+          "comment": "buildkit.dockerfile.v0",
+          "empty_layer": true
+        },
+        {
+          "created": "2026-11-06T20:58:44Z",
+          "created_by": "ARG NKAP_REVISION=0dfb4520ca512bcdcaa5c534af94a734af2c8dbf",
+          "comment": "buildkit.dockerfile.v0",
+          "empty_layer": true
+        },
+        {
+          "created": "2026-11-06T20:58:44Z",
+          "created_by": "LABEL org.opencontainers.image.source=https://github.com/deval123/nkap org.opencontainers.image.revision=0dfb4520ca512bcdcaa5c534af94a734af2c8dbf org.opencontainers.image.version=2.2.0 org.opencontainers.image.licenses=Apache-2.0 org.opencontainers.image.description=Nkap gateway: REST API, ledger, reconciler and webhooks for MTN MoMo.",
+          "comment": "buildkit.dockerfile.v0",
+          "empty_layer": true
+        },
+        {
+          "created": "2026-11-06T20:58:44Z",
+          "created_by": "WORKDIR /app",
+          "comment": "buildkit.dockerfile.v0"
+        },
+        {
+          "created": "2026-11-06T20:59:24Z",
+          "created_by": "COPY /src/extracted/dependencies/ ./ # buildkit",
+          "comment": "buildkit.dockerfile.v0"
+        },
+        {
+          "created": "2026-11-06T20:59:24Z",
+          "created_by": "COPY /src/extracted/spring-boot-loader/ ./ # buildkit",
+          "comment": "buildkit.dockerfile.v0"
+        },
+        {
+          "created": "2026-11-06T20:59:24Z",
+          "created_by": "COPY /src/extracted/snapshot-dependencies/ ./ # buildkit",
+          "comment": "buildkit.dockerfile.v0"
+        },
+        {
+          "created": "2026-11-06T20:59:24Z",
+          "created_by": "COPY /src/extracted/application/ ./ # buildkit",
+          "comment": "buildkit.dockerfile.v0"
+        },
+        {
+          "created": "2026-11-06T20:59:24Z",
+          "created_by": "EXPOSE [8080/tcp]",
+          "comment": "buildkit.dockerfile.v0",
+          "empty_layer": true
+        },
+        {
+          "created": "2026-11-06T20:59:24Z",
+          "created_by": "ENTRYPOINT [\"java\" \"-jar\" \"app.jar\"]",
+          "comment": "buildkit.dockerfile.v0",
+          "empty_layer": true
+        }
+      ],
+      "os": "linux",
+      "rootfs": {
+        "type": "layers",
+        "diff_ids": [
+          "sha256:a0904247e36a7726c03c71ee48f3e64462021c88dafeb13f37fdaf613b27f11c",
+          "sha256:e78713086b10fe3416da8be03cbb14e40d045ed57ac346a7addd597821fe4d7e",
+          "sha256:46bb69e20eb4724d5e1ac4d4f99d8dff7372cb9a1a9b0f55ae2c736c08d0a7a0",
+          "sha256:a00de1d80251d4674f24d0fca36245ee152518c24ef687a0754a92c4972bd73d",
+          "sha256:ca7fbeb4bda18dc9418dd4dfc055bbda5c7c524777c70f7e6fc20e5582f57a7f",
+          "sha256:67a01b4d07a1abc7ec3c9c6f167f641f31cf57fb1bdf087e1974004932d0dc2f",
+          "sha256:7dd133b0b041c743c09a9f9f122c0baa29808dad798fe177c6f6efbd7fd2b7f6",
+          "sha256:5f70bf18a086007016e948b04aed3b82103a36bea41755b6cddfaf10ace3c6ef",
+          "sha256:5f70bf18a086007016e948b04aed3b82103a36bea41755b6cddfaf10ace3c6ef",
+          "sha256:6065e9664adb00e33eb73898fc254a3aadab1e38aa677569434d7f454eb86535"
+        ]
+      },
+      "config": {
+        "Entrypoint": [
+          "java",
+          "-jar",
+          "app.jar"
+        ],
+        "Env": [
+          "PATH=/opt/java/openjdk/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+          "JAVA_HOME=/opt/java/openjdk",
+          "LANG=en_US.UTF-8",
+          "LANGUAGE=en_US:en",
+          "LC_ALL=en_US.UTF-8",
+          "JAVA_VERSION=jdk-21.0.5+11"
+        ],
+        "Labels": {
+          "org.opencontainers.image.description": "Nkap gateway: REST API, ledger, reconciler and webhooks for MTN MoMo.",
+          "org.opencontainers.image.licenses": "Apache-2.0",
+          "org.opencontainers.image.revision": "0dfb4520ca512bcdcaa5c534af94a734af2c8dbf",
+          "org.opencontainers.image.source": "https://github.com/deval123/nkap",
+          "org.opencontainers.image.version": "2.2.0"
+        },
+        "WorkingDir": "/app",
+        "ExposedPorts": {
+          "8080/tcp": {}
+        }
+      }
+    },
+    "Layers": [
+      {
+        "Size": 8120832,
+        "Digest": "sha256:1f3e46996e2966e4faa5846e56e76e3748b7315e2ded61476c24403d592134f0",
+        "DiffID": "sha256:a0904247e36a7726c03c71ee48f3e64462021c88dafeb13f37fdaf613b27f11c"
+      },
+      {
+        "Size": 33926144,
+        "Digest": "sha256:5659b39bd49de33bcee35552f304c295a740369c1ab0ca99a218050524788829",
+        "DiffID": "sha256:e78713086b10fe3416da8be03cbb14e40d045ed57ac346a7addd597821fe4d7e"
+      },
+      {
+        "Size": 163895296,
+        "Digest": "sha256:b993f9652cd49ac9dceb387d9aca70fc8acff6c04d043e00e8d686b84e1266e9",
+        "DiffID": "sha256:46bb69e20eb4724d5e1ac4d4f99d8dff7372cb9a1a9b0f55ae2c736c08d0a7a0"
+      },
+      {
+        "Size": 2048,
+        "Digest": "sha256:fde96ae108e0ea7f93f0e8e6113c630f022c5308f7aa3434561ab2cb0a2cf080",
+        "DiffID": "sha256:a00de1d80251d4674f24d0fca36245ee152518c24ef687a0754a92c4972bd73d"
+      },
+      {
+        "Size": 7168,
+        "Digest": "sha256:c60b2ad13be19694daf1a89afdcee310320a8b59ba77f6893e78f5de5ffd6f2f",
+        "DiffID": "sha256:ca7fbeb4bda18dc9418dd4dfc055bbda5c7c524777c70f7e6fc20e5582f57a7f"
+      },
+      {
+        "Size": 1536,
+        "Digest": "sha256:8827413101ac04a427aa493be0b9642491c1598abd9d3d86737ca0db9cd2f6ef",
+        "DiffID": "sha256:67a01b4d07a1abc7ec3c9c6f167f641f31cf57fb1bdf087e1974004932d0dc2f"
+      },
+      {
+        "Size": 28865536,
+        "Digest": "sha256:4c5d7f3461d4bc25b4697a9cece3263ce2dff9d42e26b6f9378912776b991e0f",
+        "DiffID": "sha256:7dd133b0b041c743c09a9f9f122c0baa29808dad798fe177c6f6efbd7fd2b7f6"
+      },
+      {
+        "Size": 1024,
+        "Digest": "sha256:4f4fb700ef54461cfa02571ae0db9a0dc1e0cdb5577484a6d75e68dc38e8acc1",
+        "DiffID": "sha256:5f70bf18a086007016e948b04aed3b82103a36bea41755b6cddfaf10ace3c6ef"
+      },
+      {
+        "Size": 1024,
+        "Digest": "sha256:4f4fb700ef54461cfa02571ae0db9a0dc1e0cdb5577484a6d75e68dc38e8acc1",
+        "DiffID": "sha256:5f70bf18a086007016e948b04aed3b82103a36bea41755b6cddfaf10ace3c6ef"
+      },
+      {
+        "Size": 439296,
+        "Digest": "sha256:5c4b2ef5812f166cb2917f100b249022d7903aa29a7af5ecd2b50a1e4f5bcbe6",
+        "DiffID": "sha256:6065e9664adb00e33eb73898fc254a3aadab1e38aa677569434d7f454eb86535"
+      }
+    ]
+  },
+  "Results": [
+    {
+      "Target": "ghcr.io/deval123/nkap-gateway:latest (alpine 3.21.2)",
+      "Class": "os-pkgs",
+      "Type": "alpine",
+      "Packages": [
+        {
+          "ID": "acl-libs@2.3.2-r1",
+          "Name": "acl-libs",
+          "Identifier": {
+            "PURL": "pkg:apk/alpine/acl-libs@2.3.2-r1?arch=x86_64&distro=3.21.2",
+            "UID": "3f58dff29f95d8ad"
+          },
+          "Version": "2.3.2-r1",
+          "Arch": "x86_64",
+          "SrcName": "acl",
+          "SrcVersion": "2.3.2-r1",
+          "Licenses": [
+            "LGPL-2.1-or-later",
+            "GPL-2.0-or-later"
+          ],
+          "Maintainer": "Natanael Copa <ncopa@alpinelinux.org>",
+          "DependsOn": [
+            "musl@1.2.5-r8"
+          ],
+          "Layer": {
+            "Digest": "sha256:5659b39bd49de33bcee35552f304c295a740369c1ab0ca99a218050524788829",
+            "DiffID": "sha256:e78713086b10fe3416da8be03cbb14e40d045ed57ac346a7addd597821fe4d7e"
+          },
+          "Digest": "sha1:201501cb31943570443eeb073a06e43d25ed2865",
+          "InstalledFiles": [
+            "usr/lib/libacl.so.1",
+            "usr/lib/libacl.so.1.1.2302"
+          ],
+          "AnalyzedBy": "apk"
+        },
+        {
+          "ID": "alpine-baselayout@3.6.8-r1",
+          "Name": "alpine-baselayout",
+          "Identifier": {
+            "PURL": "pkg:apk/alpine/alpine-baselayout@3.6.8-r1?arch=x86_64&distro=3.21.2",
+            "UID": "5fd5fdd650938aca"
+          },
+          "Version": "3.6.8-r1",
+          "Arch": "x86_64",
+          "SrcName": "alpine-baselayout",
+          "SrcVersion": "3.6.8-r1",
+          "Licenses": [
+            "GPL-2.0-only"
+          ],
+          "Maintainer": "Natanael Copa <ncopa@alpinelinux.org>",
+          "DependsOn": [
+            "alpine-baselayout-data@3.6.8-r1",
+            "busybox-binsh@1.37.0-r9"
+          ],
+          "Layer": {
+            "Digest": "sha256:1f3e46996e2966e4faa5846e56e76e3748b7315e2ded61476c24403d592134f0",
+            "DiffID": "sha256:a0904247e36a7726c03c71ee48f3e64462021c88dafeb13f37fdaf613b27f11c"
+          },
+          "Digest": "sha1:eceb5e3555e7f7f8925dc248d557fcc744d573d6",
+          "InstalledFiles": [
+            "etc/motd",
+            "etc/crontabs/root",
+            "etc/modprobe.d/aliases.conf",
+            "etc/modprobe.d/blacklist.conf",
+            "etc/modprobe.d/i386.conf",
+            "etc/modprobe.d/kms.conf",
+            "etc/profile.d/20locale.sh",
+            "etc/profile.d/README",
+            "etc/profile.d/color_prompt.sh.disabled",
+            "usr/lib/sysctl.d/00-alpine.conf",
+            "var/lock",
+            "var/run",
+            "var/spool/mail",
+            "var/spool/cron/crontabs"
+          ],
+          "AnalyzedBy": "apk"
+        },
+        {
+          "ID": "alpine-baselayout-data@3.6.8-r1",
+          "Name": "alpine-baselayout-data",
+          "Identifier": {
+            "PURL": "pkg:apk/alpine/alpine-baselayout-data@3.6.8-r1?arch=x86_64&distro=3.21.2",
+            "UID": "a35ff814457b106b"
+          },
+          "Version": "3.6.8-r1",
+          "Arch": "x86_64",
+          "SrcName": "alpine-baselayout",
+          "SrcVersion": "3.6.8-r1",
+          "Licenses": [
+            "GPL-2.0-only"
+          ],
+          "Maintainer": "Natanael Copa <ncopa@alpinelinux.org>",
+          "Layer": {
+            "Digest": "sha256:1f3e46996e2966e4faa5846e56e76e3748b7315e2ded61476c24403d592134f0",
+            "DiffID": "sha256:a0904247e36a7726c03c71ee48f3e64462021c88dafeb13f37fdaf613b27f11c"
+          },
+          "Digest": "sha1:7979a835bc317cedb997d3a42f3b10be86a8d18a",
+          "InstalledFiles": [
+            "etc/fstab",
+            "etc/group",
+            "etc/hostname",
+            "etc/hosts",
+            "etc/inittab",
+            "etc/modules",
+            "etc/mtab",
+            "etc/nsswitch.conf",
+            "etc/passwd",
+            "etc/profile",
+            "etc/protocols",
+            "etc/services",
+            "etc/shadow",
+            "etc/shells",
+            "etc/sysctl.conf"
+          ],
+          "AnalyzedBy": "apk"
+        }
+      ],
+      "Vulnerabilities": [
+        {
+          "VulnerabilityID": "CVE-2026-111497",
+          "PkgID": "brotli-libs@1.1.0-r2",
+          "PkgName": "brotli-libs",
+          "PkgIdentifier": {
+            "PURL": "pkg:apk/alpine/brotli-libs@1.1.0-r2?arch=x86_64&distro=3.21.2",
+            "UID": "b3c930918bcd4137"
+          },
+          "InstalledVersion": "1.1.0-r2",
+          "FixedVersion": "1.1.1-r0",
+          "Status": "fixed",
+          "Layer": {
+            "Digest": "sha256:5659b39bd49de33bcee35552f304c295a740369c1ab0ca99a218050524788829",
+            "DiffID": "sha256:e78713086b10fe3416da8be03cbb14e40d045ed57ac346a7addd597821fe4d7e"
+          },
+          "SeveritySource": "nvd",
+          "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-111497",
+          "DataSource": {
+            "ID": "alpine",
+            "Name": "Alpine Secdb",
+            "URL": "https://secdb.alpinelinux.org/"
+          },
+          "Fingerprint": "sha256:dfd60f1f8e410b031ec23620e16326ba7f4da527426507e33d4b9068cdd5eacd",
+          "Title": "brotli: Out-of-Bounds Write in Google Brotli Decoder",
+          "Description": "A buffer overflow vulnerability in the Brotli decoder (c/dec/decode.c) in Google Brotli versions 1.0.3 through 1.2.0 on all platforms allows a remote unauthenticated attacker to corrupt adjacent decoder state memory, disclose sensitive memory contents, cause a denial of service, or potentially execute arbitrary code using a crafted Brotli-compressed stream.\n\n\n\n\n\nUsers need to update any Brotli libraries or binaries between 1.0.3 through 1.2.0 to the latest available version: 1.0.10 or 1.1.1 or 1.2.1.",
+          "Severity": "CRITICAL",
+          "CweIDs": [
+            "CWE-252",
+            "CWE-787"
+          ],
+          "VendorSeverity": {
+            "alma": 3,
+            "amazon": 3,
+            "azure": 4,
+            "bitnami": 4,
+            "ghsa": 4,
+            "nvd": 4,
+            "oracle-oval": 3,
+            "photon": 4,
+            "redhat": 3,
+            "rocky": 3,
+            "ubuntu": 3
+          },
+          "CVSS": {
+            "bitnami": {
+              "V40Vector": "CVSS:4.0/AV:N/AC:L/AT:P/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N",
+              "V40Score": 9.2
+            },
+            "ghsa": {
+              "V3Vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+              "V40Vector": "CVSS:4.0/AV:N/AC:L/AT:P/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N",
+              "V3Score": 9.8,
+              "V40Score": 9.2
+            },
+            "nvd": {
+              "V3Vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+              "V3Score": 9.8
+            },
+            "redhat": {
+              "V3Vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:H",
+              "V3Score": 8.1
+            }
+          },
+          "References": [
+            "http://www.openwall.com/lists/oss-security/2026/10/23/25",
+            "http://www.openwall.com/lists/oss-security/2026/10/24/6",
+            "http://www.openwall.com/lists/oss-security/2026/10/26/12",
+            "http://www.openwall.com/lists/oss-security/2026/10/26/13",
+            "http://www.openwall.com/lists/oss-security/2026/10/26/16",
+            "http://www.openwall.com/lists/oss-security/2026/11/03/2",
+            "https://access.redhat.com/errata/RHSA-2026:90495",
+            "https://access.redhat.com/errata/RHSA-2026:92492",
+            "https://access.redhat.com/security/cve/CVE-2026-111497",
+            "https://advisory.echohq.com/cve/CVE-2026-111497",
+            "https://broccoli2shell.com",
+            "https://bugzilla.redhat.com/2558973",
+            "https://bugzilla.redhat.com/2562054",
+            "https://bugzilla.redhat.com/show_bug.cgi?id=2558973",
+            "https://cert-portal.siemens.com/productcert/html/ssa-045512.html",
+            "https://cert-portal.siemens.com/productcert/html/ssa-443410.html",
+            "https://cert-portal.siemens.com/productcert/html/ssa-898633.html",
+            "https://creativecommons.org/licenses/by/4.0/",
+            "https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2026-111497",
+            "https://devblogs.microsoft.com/dotnet/dotnet-october-2026-oob-security-updates",
+            "https://ellio.tech/en/blog/node2shell-cve-2026-111497-rce-on-stock-nodejs-builds",
+            "https://ellio.tech/en/blog/node2shell-cve-2026-111497-rce-on-stock-nodejs-builds/",
+            "https://errata.almalinux.org/9/ALSA-2026-92492.html",
+            "https://errata.rockylinux.org/RLSA-2026:90495",
+            "https://github.com/advisories/GHSA-9v8h-qqgm-4m35",
+            "https://github.com/andybalholm/brotli/releases/tag/v1.2.7",
+            "https://github.com/dotnet/announcements/issues/494",
+            "https://github.com/google/brotli",
+            "https://github.com/google/brotli/commit/0ed4268a4401abcb4472096340477cf4af7d1a2b",
+            "https://github.com/google/brotli/commit/50a9b70a4d5e1443fc40927952276b68fffa83a0",
+            "https://github.com/google/brotli/commit/b418fa81c48262a86a95332b0bc6d62c30aa78b6",
+            "https://github.com/google/brotli/commit/da9806362874b9bd4b552a3af360b5d6347beb12",
+            "https://github.com/google/brotli/releases/tag/v1.0.10",
+            "https://github.com/google/brotli/releases/tag/v1.1.1",
+            "https://github.com/google/brotli/releases/tag/v1.2.1",
+            "https://github.com/pypa/advisory-database/tree/main/vulns/brotli/PYSEC-2026-4322.yaml",
+            "https://github.com/pypa/advisory-database/tree/main/vulns/brotlicffi/PYSEC-2026-4323.yaml",
+            "https://linux.oracle.com/cve/CVE-2026-111497.html",
+            "https://linux.oracle.com/errata/ELSA-2026-92492.html",
+            "https://lists.debian.org/debian-lts-announce/2026/10/msg00049.html",
+            "https://msrc.microsoft.com/update-guide/vulnerability/CVE-2026-114148",
+            "https://nodejs.org/en/blog/vulnerability/october-2026-security-releases",
+            "https://nodejs.org/en/blog/vulnerability/october-2026-security-releases#nodejs-brotli-decoder-out-of-bounds-write-permits-remote-code-execution-cve-2026-111497---high",
+            "https://nvd.nist.gov/vuln/detail/CVE-2026-111497",
+            "https://opensourcemalware.com/blog/node2shell-affects-python",
+            "https://patchtheplanet.org/brotli",
+            "https://pypi.org/project/Brotli",
+            "https://pypi.org/project/brotlicffi",
+            "https://ubuntu.com/security/notices/USN-8956-1",
+            "https://ubuntu.com/security/notices/USN-8956-2",
+            "https://ubuntu.com/security/notices/USN-8958-1",
+            "https://www.aikido.dev/blog/node2shell-nodejs-brotli-rce-cve-2026-111497",
+            "https://www.cisa.gov/known-exploited-vulnerabilities-catalog",
+            "https://www.cisa.gov/known-exploited-vulnerabilities-catalog?field_cve=CVE-2026-111497",
+            "https://www.cve.org/CVERecord?id=CVE-2026-111497"
+          ],
+          "PublishedDate": "2026-10-22T14:17:37.19Z",
+          "LastModifiedDate": "2026-11-06T16:17:37.393Z"
+        },
+        {
+          "VulnerabilityID": "CVE-2025-68973",
+          "PkgID": "gnupg@2.4.7-r0",
+          "PkgName": "gnupg",
+          "PkgIdentifier": {
+            "PURL": "pkg:apk/alpine/gnupg@2.4.7-r0?arch=x86_64&distro=3.21.2",
+            "UID": "833fe652f3fc5446"
+          },
+          "InstalledVersion": "2.4.7-r0",
+          "FixedVersion": "2.4.9-r0",
+          "Status": "fixed",
+          "Layer": {
+            "Digest": "sha256:5659b39bd49de33bcee35552f304c295a740369c1ab0ca99a218050524788829",
+            "DiffID": "sha256:e78713086b10fe3416da8be03cbb14e40d045ed57ac346a7addd597821fe4d7e"
+          },
+          "SeveritySource": "nvd",
+          "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2025-68973",
+          "DataSource": {
+            "ID": "alpine",
+            "Name": "Alpine Secdb",
+            "URL": "https://secdb.alpinelinux.org/"
+          },
+          "Fingerprint": "sha256:e206d1379854ff73f493302b390d625170ece2b0d8317eba4cba6b6f2c6cdaee",
+          "Title": "GnuPG: GnuPG: Information disclosure and potential arbitrary code execution via out-of-bounds write",
+          "Description": "In GnuPG before 2.4.9, armor_filter in g10/armor.c has two increments of an index variable where one is intended, leading to an out-of-bounds write for crafted input. (For ExtendedLTS, 2.2.51 and later are fixed versions.)",
+          "Severity": "HIGH",
+          "CweIDs": [
+            "CWE-675",
+            "CWE-787"
+          ],
+          "VendorSeverity": {
+            "alma": 3,
+            "amazon": 3,
+            "azure": 3,
+            "cbl-mariner": 3,
+            "julia": 3,
+            "nvd": 3,
+            "oracle-oval": 3,
+            "photon": 3,
+            "redhat": 3,
+            "rocky": 3,
+            "ubuntu": 3
+          },
+          "CVSS": {
+            "julia": {
+              "V3Vector": "CVSS:3.1/AV:L/AC:H/PR:L/UI:N/S:U/C:H/I:H/A:H",
+              "V3Score": 7
+            },
+            "nvd": {
+              "V3Vector": "CVSS:3.1/AV:L/AC:H/PR:L/UI:N/S:U/C:H/I:H/A:H",
+              "V3Score": 7
+            },
+            "redhat": {
+              "V3Vector": "CVSS:3.1/AV:L/AC:H/PR:N/UI:N/S:C/C:H/I:H/A:N",
+              "V3Score": 7.8
+            }
+          },
+          "References": [
+            "http://www.openwall.com/lists/oss-security/2025/12/29/11",
+            "https://access.redhat.com/errata/RHSA-2026:0719",
+            "https://access.redhat.com/security/cve/CVE-2025-68973",
+            "https://bugzilla.redhat.com/2425966",
+            "https://bugzilla.redhat.com/show_bug.cgi?id=2425966",
+            "https://creativecommons.org/licenses/by/4.0/",
+            "https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2025-68973",
+            "https://dev.gnupg.org/T7906",
+            "https://dev.gnupg.org/T8001",
+            "https://errata.almalinux.org/9/ALSA-2026-0719.html",
+            "https://errata.rockylinux.org/RLSA-2026:0719",
+            "https://github.com/advisories/GHSA-pj23-86ww-f72p",
+            "https://github.com/gpg/gnupg/blob/ff30683418695f5d2cc9e6cf8c9418e09378ebe4/g10/armor.c#L1305-L1306",
+            "https://github.com/gpg/gnupg/commit/115d138ba599328005c5321c0ef9f00355838ca9",
+            "https://github.com/gpg/gnupg/commit/115d138ba599328005c5321c0ef9f00355838ca9%20%28gnupg-2.5.14%29",
+            "https://github.com/gpg/gnupg/commit/1e929abd20fa2e4be3797a137caca63a971d5372%20%28gnupg-2.2.51%29",
+            "https://github.com/gpg/gnupg/commit/4ecc5122f20e10c17172ed72f4fa46c784b5fb48%20%28gnupg-2.4.9%29",
+            "https://github.com/gpg/gnupg/compare/gnupg-2.2.50...gnupg-2.2.51",
+            "https://gpg.fail/memcpy",
+            "https://linux.oracle.com/cve/CVE-2025-68973.html",
+            "https://linux.oracle.com/errata/ELSA-2026-1677.html",
+            "https://lists.debian.org/debian-lts-announce/2026/01/msg00008.html",
+            "https://media.ccc.de/v/39c3-to-sign-or-not-to-sign-practical-vulnerabilities-i",
+            "https://news.ycombinator.com/item?id=46403200",
+            "https://nvd.nist.gov/vuln/detail/CVE-2025-68973",
+            "https://ubuntu.com/security/notices/USN-7946-1",
+            "https://ubuntu.com/security/notices/USN-7946-2",
+            "https://www.cve.org/CVERecord?id=CVE-2025-68973",
+            "https://www.openwall.com/lists/oss-security/2025/12/28/5"
+          ],
+          "PublishedDate": "2025-12-28T17:16:01.5Z",
+          "LastModifiedDate": "2026-10-13T09:10:00.323Z"
+        }
+      ]
+    },
+    {
+      "Target": "Java",
+      "Class": "lang-pkgs",
+      "Type": "jar",
+      "Packages": [
+        {
+          "Name": "ch.qos.logback:logback-classic",
+          "Identifier": {
+            "PURL": "pkg:maven/ch.qos.logback/logback-classic@1.5.34",
+            "UID": "ea9933e2c11701ca"
+          },
+          "Version": "1.5.34",
+          "Licenses": [
+            "EPL-2.0",
+            "LGPL-2.1-only"
+          ],
+          "Layer": {
+            "Digest": "sha256:4c5d7f3461d4bc25b4697a9cece3263ce2dff9d42e26b6f9378912776b991e0f",
+            "DiffID": "sha256:7dd133b0b041c743c09a9f9f122c0baa29808dad798fe177c6f6efbd7fd2b7f6"
+          },
+          "FilePath": "app/lib/logback-classic-1.5.34.jar",
+          "AnalyzedBy": "jar"
+        },
+        {
+          "Name": "ch.qos.logback:logback-core",
+          "Identifier": {
+            "PURL": "pkg:maven/ch.qos.logback/logback-core@1.5.34",
+            "UID": "4b085870dfb867b3"
+          },
+          "Version": "1.5.34",
+          "Licenses": [
+            "EPL-2.0",
+            "LGPL-2.1-only"
+          ],
+          "Layer": {
+            "Digest": "sha256:4c5d7f3461d4bc25b4697a9cece3263ce2dff9d42e26b6f9378912776b991e0f",
+            "DiffID": "sha256:7dd133b0b041c743c09a9f9f122c0baa29808dad798fe177c6f6efbd7fd2b7f6"
+          },
+          "FilePath": "app/lib/logback-core-1.5.34.jar",
+          "AnalyzedBy": "jar"
+        },
+        {
+          "Name": "com.fasterxml.jackson.core:jackson-annotations",
+          "Identifier": {
+            "PURL": "pkg:maven/com.fasterxml.jackson.core/jackson-annotations@2.21",
+            "UID": "b4f46b7359ee483"
+          },
+          "Version": "2.21",
+          "Licenses": [
+            "Apache-2.0"
+          ],
+          "Layer": {
+            "Digest": "sha256:4c5d7f3461d4bc25b4697a9cece3263ce2dff9d42e26b6f9378912776b991e0f",
+            "DiffID": "sha256:7dd133b0b041c743c09a9f9f122c0baa29808dad798fe177c6f6efbd7fd2b7f6"
+          },
+          "FilePath": "app/lib/jackson-annotations-2.21.jar",
+          "AnalyzedBy": "jar"
+        }
+      ],
+      "Vulnerabilities": [
+        {
+          "VulnerabilityID": "CVE-2026-55276",
+          "VendorIDs": [
+            "GHSA-mqg3-r7h5-24x4"
+          ],
+          "PkgName": "org.apache.tomcat.embed:tomcat-embed-core",
+          "PkgPath": "app/lib/tomcat-embed-core-10.1.55.jar",
+          "PkgIdentifier": {
+            "PURL": "pkg:maven/org.apache.tomcat.embed/tomcat-embed-core@10.1.55",
+            "UID": "3deafd226172be0a"
+          },
+          "InstalledVersion": "10.1.55",
+          "FixedVersion": "11.0.23, 10.1.56, 9.0.119",
+          "Status": "fixed",
+          "Layer": {
+            "Digest": "sha256:4c5d7f3461d4bc25b4697a9cece3263ce2dff9d42e26b6f9378912776b991e0f",
+            "DiffID": "sha256:7dd133b0b041c743c09a9f9f122c0baa29808dad798fe177c6f6efbd7fd2b7f6"
+          },
+          "SeveritySource": "ghsa",
+          "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-55276",
+          "DataSource": {
+            "ID": "ghsa",
+            "Name": "GitHub Security Advisory Maven",
+            "URL": "https://github.com/advisories?query=type%3Areviewed+ecosystem%3Amaven"
+          },
+          "Fingerprint": "sha256:85f08392fc97058cc77075a5fceb537069cafce7a638f16970f9e1045c8e62ee",
+          "Title": "tomcat: Apache Tomcat: Misleading security logs due to incorrect control flow",
+          "Description": "Always-Incorrect Control Flow Implementation vulnerability in Apache Tomcat meant that special roles and empty authorisation constraints were not included when the effective web.xml was logged.\n\nThis issue affects Apache Tomcat: from 11.0.0-M1 through 11.0.22, from 10.1.0-M1 through 10.1.55, from 9.0.0.M1 through 9.0.118, from 8.5.0 through 8.5.100. Other versions that have reached end of support may also be affected.\n\nUsers are recommended to upgrade to version 11.0.23, 10.1.56 or 9.0.119 which fixes the issue.",
+          "Severity": "CRITICAL",
+          "CweIDs": [
+            "CWE-670"
+          ],
+          "VendorSeverity": {
+            "alma": 2,
+            "amazon": 2,
+            "bitnami": 4,
+            "ghsa": 4,
+            "redhat": 1,
+            "rocky": 2,
+            "ubuntu": 2
+          },
+          "CVSS": {
+            "bitnami": {
+              "V3Vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N",
+              "V3Score": 9.1
+            },
+            "ghsa": {
+              "V3Vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N",
+              "V3Score": 9.1
+            },
+            "redhat": {
+              "V3Vector": "CVSS:3.1/AV:L/AC:L/PR:H/UI:N/S:U/C:N/I:L/A:N",
+              "V3Score": 2.3
+            }
+          },
+          "References": [
+            "http://www.openwall.com/lists/oss-security/2026/06/29/23",
+            "https://access.redhat.com/errata/RHSA-2026:68660",
+            "https://access.redhat.com/security/cve/CVE-2026-55276",
+            "https://bugzilla.redhat.com/2457025",
+            "https://bugzilla.redhat.com/2476511",
+            "https://bugzilla.redhat.com/2476513",
+            "https://bugzilla.redhat.com/2476516",
+            "https://bugzilla.redhat.com/2476519",
+            "https://bugzilla.redhat.com/2476520",
+            "https://bugzilla.redhat.com/2499917",
+            "https://bugzilla.redhat.com/2499931",
+            "https://bugzilla.redhat.com/show_bug.cgi?id=2457025",
+            "https://bugzilla.redhat.com/show_bug.cgi?id=2476511",
+            "https://bugzilla.redhat.com/show_bug.cgi?id=2476512",
+            "https://bugzilla.redhat.com/show_bug.cgi?id=2476513",
+            "https://bugzilla.redhat.com/show_bug.cgi?id=2476516",
+            "https://bugzilla.redhat.com/show_bug.cgi?id=2476518",
+            "https://bugzilla.redhat.com/show_bug.cgi?id=2476519",
+            "https://bugzilla.redhat.com/show_bug.cgi?id=2476520",
+            "https://bugzilla.redhat.com/show_bug.cgi?id=2494668",
+            "https://bugzilla.redhat.com/show_bug.cgi?id=2494675",
+            "https://bugzilla.redhat.com/show_bug.cgi?id=2494676",
+            "https://bugzilla.redhat.com/show_bug.cgi?id=2494678",
+            "https://bugzilla.redhat.com/show_bug.cgi?id=2494681",
+            "https://bugzilla.redhat.com/show_bug.cgi?id=2494688",
+            "https://bugzilla.redhat.com/show_bug.cgi?id=2499917",
+            "https://bugzilla.redhat.com/show_bug.cgi?id=2499931",
+            "https://creativecommons.org/licenses/by/4.0/",
+            "https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2026-32990",
+            "https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2026-41284",
+            "https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2026-41293",
+            "https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2026-42498",
+            "https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2026-43512",
+            "https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2026-43513",
+            "https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2026-43514",
+            "https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2026-43515",
+            "https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2026-50229",
+            "https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2026-53404",
+            "https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2026-53434",
+            "https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2026-55276",
+            "https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2026-55955",
+            "https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2026-55956",
+            "https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2026-59083",
+            "https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2026-59084",
+            "https://errata.almalinux.org/9/ALSA-2026-68660.html",
+            "https://errata.rockylinux.org/RLSA-2026:68660",
+            "https://github.com/apache/tomcat",
+            "https://github.com/apache/tomcat/commit/17daf80a738d66a8e6cad05c5e32c2db81500ce1%20%2810.1.56%29",
+            "https://github.com/apache/tomcat/commit/25677f90fd721c26ef0f613d34ef8275b1aafc31%20%2810.1.56%29",
+            "https://github.com/apache/tomcat/commit/3ca8cae5fd3796b1bd9759e11b0e238161e7a39c",
+            "https://github.com/apache/tomcat/commit/3ca8cae5fd3796b1bd9759e11b0e238161e7a39c%20%289.0.119%29",
+            "https://github.com/apache/tomcat/commit/e391c6b201eae2ad9707a1335aff68ab8b3e0f84",
+            "https://github.com/apache/tomcat/commit/e391c6b201eae2ad9707a1335aff68ab8b3e0f84%20%2811.0.23%29",
+            "https://github.com/apache/tomcat/commit/f844614c6d92eeb11e81e179606bf4c390f642dd",
+            "https://github.com/apache/tomcat/commit/f844614c6d92eeb11e81e179606bf4c390f642dd%20%2811.0.23%29",
+            "https://lists.apache.org/thread/jy09xjlzn6r2qwvqoph8vcmf959yq68v",
+            "https://nvd.nist.gov/vuln/detail/CVE-2026-55276",
+            "https://tomcat.apache.org/security-10.html",
+            "https://tomcat.apache.org/security-11.html",
+            "https://tomcat.apache.org/security-9.html",
+            "https://ubuntu.com/security/notices/USN-8551-1",
+            "https://www.cve.org/CVERecord?id=CVE-2026-55276"
+          ],
+          "PublishedDate": "2026-06-29T21:16:45.38Z",
+          "LastModifiedDate": "2026-10-25T21:10:00.77Z"
+        },
+        {
+          "VulnerabilityID": "CVE-2026-89407",
+          "VendorIDs": [
+            "GHSA-p6pp-m3f8-5c89"
+          ],
+          "PkgName": "com.fasterxml.jackson.core:jackson-core",
+          "PkgPath": "app/lib/jackson-core-2.21.4.jar",
+          "PkgIdentifier": {
+            "PURL": "pkg:maven/com.fasterxml.jackson.core/jackson-core@2.21.4",
+            "UID": "686a99561d675586"
+          },
+          "InstalledVersion": "2.21.4",
+          "FixedVersion": "2.18.11, 2.21.7, 2.22.3",
+          "Status": "fixed",
+          "Layer": {
+            "Digest": "sha256:4c5d7f3461d4bc25b4697a9cece3263ce2dff9d42e26b6f9378912776b991e0f",
+            "DiffID": "sha256:7dd133b0b041c743c09a9f9f122c0baa29808dad798fe177c6f6efbd7fd2b7f6"
+          },
+          "SeveritySource": "ghsa",
+          "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-89407",
+          "DataSource": {
+            "ID": "ghsa",
+            "Name": "GitHub Security Advisory Maven",
+            "URL": "https://github.com/advisories?query=type%3Areviewed+ecosystem%3Amaven"
+          },
+          "Fingerprint": "sha256:5e8a99b1403d3c644f18405d886a29a8fabcaf28900aca7f2355b001e68ef832",
+          "Title": "com.fasterxml.jackson/jackson-core: tools.jackson.core/jackson-core: Jackson-core: Denial of Service via regular expression backtracking",
+          "Description": "NumberInput.looksLikeValidNumber() in FasterXML jackson-core pre-validates \"stringified numbers\" with two regular expressions: PATTERN_FLOAT ([+-]?[0-9]*[\\.]?[0-9]+([eE][+-]?[0-9]+)?), present since 2.17.0, and PATTERN_FLOAT_TRAILING_DOT, added in 2.17.2. PATTERN_FLOAT places adjacent quantifiers over the same character class -- an optional [0-9]* run, an optional dot, then a required [0-9]+ run -- so input that ultimately fails to match forces Java's backtracking engine to retry every possible split point of the digit run. \n\n\n\nMatching cost therefore grows with the square of the input length. \n\n\n\nAn attacker who can supply JSON that an application deserializes into a numeric target type reaches this method through jackson-databind's default String-to-number coercion (StdDeserializer and NumberDeserializers for BigDecimal, BigInteger, Double and Float). \n\n\n\nBecause StreamReadConstraints.maxStringLength defaults to 20,000,000 characters, no constraint bounds the input before it reaches the regex. \n\n\n\nTesting by the reporter confirmed O(n^2) growth across five consecutive input-size doublings, with a single 160,000-character string consuming roughly 74 seconds in one call; a small number of concurrent requests of ordinary body size can therefore exhaust a server's request-handling thread pool. \n\n\n\nThe affected method does not exist before 2.17.0, so 2.16.x and earlier releases are not affected. \n\n\n\nThe fix replaces both regular expressions with a hand-rolled single-pass scan.",
+          "Severity": "HIGH",
+          "CweIDs": [
+            "CWE-400",
+            "CWE-1333"
+          ],
+          "VendorSeverity": {
+            "alma": 2,
+            "amazon": 3,
+            "ghsa": 3,
+            "oracle-oval": 3,
+            "redhat": 2,
+            "rocky": 2
+          },
+          "CVSS": {
+            "ghsa": {
+              "V3Vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H",
+              "V3Score": 7.5
+            },
+            "redhat": {
+              "V3Vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:N/A:H",
+              "V3Score": 5.9
+            }
+          },
+          "References": [
+            "https://access.redhat.com/errata/RHSA-2026:86706",
+            "https://access.redhat.com/security/cve/CVE-2026-89407",
+            "https://advisory.echohq.com/cve/CVE-2026-89407",
+            "https://bugzilla.redhat.com/2538720",
+            "https://bugzilla.redhat.com/2539084",
+            "https://bugzilla.redhat.com/show_bug.cgi?id=2538720",
+            "https://bugzilla.redhat.com/show_bug.cgi?id=2539084",
+            "https://creativecommons.org/licenses/by/4.0/",
+            "https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2026-89407",
+            "https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2026-89425",
+            "https://errata.almalinux.org/9/ALSA-2026-86706.html",
+            "https://errata.rockylinux.org/RLSA-2026:86706",
+            "https://getsafety.com/vulnerabilities/SFTY-20260922-89449/CVE-2026-89407",
+            "https://github.com/FasterXML/jackson-core",
+            "https://github.com/FasterXML/jackson-core/commit/731e794f62623aa0d86ced52490166be903fbb1d",
+            "https://github.com/FasterXML/jackson-core/commit/e7acd64cc99bd346704423dc2bfea1ab0a08ddff",
+            "https://github.com/FasterXML/jackson-core/issues/1649",
+            "https://github.com/FasterXML/jackson-core/pull/1650",
+            "https://github.com/FasterXML/jackson-core/pull/1701",
+            "https://github.com/FasterXML/jackson-core/security/advisories/GHSA-p6pp-m3f8-5c89",
+            "https://linux.oracle.com/cve/CVE-2026-89407.html",
+            "https://linux.oracle.com/errata/ELSA-2026-92408.html",
+            "https://nvd.nist.gov/vuln/detail/CVE-2026-89407",
+            "https://www.cve.org/CVERecord?id=CVE-2026-89407"
+          ],
+          "PublishedDate": "2026-09-22T15:17:21.053Z",
+          "LastModifiedDate": "2026-09-22T20:00:03.713Z"
+        }
+      ]
+    }
+  ]
+}

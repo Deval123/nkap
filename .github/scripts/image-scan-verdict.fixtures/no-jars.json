@@ -1,0 +1,360 @@
+{
+  "SchemaVersion": 2,
+  "Trivy": {
+    "Version": "0.76.2"
+  },
+  "ReportID": "01a1b771-49f0-7280-9851-682ad1f9468c",
+  "CreatedAt": "2026-11-07T19:16:57.456166877Z",
+  "ArtifactID": "sha256:acea8b4169b34d5321f5fb25f7633335df51d758cee334dd0b52fd85db1b961c",
+  "ArtifactName": "nkap-demo-gateway:latest",
+  "ArtifactType": "container_image",
+  "Metadata": {
+    "Size": 239647232,
+    "OS": {
+      "Family": "alpine",
+      "Name": "3.24.4"
+    },
+    "ImageID": "sha256:949f32fa79e03989108d60e391449d64f67fa3c70d5acfb96a95e053a67a022a",
+    "DiffIDs": [
+      "sha256:3d971ddbca237031066ab6609a11ae2e9e5b109da24d5c5d94d2e584dd94bd54",
+      "sha256:d307255dff9c60ea872845ceabf27346ad564be981e0c194ba98688dcc4c2e19",
+      "sha256:112e37db4c319d06f3d776995202111662e2b60ec550be1fb664201f1b47640a",
+      "sha256:e0096ed79db64f8ae0ab98b6bc13eb55127f48cf710e341f1f934e9acb098da6",
+      "sha256:ac92f20ebd76ab761b58190e72925c9be859f64882f876f8f1e2292e876286a4",
+      "sha256:b2c9629b32a34fdc8a73dc8b612da10980df3759f1034c3f143893c0c40aa508",
+      "sha256:6c7da4a27a584e614d70d77af85ac930cf348c31ee1719882056d8374180f3a0",
+      "sha256:e15345125133e3af3888ac1407f78f958b49b9ccb241a93f260ec4102832ecb8",
+      "sha256:e15345125133e3af3888ac1407f78f958b49b9ccb241a93f260ec4102832ecb8",
+      "sha256:499fec51329705aa36d66da74a427abd7a142bb3bd470f2bab91ef8c6993a55b"
+    ],
+    "RepoTags": [
+      "nkap-demo-gateway:latest"
+    ],
+    "Reference": "nkap-demo-gateway:latest",
+    "ImageConfig": {
+      "architecture": "arm64",
+      "created": "2026-11-07T18:36:28.683310334Z",
+      "history": [
+        {
+          "created": "2026-11-05T18:00:31Z",
+          "created_by": "ADD alpine-minirootfs-3.24.4-aarch64.tar.gz / # buildkit",
+          "comment": "buildkit.dockerfile.v0"
+        },
+        {
+          "created": "2026-11-05T18:00:31Z",
+          "created_by": "CMD [\"/bin/sh\"]",
+          "comment": "buildkit.dockerfile.v0",
+          "empty_layer": true
+        },
+        {
+          "created": "2026-11-05T19:12:54Z",
+          "created_by": "ENV JAVA_HOME=/opt/java/openjdk",
+          "comment": "buildkit.dockerfile.v0",
+          "empty_layer": true
+        },
+        {
+          "created": "2026-11-05T19:12:54Z",
+          "created_by": "ENV PATH=/opt/java/openjdk/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+          "comment": "buildkit.dockerfile.v0",
+          "empty_layer": true
+        },
+        {
+          "created": "2026-11-05T19:12:54Z",
+          "created_by": "ENV LANG=en_US.UTF-8 LANGUAGE=en_US:en LC_ALL=en_US.UTF-8",
+          "comment": "buildkit.dockerfile.v0",
+          "empty_layer": true
+        },
+        {
+          "created": "2026-11-05T19:12:54Z",
+          "created_by": "RUN /bin/sh -c set -eux;     apk add --no-cache         fontconfig ttf-dejavu         gnupg         ca-certificates p11-kit-trust         musl-locales musl-locales-lang         tzdata         coreutils         openssl     ;     rm -rf /var/cache/apk/* # buildkit",
+          "comment": "buildkit.dockerfile.v0"
+        },
+        {
+          "created": "2026-11-05T19:12:54Z",
+          "created_by": "ENV JAVA_VERSION=jdk-21.0.13+9",
+          "comment": "buildkit.dockerfile.v0",
+          "empty_layer": true
+        },
+        {
+          "created": "2026-11-05T19:13:19Z",
+          "created_by": "RUN /bin/sh -c set -eux;     ARCH=\"$(apk --print-arch)\";     case \"${ARCH}\" in        aarch64)          ESUM='382633eb2ba28cc5b97be1446eb1dd8d2a60a3795be0166a030e4cda338c490e';          BINARY_URL='https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.13%2B9/OpenJDK21U-jre_aarch64_alpine-linux_hotspot_21.0.13_9.tar.gz';          ;;        x86_64)          ESUM='9138eab0f7d230e17163953f015ec9ae2431dbc49069c658b7f991e45b54fb9b';          BINARY_URL='https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.13%2B9/OpenJDK21U-jre_x64_alpine-linux_hotspot_21.0.13_9.tar.gz';          ;;        *)          echo \"Unsupported arch: ${ARCH}\";          exit 1;          ;;     esac;     wget -O /tmp/openjdk.tar.gz ${BINARY_URL};     wget -O /tmp/openjdk.tar.gz.sig ${BINARY_URL}.sig;     export GNUPGHOME=\"$(mktemp -d)\";     gpg --batch --keyserver keyserver.ubuntu.com --recv-keys 3B04D753C9050D9A5D343F39843C48A565F8F04B;     gpg --batch --verify /tmp/openjdk.tar.gz.sig /tmp/openjdk.tar.gz;     rm -rf \"${GNUPGHOME}\" /tmp/openjdk.tar.gz.sig;     echo \"${ESUM} */tmp/openjdk.tar.gz\" | sha256sum -c -;     mkdir -p \"$JAVA_HOME\";     tar --extract         --file /tmp/openjdk.tar.gz         --directory \"$JAVA_HOME\"         --strip-components 1         --no-same-owner     ;     rm -f /tmp/openjdk.tar.gz; # buildkit",
+          "comment": "buildkit.dockerfile.v0"
+        },
+        {
+          "created": "2026-11-05T19:13:19Z",
+          "created_by": "RUN /bin/sh -c set -eux;     echo \"Verifying install ...\";     echo \"java --version\"; java --version;     echo \"Complete.\" # buildkit",
+          "comment": "buildkit.dockerfile.v0"
+        },
+        {
+          "created": "2026-11-05T19:13:19Z",
+          "created_by": "COPY --chmod=755 entrypoint.sh /__cacert_entrypoint.sh # buildkit",
+          "comment": "buildkit.dockerfile.v0"
+        },
+        {
+          "created": "2026-11-05T19:13:19Z",
+          "created_by": "ENTRYPOINT [\"/__cacert_entrypoint.sh\"]",
+          "comment": "buildkit.dockerfile.v0",
+          "empty_layer": true
+        },
+        {
+          "created": "2026-11-07T18:36:11Z",
+          "created_by": "ARG NKAP_VERSION=",
+          "comment": "buildkit.dockerfile.v0",
+          "empty_layer": true
+        },
+        {
+          "created": "2026-11-07T18:36:11Z",
+          "created_by": "ARG NKAP_REVISION=",
+          "comment": "buildkit.dockerfile.v0",
+          "empty_layer": true
+        },
+        {
+          "created": "2026-11-07T18:36:11Z",
+          "created_by": "LABEL org.opencontainers.image.source=https://github.com/deval123/nkap org.opencontainers.image.revision= org.opencontainers.image.version= org.opencontainers.image.licenses=Apache-2.0 org.opencontainers.image.description=Nkap gateway: REST API, ledger, reconciler and webhooks for MTN MoMo.",
+          "comment": "buildkit.dockerfile.v0",
+          "empty_layer": true
+        },
+        {
+          "created": "2026-11-07T18:36:11Z",
+          "created_by": "WORKDIR /app",
+          "comment": "buildkit.dockerfile.v0"
+        },
+        {
+          "created": "2026-11-07T18:36:28Z",
+          "created_by": "COPY /src/extracted/dependencies/ ./ # buildkit",
+          "comment": "buildkit.dockerfile.v0"
+        },
+        {
+          "created": "2026-11-07T18:36:28Z",
+          "created_by": "COPY /src/extracted/spring-boot-loader/ ./ # buildkit",
+          "comment": "buildkit.dockerfile.v0"
+        },
+        {
+          "created": "2026-11-07T18:36:28Z",
+          "created_by": "COPY /src/extracted/snapshot-dependencies/ ./ # buildkit",
+          "comment": "buildkit.dockerfile.v0"
+        },
+        {
+          "created": "2026-11-07T18:36:28Z",
+          "created_by": "COPY /src/extracted/application/ ./ # buildkit",
+          "comment": "buildkit.dockerfile.v0"
+        },
+        {
+          "created": "2026-11-07T18:36:28Z",
+          "created_by": "EXPOSE [8080/tcp]",
+          "comment": "buildkit.dockerfile.v0",
+          "empty_layer": true
+        },
+        {
+          "created": "2026-11-07T18:36:28Z",
+          "created_by": "ENTRYPOINT [\"java\" \"-jar\" \"app.jar\"]",
+          "comment": "buildkit.dockerfile.v0",
+          "empty_layer": true
+        }
+      ],
+      "os": "linux",
+      "rootfs": {
+        "type": "layers",
+        "diff_ids": [
+          "sha256:3d971ddbca237031066ab6609a11ae2e9e5b109da24d5c5d94d2e584dd94bd54",
+          "sha256:d307255dff9c60ea872845ceabf27346ad564be981e0c194ba98688dcc4c2e19",
+          "sha256:112e37db4c319d06f3d776995202111662e2b60ec550be1fb664201f1b47640a",
+          "sha256:e0096ed79db64f8ae0ab98b6bc13eb55127f48cf710e341f1f934e9acb098da6",
+          "sha256:ac92f20ebd76ab761b58190e72925c9be859f64882f876f8f1e2292e876286a4",
+          "sha256:b2c9629b32a34fdc8a73dc8b612da10980df3759f1034c3f143893c0c40aa508",
+          "sha256:6c7da4a27a584e614d70d77af85ac930cf348c31ee1719882056d8374180f3a0",
+          "sha256:e15345125133e3af3888ac1407f78f958b49b9ccb241a93f260ec4102832ecb8",
+          "sha256:e15345125133e3af3888ac1407f78f958b49b9ccb241a93f260ec4102832ecb8",
+          "sha256:499fec51329705aa36d66da74a427abd7a142bb3bd470f2bab91ef8c6993a55b"
+        ]
+      },
+      "config": {
+        "Entrypoint": [
+          "java",
+          "-jar",
+          "app.jar"
+        ],
+        "Env": [
+          "PATH=/opt/java/openjdk/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+          "JAVA_HOME=/opt/java/openjdk",
+          "LANG=en_US.UTF-8",
+          "LANGUAGE=en_US:en",
+          "LC_ALL=en_US.UTF-8",
+          "JAVA_VERSION=jdk-21.0.13+9"
+        ],
+        "Labels": {
+          "com.docker.compose.project": "nkap-demo",
+          "com.docker.compose.service": "gateway",
+          "com.docker.compose.version": "5.5.1",
+          "org.opencontainers.image.description": "Nkap gateway: REST API, ledger, reconciler and webhooks for MTN MoMo.",
+          "org.opencontainers.image.licenses": "Apache-2.0",
+          "org.opencontainers.image.revision": "",
+          "org.opencontainers.image.source": "https://github.com/deval123/nkap",
+          "org.opencontainers.image.version": ""
+        },
+        "WorkingDir": "/app",
+        "ExposedPorts": {
+          "8080/tcp": {}
+        }
+      }
+    },
+    "Layers": [
+      {
+        "Size": 8939008,
+        "DiffID": "sha256:3d971ddbca237031066ab6609a11ae2e9e5b109da24d5c5d94d2e584dd94bd54"
+      },
+      {
+        "Size": 38631936,
+        "DiffID": "sha256:d307255dff9c60ea872845ceabf27346ad564be981e0c194ba98688dcc4c2e19"
+      },
+      {
+        "Size": 162371072,
+        "DiffID": "sha256:112e37db4c319d06f3d776995202111662e2b60ec550be1fb664201f1b47640a"
+      },
+      {
+        "Size": 2048,
+        "DiffID": "sha256:e0096ed79db64f8ae0ab98b6bc13eb55127f48cf710e341f1f934e9acb098da6"
+      },
+      {
+        "Size": 7680,
+        "DiffID": "sha256:ac92f20ebd76ab761b58190e72925c9be859f64882f876f8f1e2292e876286a4"
+      },
+      {
+        "Size": 1536,
+        "DiffID": "sha256:b2c9629b32a34fdc8a73dc8b612da10980df3759f1034c3f143893c0c40aa508"
+      },
+      {
+        "Size": 29250048,
+        "DiffID": "sha256:6c7da4a27a584e614d70d77af85ac930cf348c31ee1719882056d8374180f3a0"
+      },
+      {
+        "Size": 1536,
+        "DiffID": "sha256:e15345125133e3af3888ac1407f78f958b49b9ccb241a93f260ec4102832ecb8"
+      },
+      {
+        "Size": 1536,
+        "DiffID": "sha256:e15345125133e3af3888ac1407f78f958b49b9ccb241a93f260ec4102832ecb8"
+      },
+      {
+        "Size": 440832,
+        "DiffID": "sha256:499fec51329705aa36d66da74a427abd7a142bb3bd470f2bab91ef8c6993a55b"
+      }
+    ]
+  },
+  "Results": [
+    {
+      "Target": "nkap-demo-gateway:latest (alpine 3.24.4)",
+      "Class": "os-pkgs",
+      "Type": "alpine",
+      "Packages": [
+        {
+          "ID": "acl-libs@2.3.2-r1",
+          "Name": "acl-libs",
+          "Identifier": {
+            "PURL": "pkg:apk/alpine/acl-libs@2.3.2-r1?arch=aarch64&distro=3.24.4",
+            "UID": "d42e042091b9b2a8"
+          },
+          "Version": "2.3.2-r1",
+          "Arch": "aarch64",
+          "SrcName": "acl",
+          "SrcVersion": "2.3.2-r1",
+          "Licenses": [
+            "LGPL-2.1-or-later",
+            "GPL-2.0-or-later"
+          ],
+          "Maintainer": "Natanael Copa <ncopa@alpinelinux.org>",
+          "DependsOn": [
+            "musl@1.2.6-r3"
+          ],
+          "Layer": {
+            "DiffID": "sha256:d307255dff9c60ea872845ceabf27346ad564be981e0c194ba98688dcc4c2e19"
+          },
+          "Digest": "sha1:3f647a9e2d06f9600a7bfefdecb2a29af94eacd1",
+          "InstalledFiles": [
+            "usr/lib/libacl.so.1",
+            "usr/lib/libacl.so.1.1.2302"
+          ],
+          "AnalyzedBy": "apk"
+        },
+        {
+          "ID": "alpine-baselayout@3.7.2-r1",
+          "Name": "alpine-baselayout",
+          "Identifier": {
+            "PURL": "pkg:apk/alpine/alpine-baselayout@3.7.2-r1?arch=aarch64&distro=3.24.4",
+            "UID": "304a3a90fc88fa6b"
+          },
+          "Version": "3.7.2-r1",
+          "Arch": "aarch64",
+          "SrcName": "alpine-baselayout",
+          "SrcVersion": "3.7.2-r1",
+          "Licenses": [
+            "GPL-2.0-only"
+          ],
+          "Maintainer": "Natanael Copa <ncopa@alpinelinux.org>",
+          "DependsOn": [
+            "alpine-baselayout-data@3.7.2-r1",
+            "busybox-binsh@1.37.0-r31"
+          ],
+          "Layer": {
+            "DiffID": "sha256:3d971ddbca237031066ab6609a11ae2e9e5b109da24d5c5d94d2e584dd94bd54"
+          },
+          "Digest": "sha1:ee13a18ee7e29d75872017403d59c0484dacd963",
+          "InstalledFiles": [
+            "etc/motd",
+            "etc/crontabs/root",
+            "etc/modprobe.d/aliases.conf",
+            "etc/modprobe.d/blacklist.conf",
+            "etc/modprobe.d/i386.conf",
+            "etc/profile.d/20locale.sh",
+            "etc/profile.d/README",
+            "etc/profile.d/color_prompt.sh.disabled",
+            "usr/lib/sysctl.d/00-alpine.conf",
+            "var/lock",
+            "var/run",
+            "var/spool/mail",
+            "var/spool/cron/crontabs"
+          ],
+          "AnalyzedBy": "apk"
+        },
+        {
+          "ID": "alpine-baselayout-data@3.7.2-r1",
+          "Name": "alpine-baselayout-data",
+          "Identifier": {
+            "PURL": "pkg:apk/alpine/alpine-baselayout-data@3.7.2-r1?arch=aarch64&distro=3.24.4",
+            "UID": "9107750a7f29a381"
+          },
+          "Version": "3.7.2-r1",
+          "Arch": "aarch64",
+          "SrcName": "alpine-baselayout",
+          "SrcVersion": "3.7.2-r1",
+          "Licenses": [
+            "GPL-2.0-only"
+          ],
+          "Maintainer": "Natanael Copa <ncopa@alpinelinux.org>",
+          "Layer": {
+            "DiffID": "sha256:3d971ddbca237031066ab6609a11ae2e9e5b109da24d5c5d94d2e584dd94bd54"
+          },
+          "Digest": "sha1:3337c83d21c8eb114e0d4bb275e561dd3493bdb8",
+          "InstalledFiles": [
+            "etc/fstab",
+            "etc/group",
+            "etc/hostname",
+            "etc/hosts",
+            "etc/inittab",
+            "etc/modules",
+            "etc/mtab",
+            "etc/nsswitch.conf",
+            "etc/passwd",
+            "etc/profile",
+            "etc/protocols",
+            "etc/services",
+            "etc/shadow",
+            "etc/shells",
+            "etc/sysctl.conf"
+          ],
+          "AnalyzedBy": "apk"
+        }
+      ]
+    }
+  ]
+}

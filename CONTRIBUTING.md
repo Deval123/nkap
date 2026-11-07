@@ -85,6 +85,15 @@ lapses on that date and the build fails again, and a check refuses an entry with
 file's header says why a date in a comment would not do. The scan is not yet a required check: it reports, and blocks no merge, until its
 first findings are triaged.
 
+The published images get a second, separate look. `.github/workflows/image-scan.yml` pulls
+the three images from GHCR every day with no credentials and scans the operating-system layer
+and the Java archives in them with Trivy; its report is the `image-scan-reports` artifact of
+the run. It reads what operators have downloaded, not what `main` contains, so after a fix
+merges it stays red until the next release ships. It runs on a schedule and on demand and
+never on a pull request, so a pull request that bumps a base image gets no verdict from it;
+that is deliberate. It is not a required check and it blocks no merge. The `docker` entry of
+`.github/dependabot.yml` is what raises base-image bumps in the first place.
+
 ## Amending an ADR
 
 An ADR records a decision and the reasoning that led to it — not a claim that stays true

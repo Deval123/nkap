@@ -1,0 +1,212 @@
+name: image-scan
+
+# Scans the three images an operator actually pulls (issue #288): the operating-system layer and
+# the Java archives in it, as published on GHCR. vulnerability-check.yml reads the jars this
+# repository builds and never looks at the layer under them; this is the other half. It pulls
+# `ghcr.io/deval123/nkap-gateway`, `nkap-simulator` and `nkap-simulator-mpesa` at the floating
+# tag an operator gets by default, `latest`, and scans them with Trivy.
+#
+# The names are read from release.yml's own `*_IMAGE` variables at run time, not retyped here, so
+# a renamed image fails this job instead of being scanned under its old name for months.
+#
+# It REPORTS. Three decisions, each with a reason, and none of them to be undone quietly:
+#
+#   - `schedule` and `workflow_dispatch` only, no `pull_request`. What is on GHCR does not change
+#     when a branch does. A pull-request run would re-report yesterday's findings on every pull
+#     request and teach everyone to ignore it. The cost is real and is written down on the audit
+#     page: a pull request that bumps a base image gets no verdict from this before it merges.
+#     Its verdict comes from the first run after the next release. Scanning an image built from
+#     the branch would close that, at the price of an image build per pull request; not now.
+#   - It is not a required check, here or in the repository settings. It reports on something
+#     outside this repository's control (a CVE published tonight against Alpine), and a red day
+#     must not be able to block an unrelated merge.
+#   - It is red whenever an image has a HIGH or CRITICAL finding, fixed upstream or not, and
+#     after a base-image bump merges it stays red until the next release ships, because the
+#     published images still carry the old base. That is the instrument working: it reports what
+#     operators have, not what `main` contains.
+#
+# It fails when it cannot answer, which is not the same as finding nothing. A pull that fails, a
+# scanner that cannot fetch its database, a report that does not name the image it was asked
+# for, an image in which the scanner found no operating system or no Java archive: each is a red
+# job, never a green one. A scan that passes because it looked at nothing is worse than no scan.
+#
+# The pull is anonymous, and this file proves it by never logging in: there is no login step and
+# no secret anywhere in it, and `permissions` is `contents: read`. That also re-proves, every
+# day, that the packages are public, which `verify-pull` in release.yml checks only once, at
+# release time.
+#
+# Trivy runs as its own container image, pinned by digest, and not as a marketplace action. The
+# action would be code from a third party running in a job beside a registry pull; the image is
+# the same scanner without that, pinned so a moved tag cannot change what runs. The pin is moved
+# by hand (Dependabot's `docker` ecosystem reads Dockerfiles, not this file): to move it, pick a
+# release, read its digest with `docker buildx imagetools inspect ghcr.io/aquasecurity/trivy:<v>`,
+# and change both lines below.
+#
+# Why Trivy and not Grype, the other obvious choice: both read the Alpine package database and
+# the jars. What decides it is the ignore list. The triage the issue asks for says an ignore needs
+# a reason, evidence and a date that lapses, and that a scanner whose format cannot express an
+# expiry is to be called out. Trivy's `.trivyignore.yaml` carries `expired_at` on each entry, so
+# the discipline the dependency scan's suppression file has can be written down in the scanner's
+# own format. Grype's ignore rules have no expiry, which would leave dates nobody enforces.
+# There is no ignore file yet: nothing has been judged unfixable, and none is added before the
+# first findings are triaged. When one is, an expiry check beside check-suppression-expiry.sh
+# is part of that change, since a format that can express a date does not enforce it.
+on:
+  schedule:
+    - cron: "41 4 * * *"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "The image tag to scan. Leave as latest; a tag that does not exist is how the job is shown to fail."
+        required: false
+        default: latest
+
+permissions:
+  contents: read
+
+env:
+  # ghcr.io/aquasecurity/trivy:0.76.2, by digest.
+  TRIVY_IMAGE: ghcr.io/aquasecurity/trivy@sha256:8f6bb947dbc528902e11f2f5be52f7b519f6a39d5d148f41166f2040499768fb
+
+jobs:
+  image-scan:
+    runs-on: ubuntu-latest
+    # Three pulls and three scans, with a vulnerability database fetched on the first.
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Pull and scan the published images
+        env:
+          # An input, so a run can be pointed at a tag that does not exist. Taken from the
+          # environment and validated, never interpolated into the script.
+          TAG: ${{ inputs.tag || 'latest' }}
+        run: |
+          set -uo pipefail
+          if ! grep -qE '^[A-Za-z0-9_][A-Za-z0-9._-]{0,127}$' <<< "$TAG"; then
+            echo "::error::'$TAG' is not an image tag"
+            exit 1
+          fi
+
+          # The image names, from the one place that publishes them.
+          images=()
+          while IFS= read -r line; do images+=("$line"); done < <(sed -n -E 's/^  (GATEWAY|SIMULATOR|SIMULATOR_MPESA)_IMAGE: *//p' .github/workflows/release.yml)
+          if [ "${#images[@]}" -ne 3 ]; then
+            echo "::error::expected three *_IMAGE variables in release.yml, found ${#images[@]}: ${images[*]:-none}"
+            exit 1
+          fi
+
+          mkdir -p reports
+          failed=0
+          for image in "${images[@]}"; do
+            ref="${image}:${TAG}"
+            name="${image##*/}"
+            echo "::group::${ref}"
+
+            # No `docker login` anywhere in this job: the pull below is anonymous or it fails.
+            if ! docker pull --quiet "$ref" > /dev/null; then
+              echo "::error::could not pull ${ref} with no credentials; the image is missing, or not public"
+              failed=1
+              echo "::endgroup::"
+              continue
+            fi
+
+            # Up to three tries for the scanner, because its database comes from a registry that
+            # rate-limits. Three failures is a failure; there is no flag here that skips the
+            # database or tolerates its absence.
+            scanned=0
+            for attempt in 1 2 3; do
+              if docker run --rm \
+                   -v /var/run/docker.sock:/var/run/docker.sock \
+                   -v "${PWD}/reports:/reports" \
+                   -v "${RUNNER_TEMP}/trivy-cache:/root/.cache/trivy" \
+                   "$TRIVY_IMAGE" image --quiet --scanners vuln --list-all-pkgs \
+                   --severity HIGH,CRITICAL --format json \
+                   --output "/reports/${name}.json" "$ref"; then
+                scanned=1
+                break
+              fi
+              echo "trivy attempt ${attempt} failed"
+              sleep $((attempt * 20))
+            done
+            if [ "$scanned" -ne 1 ]; then
+              echo "::error::trivy could not scan ${ref} after three tries, so there is no answer for it"
+              failed=1
+            fi
+            echo "::endgroup::"
+          done
+
+          # Read every report that exists, and refuse any that does not show the scanner looked.
+          python3 -I - "$TAG" "${images[@]}" <<'PY' || failed=1
+          import collections
+          import json
+          import os
+          import sys
+
+          tag, images = sys.argv[1], sys.argv[2:]
+          summary = ["| image | OS | OS HIGH/CRITICAL | jar HIGH/CRITICAL | with a fix |", "| --- | --- | --- | --- | --- |"]
+          problems, red = [], False
+
+          for image in images:
+              ref, path = image + ":" + tag, "reports/" + image.rsplit("/", 1)[-1] + ".json"
+              if not os.path.exists(path):
+                  problems.append(ref + ": no report was written")
+                  continue
+              with open(path, encoding="utf-8") as handle:
+                  report = json.load(handle)
+              if report.get("ArtifactName") != ref:
+                  problems.append(ref + ": the report is for " + repr(report.get("ArtifactName")))
+                  continue
+              os_meta = (report.get("Metadata") or {}).get("OS") or {}
+              results = report.get("Results") or []
+              os_results = [r for r in results if r.get("Class") == "os-pkgs"]
+              jar_results = [r for r in results if r.get("Class") == "lang-pkgs" and r.get("Type") == "jar"]
+              os_packages = sum(len(r.get("Packages") or []) for r in os_results)
+              jar_packages = sum(len(r.get("Packages") or []) for r in jar_results)
+              # A scan that read no operating system, or no Java archive, looked at nothing it was
+              # asked about. That is a failure to answer, whatever the finding count says.
+              if not os_meta.get("Family") or os_packages == 0:
+                  problems.append(ref + ": the scanner found no operating-system packages (OS " + repr(os_meta) + ")")
+                  continue
+              if jar_packages == 0:
+                  problems.append(ref + ": the scanner found no Java archives, but the image runs a Java application")
+                  continue
+              counts = {"os": collections.Counter(), "jar": collections.Counter()}
+              fixable = 0
+              for kind, group in (("os", os_results), ("jar", jar_results)):
+                  for result in group:
+                      for finding in result.get("Vulnerabilities") or []:
+                          counts[kind][finding["Severity"]] += 1
+                          fixable += 1 if finding.get("FixedVersion") else 0
+              total = sum(counts["os"].values()) + sum(counts["jar"].values())
+              red = red or total > 0
+              eosl = " (end of life)" if os_meta.get("EOSL") else ""
+              line = (image + " " + os_meta["Family"] + " " + os_meta.get("Name", "?") + eosl + ": " +
+                      str(os_packages) + " OS packages, " + str(jar_packages) + " jar packages; " +
+                      "OS " + str(dict(counts["os"])) + ", jar " + str(dict(counts["jar"])) + ", " + str(fixable) + " with a fix")
+              print(("FINDINGS " if total else "clean    ") + line)
+              summary.append("| `" + ref + "` | " + os_meta["Family"] + " " + os_meta.get("Name", "?") + eosl + " | " +
+                             str(sum(counts["os"].values())) + " | " + str(sum(counts["jar"].values())) + " | " + str(fixable) + " |")
+
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as out:
+              out.write("## Published images, tag `" + tag + "`\n\n" + "\n".join(summary) + "\n")
+              for problem in problems:
+                  out.write("\n**No answer:** " + problem + "\n")
+          for problem in problems:
+              print("::error::" + problem)
+          if problems:
+              sys.exit(1)
+          if red:
+              print("::error::at least one image has a HIGH or CRITICAL finding; see the report artifact")
+              sys.exit(1)
+          PY
+
+          exit "$failed"
+
+      - name: Upload the reports
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: image-scan-reports
+          path: reports/
+          if-no-files-found: ignore

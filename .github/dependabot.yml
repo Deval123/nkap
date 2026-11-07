@@ -1,0 +1,29 @@
+# Dependabot, for SECURITY updates only (issue #280).
+#
+# A weekly stream of version-bump pull requests is not what is wanted here: the point is a pull
+# request when a dependency in the tree has a known vulnerability and a fixed version exists,
+# and nothing otherwise. `open-pull-requests-limit: 0` is how GitHub says that. It stops version
+# updates and leaves security updates alone, which keep their own limit.
+#
+# This file only says what to update and where. Security updates themselves are switched on in
+# the repository's settings (Settings -> Code security -> Dependabot alerts, then Dependabot
+# security updates), not in any file, and without them this file does nothing. The scan in
+# .github/workflows/vulnerability-check.yml is independent of both: it fails on a CVSS of 7 or
+# more whether or not a fixed version exists, and says so in its report.
+#
+# `schedule` is required by the format even when no version update is allowed.
+version: 2
+updates:
+  # The root POM and the modules under it, which is the tree the published images ship.
+  - package-ecosystem: maven
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 0
+
+  # The actions the workflows use.
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 0

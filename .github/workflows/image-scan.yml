@@ -20,10 +20,15 @@ name: image-scan
 #   - It is not a required check, here or in the repository settings. It reports on something
 #     outside this repository's control (a CVE published tonight against Alpine), and a red day
 #     must not be able to block an unrelated merge.
-#   - It is red whenever an image has a HIGH or CRITICAL finding, fixed upstream or not, and
-#     after a base-image bump merges it stays red until the next release ships, because the
-#     published images still carry the old base. That is the instrument working: it reports what
-#     operators have, not what `main` contains.
+#   - It is red whenever an image has a HIGH or CRITICAL finding that has a fix, and after a
+#     base-image bump merges it stays red until the next release ships, because the published
+#     images still carry the old base. That is the instrument working: it reports what operators
+#     have, not what `main` contains. A finding with no fix available does not turn it red, and
+#     it is never hidden either: the scan is one run that keeps every HIGH and CRITICAL, fixed or
+#     not, in the uploaded report, and the job summary prints both counts, named. The gate reads
+#     that same report and not a second scan, so the report and the verdict cannot disagree.
+#     Green therefore means "nothing to act on", never "clean"; the unfixable column says what is
+#     still there.
 #
 # It fails when it cannot answer, which is not the same as finding nothing. A pull that fails, a
 # scanner that cannot fetch its database, a report that does not name the image it was asked
@@ -114,6 +119,8 @@ jobs:
             # Up to three tries for the scanner, because its database comes from a registry that
             # rate-limits. Three failures is a failure; there is no flag here that skips the
             # database or tolerates its absence.
+            # One scan, and no `--ignore-unfixed`: that flag removes findings from the report,
+            # and the report is the record. The verdict below reads this same file.
             scanned=0
             for attempt in 1 2 3; do
               if docker run --rm \
@@ -144,8 +151,10 @@ jobs:
           import sys
 
           tag, images = sys.argv[1], sys.argv[2:]
-          summary = ["| image | OS | OS HIGH/CRITICAL | jar HIGH/CRITICAL | with a fix |", "| --- | --- | --- | --- | --- |"]
+          summary = ["| image | OS | fixable HIGH/CRITICAL (the gate reads this) | unfixable HIGH/CRITICAL (the gate does not) |",
+                     "| --- | --- | --- | --- |"]
           problems, red = [], False
+          unfixable_total = 0
 
           for image in images:
               ref, path = image + ":" + tag, "reports/" + image.rsplit("/", 1)[-1] + ".json"
@@ -171,25 +180,37 @@ jobs:
               if jar_packages == 0:
                   problems.append(ref + ": the scanner found no Java archives, but the image runs a Java application")
                   continue
-              counts = {"os": collections.Counter(), "jar": collections.Counter()}
-              fixable = 0
+              # One report, two readings of it. A finding is fixable when the report names a
+              # fixed version; one with none (no fix yet, will not be fixed, fix deferred) is
+              # not. Both are counted from the same report the artifact carries.
+              fixable = {"os": 0, "jar": 0}
+              unfixable = {"os": 0, "jar": 0}
               for kind, group in (("os", os_results), ("jar", jar_results)):
                   for result in group:
                       for finding in result.get("Vulnerabilities") or []:
-                          counts[kind][finding["Severity"]] += 1
-                          fixable += 1 if finding.get("FixedVersion") else 0
-              total = sum(counts["os"].values()) + sum(counts["jar"].values())
-              red = red or total > 0
+                          bucket = fixable if finding.get("FixedVersion") else unfixable
+                          bucket[kind] += 1
+              fixable_n, unfixable_n = sum(fixable.values()), sum(unfixable.values())
+              unfixable_total += unfixable_n
+              # The gate: an always-red job on findings nobody can act on teaches people to
+              # ignore it, so only a finding with a fix turns this red.
+              red = red or fixable_n > 0
               eosl = " (end of life)" if os_meta.get("EOSL") else ""
               line = (image + " " + os_meta["Family"] + " " + os_meta.get("Name", "?") + eosl + ": " +
                       str(os_packages) + " OS packages, " + str(jar_packages) + " jar packages; " +
-                      "OS " + str(dict(counts["os"])) + ", jar " + str(dict(counts["jar"])) + ", " + str(fixable) + " with a fix")
-              print(("FINDINGS " if total else "clean    ") + line)
+                      "fixable " + str(fixable_n) + " (OS " + str(fixable["os"]) + ", jar " + str(fixable["jar"]) + "), " +
+                      "unfixable " + str(unfixable_n) + " (OS " + str(unfixable["os"]) + ", jar " + str(unfixable["jar"]) + ")")
+              label = "FIXABLE  " if fixable_n else ("UNFIXABLE" if unfixable_n else "clean    ")
+              print(label + " " + line)
               summary.append("| `" + ref + "` | " + os_meta["Family"] + " " + os_meta.get("Name", "?") + eosl + " | " +
-                             str(sum(counts["os"].values())) + " | " + str(sum(counts["jar"].values())) + " | " + str(fixable) + " |")
+                             str(fixable_n) + " (OS " + str(fixable["os"]) + ", jar " + str(fixable["jar"]) + ") | " +
+                             str(unfixable_n) + " (OS " + str(unfixable["os"]) + ", jar " + str(unfixable["jar"]) + ") |")
 
           with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as out:
               out.write("## Published images, tag `" + tag + "`\n\n" + "\n".join(summary) + "\n")
+              if not problems:
+                  out.write("\nThe job is red only for **fixable** HIGH or CRITICAL findings. **Green does not mean clean:** "
+                            "the unfixable column is what is still in the image, and the uploaded report lists every one.\n")
               for problem in problems:
                   out.write("\n**No answer:** " + problem + "\n")
           for problem in problems:
@@ -197,8 +218,10 @@ jobs:
           if problems:
               sys.exit(1)
           if red:
-              print("::error::at least one image has a HIGH or CRITICAL finding; see the report artifact")
+              print("::error::at least one image has a HIGH or CRITICAL finding with a fix available; see the report artifact")
               sys.exit(1)
+          if unfixable_total:
+              print("::warning::" + str(unfixable_total) + " HIGH or CRITICAL finding(s) have no fix available. They do not fail this job and are in the report artifact; green is not clean.")
           PY
 
           exit "$failed"

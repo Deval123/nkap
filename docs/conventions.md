@@ -44,8 +44,10 @@ even a one-line fix, and not even by the maintainer.
   `Closes #N` so merging closes it automatically.
 - **The build must be green before merging.** That is the whole reason the workflow runs
   on pull requests; a red PR is not a discussion, it is unfinished work.
-- Merge with a rebase or a merge commit, not a squash. Commit messages here are written to
-  be read a year later, and squashing throws them away.
+- Merge with a merge commit, never a squash and never a rebase. Every merge in this
+  repository's history is a merge commit, and a single method is one fewer thing to get
+  wrong. Commit messages here are written to be read a year later, and squashing throws
+  them away. The `main` ruleset allows no other method.
 - Delete the branch after merging.
 
 If `gh` is available and authenticated, open the pull request with it. Otherwise push the

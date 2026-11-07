@@ -32,4 +32,329 @@
   or a whole class of findings.
 -->
 <suppressions xmlns="https://jeremylong.github.io/DependencyCheck/dependency-suppression.1.4.xsd">
+
+  <!-- spring-core: twelve findings at 7 or above. One entry each, because each is its own CVE with
+       its own reason; the facts they share are repeated in every entry so each stands alone. -->
+  <suppress until="2027-02-07Z">
+    <notes><![CDATA[
+    CVE-2026-47884 on the Spring Framework 6.2.19 jars, CVSS 9.8. NOT REACHABLE FROM THIS PROJECT.
+    What it is: SSRF and RCE through Spring MVC's XsltView, when an application has a "/**" mapping that renders a view and the view name is not specified. The class is in spring-webmvc.
+    Why it is not reachable here: the project renders no views at all. It is a JSON API and a set of fake operators: every handler returns data written by Jackson, and nothing resolves a view name, let alone an XSLT one.
+    Evidence: no ViewResolver, View rendering, XsltView, XSLT or javax.xml.transform in any src/main; every controller is a @RestController (grep for @Controller finds none). ModelAndViewContainer appears once, as a parameter type in CallerArgumentResolver.resolveArgument, which is the signature the HandlerMethodArgumentResolver interface requires; nothing builds or renders a model and view. XsltView exists in the spring-webmvc jar and nothing references it.
+    Checked 2026-11-07 on f5d3b1c, with the runtime dependency tree of every module
+    (`mvn dependency:tree -Dscope=runtime`, per module) and the source of every module's
+    src/main. The Spring modules this project ships are spring-core, -aop, -beans, -context,
+    -expression, -jcl, -jdbc, -tx, -web and -webmvc, all 6.2.19. No runtime tree contains
+    spring-webflux, spring-websocket, spring-messaging, reactor, Aalto, RSocket or Jetty.
+    The scan matches the CPE spring_framework to every Spring jar at 6.2.19 and reports the
+    finding on whichever it groups first: spring-core, then spring-tx, then spring-jcl, as
+    each was suppressed in turn. So each entry covers the ten Spring jars this project ships,
+    listed in its pattern, and not an eleventh that someone adds later. The code each CVE describes lives
+    in a module or a feature this project does not ship or does not use.
+    Until 2027-02-07Z: re-evaluate at the next Spring Boot upgrade, or on this date if there is
+    none. The entry is pinned to 6.2.19 of the Spring jars this project ships, so any Spring bump on the Boot 3.5 line
+    stops it matching and the finding comes back for a fresh decision. No fix exists on this
+    line (6.2.19 is the newest 6.2.x); the advisories fix these in Spring 7 / Boot 4.
+    ]]></notes>
+    <packageUrl regex="true">^pkg:maven/org\.springframework/spring-(?:aop|beans|context|core|expression|jcl|jdbc|tx|web|webmvc)@6\.2\.19$</packageUrl>
+    <cve>CVE-2026-47884</cve>
+  </suppress>
+
+  <suppress until="2027-02-07Z">
+    <notes><![CDATA[
+    CVE-2026-47890 on the Spring Framework 6.2.19 jars, CVSS 9.8. NOT REACHABLE FROM THIS PROJECT.
+    What it is: stream corruption when Server-Sent Events are used together with view fragments, in Spring MVC and WebFlux.
+    Why it is not reachable here: the project uses neither Server-Sent Events nor views.
+    Evidence: no SseEmitter, text/event-stream or TEXT_EVENT_STREAM in any src/main, and no view technology (see CVE-2026-47884's evidence); spring-webflux is in no runtime tree.
+    Checked 2026-11-07 on f5d3b1c, with the runtime dependency tree of every module
+    (`mvn dependency:tree -Dscope=runtime`, per module) and the source of every module's
+    src/main. The Spring modules this project ships are spring-core, -aop, -beans, -context,
+    -expression, -jcl, -jdbc, -tx, -web and -webmvc, all 6.2.19. No runtime tree contains
+    spring-webflux, spring-websocket, spring-messaging, reactor, Aalto, RSocket or Jetty.
+    The scan matches the CPE spring_framework to every Spring jar at 6.2.19 and reports the
+    finding on whichever it groups first: spring-core, then spring-tx, then spring-jcl, as
+    each was suppressed in turn. So each entry covers the ten Spring jars this project ships,
+    listed in its pattern, and not an eleventh that someone adds later. The code each CVE describes lives
+    in a module or a feature this project does not ship or does not use.
+    Until 2027-02-07Z: re-evaluate at the next Spring Boot upgrade, or on this date if there is
+    none. The entry is pinned to 6.2.19 of the Spring jars this project ships, so any Spring bump on the Boot 3.5 line
+    stops it matching and the finding comes back for a fresh decision. No fix exists on this
+    line (6.2.19 is the newest 6.2.x); the advisories fix these in Spring 7 / Boot 4.
+    ]]></notes>
+    <packageUrl regex="true">^pkg:maven/org\.springframework/spring-(?:aop|beans|context|core|expression|jcl|jdbc|tx|web|webmvc)@6\.2\.19$</packageUrl>
+    <cve>CVE-2026-47890</cve>
+  </suppress>
+
+  <suppress until="2027-02-07Z">
+    <notes><![CDATA[
+    CVE-2026-47891 on the Spring Framework 6.2.19 jars, CVSS 9.8. NOT REACHABLE FROM THIS PROJECT.
+    What it is: a Spring WebFlux application that parses XML with the Aalto processor does not enforce maxInMemorySize.
+    Why it is not reachable here: WebFlux, Reactor and Aalto are not part of the project.
+    Evidence: none of spring-webflux, reactor or Aalto appears in any module's runtime dependency tree; the project is Spring MVC on embedded Tomcat.
+    Checked 2026-11-07 on f5d3b1c, with the runtime dependency tree of every module
+    (`mvn dependency:tree -Dscope=runtime`, per module) and the source of every module's
+    src/main. The Spring modules this project ships are spring-core, -aop, -beans, -context,
+    -expression, -jcl, -jdbc, -tx, -web and -webmvc, all 6.2.19. No runtime tree contains
+    spring-webflux, spring-websocket, spring-messaging, reactor, Aalto, RSocket or Jetty.
+    The scan matches the CPE spring_framework to every Spring jar at 6.2.19 and reports the
+    finding on whichever it groups first: spring-core, then spring-tx, then spring-jcl, as
+    each was suppressed in turn. So each entry covers the ten Spring jars this project ships,
+    listed in its pattern, and not an eleventh that someone adds later. The code each CVE describes lives
+    in a module or a feature this project does not ship or does not use.
+    Until 2027-02-07Z: re-evaluate at the next Spring Boot upgrade, or on this date if there is
+    none. The entry is pinned to 6.2.19 of the Spring jars this project ships, so any Spring bump on the Boot 3.5 line
+    stops it matching and the finding comes back for a fresh decision. No fix exists on this
+    line (6.2.19 is the newest 6.2.x); the advisories fix these in Spring 7 / Boot 4.
+    ]]></notes>
+    <packageUrl regex="true">^pkg:maven/org\.springframework/spring-(?:aop|beans|context|core|expression|jcl|jdbc|tx|web|webmvc)@6\.2\.19$</packageUrl>
+    <cve>CVE-2026-47891</cve>
+  </suppress>
+
+  <suppress until="2027-02-07Z">
+    <notes><![CDATA[
+    CVE-2026-47892 on the Spring Framework 6.2.19 jars, CVSS 9.8. NOT REACHABLE FROM THIS PROJECT.
+    What it is: a header-predicate bypass in a pre-flight request for functional endpoints (RouterFunction) deployed with the DispatcherServlet.
+    Why it is not reachable here: the project defines no functional endpoints. Every endpoint is an annotated controller method.
+    Evidence: no RouterFunction or ServerResponse is used in any src/main; the 32 handler methods across server and the simulators are all annotated mappings on @RestController classes. (ServerResponse exists in the spring-webmvc jar and nothing references it.)
+    Checked 2026-11-07 on f5d3b1c, with the runtime dependency tree of every module
+    (`mvn dependency:tree -Dscope=runtime`, per module) and the source of every module's
+    src/main. The Spring modules this project ships are spring-core, -aop, -beans, -context,
+    -expression, -jcl, -jdbc, -tx, -web and -webmvc, all 6.2.19. No runtime tree contains
+    spring-webflux, spring-websocket, spring-messaging, reactor, Aalto, RSocket or Jetty.
+    The scan matches the CPE spring_framework to every Spring jar at 6.2.19 and reports the
+    finding on whichever it groups first: spring-core, then spring-tx, then spring-jcl, as
+    each was suppressed in turn. So each entry covers the ten Spring jars this project ships,
+    listed in its pattern, and not an eleventh that someone adds later. The code each CVE describes lives
+    in a module or a feature this project does not ship or does not use.
+    Until 2027-02-07Z: re-evaluate at the next Spring Boot upgrade, or on this date if there is
+    none. The entry is pinned to 6.2.19 of the Spring jars this project ships, so any Spring bump on the Boot 3.5 line
+    stops it matching and the finding comes back for a fresh decision. No fix exists on this
+    line (6.2.19 is the newest 6.2.x); the advisories fix these in Spring 7 / Boot 4.
+    ]]></notes>
+    <packageUrl regex="true">^pkg:maven/org\.springframework/spring-(?:aop|beans|context|core|expression|jcl|jdbc|tx|web|webmvc)@6\.2\.19$</packageUrl>
+    <cve>CVE-2026-47892</cve>
+  </suppress>
+
+  <suppress until="2027-02-07Z">
+    <notes><![CDATA[
+    CVE-2026-59313 on the Spring Framework 6.2.19 jars, CVSS 9.8. NOT REACHABLE FROM THIS PROJECT.
+    What it is: stream corruption with Server-Sent Events in Spring MVC's functional web framework.
+    Why it is not reachable here: the project uses neither the functional web framework nor Server-Sent Events.
+    Evidence: no RouterFunction, ServerResponse, SseEmitter or text/event-stream in any src/main.
+    Checked 2026-11-07 on f5d3b1c, with the runtime dependency tree of every module
+    (`mvn dependency:tree -Dscope=runtime`, per module) and the source of every module's
+    src/main. The Spring modules this project ships are spring-core, -aop, -beans, -context,
+    -expression, -jcl, -jdbc, -tx, -web and -webmvc, all 6.2.19. No runtime tree contains
+    spring-webflux, spring-websocket, spring-messaging, reactor, Aalto, RSocket or Jetty.
+    The scan matches the CPE spring_framework to every Spring jar at 6.2.19 and reports the
+    finding on whichever it groups first: spring-core, then spring-tx, then spring-jcl, as
+    each was suppressed in turn. So each entry covers the ten Spring jars this project ships,
+    listed in its pattern, and not an eleventh that someone adds later. The code each CVE describes lives
+    in a module or a feature this project does not ship or does not use.
+    Until 2027-02-07Z: re-evaluate at the next Spring Boot upgrade, or on this date if there is
+    none. The entry is pinned to 6.2.19 of the Spring jars this project ships, so any Spring bump on the Boot 3.5 line
+    stops it matching and the finding comes back for a fresh decision. No fix exists on this
+    line (6.2.19 is the newest 6.2.x); the advisories fix these in Spring 7 / Boot 4.
+    ]]></notes>
+    <packageUrl regex="true">^pkg:maven/org\.springframework/spring-(?:aop|beans|context|core|expression|jcl|jdbc|tx|web|webmvc)@6\.2\.19$</packageUrl>
+    <cve>CVE-2026-59313</cve>
+  </suppress>
+
+  <suppress until="2027-02-07Z">
+    <notes><![CDATA[
+    CVE-2026-59283 on the Spring Framework 6.2.19 jars, CVSS 9.1. NOT REACHABLE FROM THIS PROJECT.
+    What it is: a guard bypass when SpEL expressions are evaluated with SimpleEvaluationContext while the SpEL compiler is active. The class is in spring-expression.
+    Why it is not reachable here: no code in this repository evaluates a SpEL expression, so none is evaluated with SimpleEvaluationContext, and no request data reaches an expression. The SpEL compiler is Spring's default (off); nothing here turns it on.
+    Evidence: no SpelExpressionParser, ExpressionParser, SimpleEvaluationContext, StandardEvaluationContext, @Value("#{...}") or @ConditionalOnExpression in any src/main, and no spring.expression.* property anywhere in the repository. spring-expression ships only as spring-context's dependency. I did not audit what each library in the tree evaluates internally; the claim is about this project's code and the data it passes.
+    Checked 2026-11-07 on f5d3b1c, with the runtime dependency tree of every module
+    (`mvn dependency:tree -Dscope=runtime`, per module) and the source of every module's
+    src/main. The Spring modules this project ships are spring-core, -aop, -beans, -context,
+    -expression, -jcl, -jdbc, -tx, -web and -webmvc, all 6.2.19. No runtime tree contains
+    spring-webflux, spring-websocket, spring-messaging, reactor, Aalto, RSocket or Jetty.
+    The scan matches the CPE spring_framework to every Spring jar at 6.2.19 and reports the
+    finding on whichever it groups first: spring-core, then spring-tx, then spring-jcl, as
+    each was suppressed in turn. So each entry covers the ten Spring jars this project ships,
+    listed in its pattern, and not an eleventh that someone adds later. The code each CVE describes lives
+    in a module or a feature this project does not ship or does not use.
+    Until 2027-02-07Z: re-evaluate at the next Spring Boot upgrade, or on this date if there is
+    none. The entry is pinned to 6.2.19 of the Spring jars this project ships, so any Spring bump on the Boot 3.5 line
+    stops it matching and the finding comes back for a fresh decision. No fix exists on this
+    line (6.2.19 is the newest 6.2.x); the advisories fix these in Spring 7 / Boot 4.
+    ]]></notes>
+    <packageUrl regex="true">^pkg:maven/org\.springframework/spring-(?:aop|beans|context|core|expression|jcl|jdbc|tx|web|webmvc)@6\.2\.19$</packageUrl>
+    <cve>CVE-2026-59283</cve>
+  </suppress>
+
+  <suppress until="2027-02-07Z">
+    <notes><![CDATA[
+    CVE-2026-47885 on the Spring Framework 6.2.19 jars, CVSS 7.5. NOT REACHABLE FROM THIS PROJECT.
+    What it is: Spring WebFlux's PartEventHttpMessageReader does not enforce maxPartSize when maxInMemorySize is -1.
+    Why it is not reachable here: WebFlux is not part of the project, and nothing reads multipart parts.
+    Evidence: spring-webflux and reactor are in no runtime tree. The class sits in the spring-web jar but needs the reactive stack; the project is Spring MVC and has no multipart handler.
+    Checked 2026-11-07 on f5d3b1c, with the runtime dependency tree of every module
+    (`mvn dependency:tree -Dscope=runtime`, per module) and the source of every module's
+    src/main. The Spring modules this project ships are spring-core, -aop, -beans, -context,
+    -expression, -jcl, -jdbc, -tx, -web and -webmvc, all 6.2.19. No runtime tree contains
+    spring-webflux, spring-websocket, spring-messaging, reactor, Aalto, RSocket or Jetty.
+    The scan matches the CPE spring_framework to every Spring jar at 6.2.19 and reports the
+    finding on whichever it groups first: spring-core, then spring-tx, then spring-jcl, as
+    each was suppressed in turn. So each entry covers the ten Spring jars this project ships,
+    listed in its pattern, and not an eleventh that someone adds later. The code each CVE describes lives
+    in a module or a feature this project does not ship or does not use.
+    Until 2027-02-07Z: re-evaluate at the next Spring Boot upgrade, or on this date if there is
+    none. The entry is pinned to 6.2.19 of the Spring jars this project ships, so any Spring bump on the Boot 3.5 line
+    stops it matching and the finding comes back for a fresh decision. No fix exists on this
+    line (6.2.19 is the newest 6.2.x); the advisories fix these in Spring 7 / Boot 4.
+    ]]></notes>
+    <packageUrl regex="true">^pkg:maven/org\.springframework/spring-(?:aop|beans|context|core|expression|jcl|jdbc|tx|web|webmvc)@6\.2\.19$</packageUrl>
+    <cve>CVE-2026-47885</cve>
+  </suppress>
+
+  <suppress until="2027-02-07Z">
+    <notes><![CDATA[
+    CVE-2026-47886 on the Spring Framework 6.2.19 jars, CVSS 7.5. NOT REACHABLE FROM THIS PROJECT.
+    What it is: a denial of service when an application evaluates user-supplied SpEL and the power operator (^) is used with a large BigDecimal or BigInteger exponent.
+    Why it is not reachable here: nothing here evaluates SpEL, and certainly nothing a caller supplies.
+    Evidence: see CVE-2026-59283's evidence: no SpEL is evaluated in any src/main, and the API's inputs are JSON bodies, path variables and a few query parameters, none of which reach an expression.
+    Checked 2026-11-07 on f5d3b1c, with the runtime dependency tree of every module
+    (`mvn dependency:tree -Dscope=runtime`, per module) and the source of every module's
+    src/main. The Spring modules this project ships are spring-core, -aop, -beans, -context,
+    -expression, -jcl, -jdbc, -tx, -web and -webmvc, all 6.2.19. No runtime tree contains
+    spring-webflux, spring-websocket, spring-messaging, reactor, Aalto, RSocket or Jetty.
+    The scan matches the CPE spring_framework to every Spring jar at 6.2.19 and reports the
+    finding on whichever it groups first: spring-core, then spring-tx, then spring-jcl, as
+    each was suppressed in turn. So each entry covers the ten Spring jars this project ships,
+    listed in its pattern, and not an eleventh that someone adds later. The code each CVE describes lives
+    in a module or a feature this project does not ship or does not use.
+    Until 2027-02-07Z: re-evaluate at the next Spring Boot upgrade, or on this date if there is
+    none. The entry is pinned to 6.2.19 of the Spring jars this project ships, so any Spring bump on the Boot 3.5 line
+    stops it matching and the finding comes back for a fresh decision. No fix exists on this
+    line (6.2.19 is the newest 6.2.x); the advisories fix these in Spring 7 / Boot 4.
+    ]]></notes>
+    <packageUrl regex="true">^pkg:maven/org\.springframework/spring-(?:aop|beans|context|core|expression|jcl|jdbc|tx|web|webmvc)@6\.2\.19$</packageUrl>
+    <cve>CVE-2026-47886</cve>
+  </suppress>
+
+  <suppress until="2027-02-07Z">
+    <notes><![CDATA[
+    CVE-2026-47888 on the Spring Framework 6.2.19 jars, CVSS 7.5. NOT REACHABLE FROM THIS PROJECT.
+    What it is: a memory leak in a Spring RSocket application on a malformed SETUP frame.
+    Why it is not reachable here: the project does not use RSocket.
+    Evidence: no rsocket or spring-messaging artifact in any runtime tree; no @MessageMapping or RSocket reference in any src/main.
+    Checked 2026-11-07 on f5d3b1c, with the runtime dependency tree of every module
+    (`mvn dependency:tree -Dscope=runtime`, per module) and the source of every module's
+    src/main. The Spring modules this project ships are spring-core, -aop, -beans, -context,
+    -expression, -jcl, -jdbc, -tx, -web and -webmvc, all 6.2.19. No runtime tree contains
+    spring-webflux, spring-websocket, spring-messaging, reactor, Aalto, RSocket or Jetty.
+    The scan matches the CPE spring_framework to every Spring jar at 6.2.19 and reports the
+    finding on whichever it groups first: spring-core, then spring-tx, then spring-jcl, as
+    each was suppressed in turn. So each entry covers the ten Spring jars this project ships,
+    listed in its pattern, and not an eleventh that someone adds later. The code each CVE describes lives
+    in a module or a feature this project does not ship or does not use.
+    Until 2027-02-07Z: re-evaluate at the next Spring Boot upgrade, or on this date if there is
+    none. The entry is pinned to 6.2.19 of the Spring jars this project ships, so any Spring bump on the Boot 3.5 line
+    stops it matching and the finding comes back for a fresh decision. No fix exists on this
+    line (6.2.19 is the newest 6.2.x); the advisories fix these in Spring 7 / Boot 4.
+    ]]></notes>
+    <packageUrl regex="true">^pkg:maven/org\.springframework/spring-(?:aop|beans|context|core|expression|jcl|jdbc|tx|web|webmvc)@6\.2\.19$</packageUrl>
+    <cve>CVE-2026-47888</cve>
+  </suppress>
+
+  <suppress until="2027-02-07Z">
+    <notes><![CDATA[
+    CVE-2026-47889 on the Spring Framework 6.2.19 jars, CVSS 7.5. NOT REACHABLE FROM THIS PROJECT.
+    What it is: a WebFlux application on the Jetty 12 Core reactive adapter serialises response cookies without the sameSite attribute.
+    Why it is not reachable here: the project runs on Tomcat, not Jetty, and does not use WebFlux.
+    Evidence: no Jetty or spring-webflux artifact in any runtime tree; the embedded container is tomcat-embed-core (10.1.61).
+    Checked 2026-11-07 on f5d3b1c, with the runtime dependency tree of every module
+    (`mvn dependency:tree -Dscope=runtime`, per module) and the source of every module's
+    src/main. The Spring modules this project ships are spring-core, -aop, -beans, -context,
+    -expression, -jcl, -jdbc, -tx, -web and -webmvc, all 6.2.19. No runtime tree contains
+    spring-webflux, spring-websocket, spring-messaging, reactor, Aalto, RSocket or Jetty.
+    The scan matches the CPE spring_framework to every Spring jar at 6.2.19 and reports the
+    finding on whichever it groups first: spring-core, then spring-tx, then spring-jcl, as
+    each was suppressed in turn. So each entry covers the ten Spring jars this project ships,
+    listed in its pattern, and not an eleventh that someone adds later. The code each CVE describes lives
+    in a module or a feature this project does not ship or does not use.
+    Until 2027-02-07Z: re-evaluate at the next Spring Boot upgrade, or on this date if there is
+    none. The entry is pinned to 6.2.19 of the Spring jars this project ships, so any Spring bump on the Boot 3.5 line
+    stops it matching and the finding comes back for a fresh decision. No fix exists on this
+    line (6.2.19 is the newest 6.2.x); the advisories fix these in Spring 7 / Boot 4.
+    ]]></notes>
+    <packageUrl regex="true">^pkg:maven/org\.springframework/spring-(?:aop|beans|context|core|expression|jcl|jdbc|tx|web|webmvc)@6\.2\.19$</packageUrl>
+    <cve>CVE-2026-47889</cve>
+  </suppress>
+
+  <suppress until="2027-02-07Z">
+    <notes><![CDATA[
+    CVE-2026-47893 on the Spring Framework 6.2.19 jars, CVSS 7.5. NOT REACHABLE FROM THIS PROJECT.
+    What it is: a WebFlux application that supports WebSocket connections includes request headers in an exception reason.
+    Why it is not reachable here: the project uses neither WebFlux nor Spring's WebSocket support.
+    Evidence: no spring-webflux or spring-websocket artifact in any runtime tree, and no @ServerEndpoint, WebSocketHandler or other WebSocket reference in any src/main. (tomcat-embed-websocket is on the classpath as part of Spring Boot's Tomcat starter; it is Tomcat's, not Spring's, and nothing here registers an endpoint.)
+    Checked 2026-11-07 on f5d3b1c, with the runtime dependency tree of every module
+    (`mvn dependency:tree -Dscope=runtime`, per module) and the source of every module's
+    src/main. The Spring modules this project ships are spring-core, -aop, -beans, -context,
+    -expression, -jcl, -jdbc, -tx, -web and -webmvc, all 6.2.19. No runtime tree contains
+    spring-webflux, spring-websocket, spring-messaging, reactor, Aalto, RSocket or Jetty.
+    The scan matches the CPE spring_framework to every Spring jar at 6.2.19 and reports the
+    finding on whichever it groups first: spring-core, then spring-tx, then spring-jcl, as
+    each was suppressed in turn. So each entry covers the ten Spring jars this project ships,
+    listed in its pattern, and not an eleventh that someone adds later. The code each CVE describes lives
+    in a module or a feature this project does not ship or does not use.
+    Until 2027-02-07Z: re-evaluate at the next Spring Boot upgrade, or on this date if there is
+    none. The entry is pinned to 6.2.19 of the Spring jars this project ships, so any Spring bump on the Boot 3.5 line
+    stops it matching and the finding comes back for a fresh decision. No fix exists on this
+    line (6.2.19 is the newest 6.2.x); the advisories fix these in Spring 7 / Boot 4.
+    ]]></notes>
+    <packageUrl regex="true">^pkg:maven/org\.springframework/spring-(?:aop|beans|context|core|expression|jcl|jdbc|tx|web|webmvc)@6\.2\.19$</packageUrl>
+    <cve>CVE-2026-47893</cve>
+  </suppress>
+
+  <suppress until="2027-02-07Z">
+    <notes><![CDATA[
+    CVE-2026-59282 on the Spring Framework 6.2.19 jars, CVSS 7.5. NOT REACHABLE FROM THIS PROJECT.
+    What it is: a denial of service when an application uses Spring's data binding to apply user-supplied property paths onto a target object.
+    Why it is not reachable here: no request data is bound onto a bean through data binding. Handlers take a JSON body through @RequestBody, which Jackson reads, and otherwise only scalar strings from the path, the query or a header.
+    Evidence: WebDataBinderFactory appears once, as an interface parameter of CallerArgumentResolver.resolveArgument, which never uses it. There is no @ModelAttribute, no @InitBinder, no DataBinder, BeanWrapper or BeanUtils in any src/main. All 32 handler methods in server and the simulators take only: ApiCredential (resolved by CallerArgumentResolver), @RequestBody, or @PathVariable, @RequestParam and @RequestHeader scalars (String, and Map<String, String> for headers). None takes an unannotated bean, which Spring would otherwise bind from the request as an implicit @ModelAttribute.
+    Checked 2026-11-07 on f5d3b1c, with the runtime dependency tree of every module
+    (`mvn dependency:tree -Dscope=runtime`, per module) and the source of every module's
+    src/main. The Spring modules this project ships are spring-core, -aop, -beans, -context,
+    -expression, -jcl, -jdbc, -tx, -web and -webmvc, all 6.2.19. No runtime tree contains
+    spring-webflux, spring-websocket, spring-messaging, reactor, Aalto, RSocket or Jetty.
+    The scan matches the CPE spring_framework to every Spring jar at 6.2.19 and reports the
+    finding on whichever it groups first: spring-core, then spring-tx, then spring-jcl, as
+    each was suppressed in turn. So each entry covers the ten Spring jars this project ships,
+    listed in its pattern, and not an eleventh that someone adds later. The code each CVE describes lives
+    in a module or a feature this project does not ship or does not use.
+    Until 2027-02-07Z: re-evaluate at the next Spring Boot upgrade, or on this date if there is
+    none. The entry is pinned to 6.2.19 of the Spring jars this project ships, so any Spring bump on the Boot 3.5 line
+    stops it matching and the finding comes back for a fresh decision. No fix exists on this
+    line (6.2.19 is the newest 6.2.x); the advisories fix these in Spring 7 / Boot 4.
+    ]]></notes>
+    <packageUrl regex="true">^pkg:maven/org\.springframework/spring-(?:aop|beans|context|core|expression|jcl|jdbc|tx|web|webmvc)@6\.2\.19$</packageUrl>
+    <cve>CVE-2026-59282</cve>
+  </suppress>
+
+  <!-- log4j-api: one finding. -->
+  <suppress until="2027-02-07Z">
+    <notes><![CDATA[
+    CVE-2026-34479 on log4j-api and log4j-to-slf4j 2.24.3, CVSS 7.5 (CVSSv3; 6.9 under CVSSv4).
+    FALSE POSITIVE.
+    What it is: the Log4j1XmlLayout of the Log4j 1-to-Log4j 2 bridge (log4j-1.2-api), and the
+    Log4j 1 compatibility layer's org.apache.log4j.xml.XMLLayout, fail to escape characters
+    forbidden by XML 1.0. The scan matches the CPE apache:log4j to the log4j jars by name, and
+    reports it on log4j-api, or on log4j-to-slf4j once log4j-api alone was suppressed.
+    Why it is not reachable here: the vulnerable classes are not in what this project ships.
+    Evidence: checked 2026-11-07 on f5d3b1c. log4j-api arrives only through log4j-to-slf4j,
+    which Spring Boot's logging starter brings to route Log4j API calls to SLF4J; neither
+    log4j-1.2-api nor log4j-core is in any module's runtime dependency tree, and neither
+    log4j-api-2.24.3.jar nor log4j-to-slf4j-2.24.3.jar contains Log4j1XmlLayout or
+    org/apache/log4j/xml/XMLLayout. The advisory's fixed version, 2.25.4, is for the bridge.
+    Until 2027-02-07Z: re-evaluate when log4j-api is next upgraded, or on this date if it is not.
+    The entry is pinned to 2.24.3 of the two log4j jars this project ships, so an upgrade stops
+    it matching.
+    ]]></notes>
+    <packageUrl regex="true">^pkg:maven/org\.apache\.logging\.log4j/log4j-(?:api|to-slf4j)@2\.24\.3$</packageUrl>
+    <cve>CVE-2026-34479</cve>
+  </suppress>
 </suppressions>

@@ -28,18 +28,31 @@ updates:
       interval: weekly
     open-pull-requests-limit: 0
 
-  # The base images of the three published images, and the one entry in this file that is NOT
-  # security-only (issue #288). It uses version updates, monthly, with a small limit, because
-  # `open-pull-requests-limit: 0` would make it do nothing: a base image is not a package in the
-  # advisory database, so a security-only configuration never raises a base-image bump, and
-  # nothing else in this repository would ever raise one either. The pin is exact on purpose
-  # (a full `21.x.y_b-jre-alpine` tag), which means it only moves when something moves it, and
-  # this is that something. Do not "fix" the difference with its neighbours by setting this to 0.
+  # The base image the three published images run on, and the one entry in this file that is NOT
+  # security-only (issue #288, narrowed by #298).
   #
-  # It reads every FROM line in these three Dockerfiles, so it will also propose a newer `maven:`
-  # build-stage image. That image does not ship; the pull request is a convenience, and it is
-  # reviewed like any other. A bump arrives with no vulnerability verdict before it merges,
-  # because .github/workflows/image-scan.yml reads published images and not branch builds.
+  # What it raises: a newer release of the runtime base inside Java 21 (21.0.x), monthly, three
+  # pull requests at most. The pin is exact on purpose (a full `21.x.y_b-jre-alpine` tag), so it
+  # only moves when something moves it, and this is that something. A bump arrives with no
+  # vulnerability verdict before it merges, because .github/workflows/image-scan.yml reads
+  # published images and not branch builds.
+  #
+  # What it will never raise, and each of these is a decision, not an oversight:
+  #   - A major runtime bump. This project targets Java 21 on purpose, and Dependabot cannot know
+  #     that; to it, 24 is simply newer. Moving to another LTS is a decision with a release note
+  #     behind it and arrives as a hand-written pull request, not as a monthly one.
+  #   - Anything about the `maven:` build-stage image. It does not ship, #288 chose not to move it,
+  #     and the one proposal it produced replaced `3.9.9-eclipse-temurin-21` with
+  #     `3.9-eclipse-temurin-26`: a move to Java 26, and a pin with its patch digit dropped, under
+  #     a comment in server/Dockerfile saying a build cannot depend on what a floating tag means.
+  #
+  # Both defects arrived at once, as six pull requests nobody could merge (#290 to #295). Two
+  # warnings for whoever is looking at a list of stale ones:
+  #   - Do not set this entry to `open-pull-requests-limit: 0`. That is what the entries above do,
+  #     and here it makes the entry do nothing: a base image is not a package in the advisory
+  #     database, so a security-only configuration never raises a base-image bump.
+  #   - Do not widen these ignores back. The ignores are the argument against exactly those six.
+  #     To move the runtime to another major, change the Dockerfiles by hand.
   - package-ecosystem: docker
     directories:
       - "/server"
@@ -48,3 +61,7 @@ updates:
     schedule:
       interval: monthly
     open-pull-requests-limit: 3
+    ignore:
+      - dependency-name: eclipse-temurin
+        update-types: ["version-update:semver-major"]
+      - dependency-name: maven

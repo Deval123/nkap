@@ -28,6 +28,27 @@ set -euo pipefail
 #      the modules inherit it.
 #   2. CHANGELOG.md has a heading that starts "## [<version>]" -- the repository writes
 #      "## [2.2.0] - 2026-11-06", and an "## [Unreleased]" heading is not one.
+#   3. The tag is annotated (issue #277). CONTRIBUTING.md and docs/conventions.md both say
+#      so, with the reason: a lightweight tag carries no author, no date and no message, which
+#      is what you want a year later. release.yml fires on any pushed v* tag, and without this
+#      a lightweight one would publish exactly like an annotated one.
+#
+# How check 3 reads the tag's type, settled by trying it in a real tag-push run rather than by
+# assuming. actions/checkout does not leave the tag object: it fetches "+<sha>:refs/tags/<tag>",
+# which points the local tag at the COMMIT, so `git cat-file -t refs/tags/<tag>` answers
+# "commit" for an annotated tag too, with a shallow checkout and with fetch-depth: 0 alike
+# (it overwrites the tag the full fetch had just brought). Reading it as it stands would
+# therefore reject every release. So this script fetches the tag's own ref again from the
+# remote, "+refs/tags/<tag>:refs/tags/<tag>", which restores the real object, and then asks:
+# `tag` is annotated, `commit` is lightweight. The checkout's own credentials are enough and
+# the repository's visibility does not matter. The alternative that also worked, GET
+# /repos/{owner}/{repo}/git/ref/tags/{tag} with no credentials, was not taken: it needs the
+# network from a runner whose address is shared and rate-limited, and it cannot be exercised
+# against a local repository, which this script's test does. If the fetch fails the check
+# fails, saying so: a guard that cannot answer must not pass.
+#
+# Inputs for it: TAG_REMOTE, the remote to fetch from, defaults to "origin" (a test points it
+# elsewhere to prove the failure).
 #
 # What it deliberately does not check: that the tagged commit is on main, the
 # `git merge-base --is-ancestor` check in CONTRIBUTING.md step 3. A tag push cannot cheaply
@@ -81,6 +102,17 @@ else
   fi
 fi
 
+tag_ref="refs/tags/${ref_name}"
+remote="${TAG_REMOTE:-origin}"
+if ! fetch_error="$(git -C "$workspace" fetch --no-tags --quiet "$remote" "+${tag_ref}:${tag_ref}" 2>&1)"; then
+  fail "could not fetch ${tag_ref} from ${remote} to read its type, so it cannot be shown to be annotated: ${fetch_error}"
+else
+  tag_type="$(git -C "$workspace" cat-file -t "$tag_ref" 2>&1 || true)"
+  if [ "$tag_type" != "tag" ]; then
+    fail "the tag ${ref_name} is lightweight (it points straight at an object of type '${tag_type}', not at a tag object), but a release tag must be annotated. Delete it, locally and on the remote (git tag -d ${ref_name} && git push origin :refs/tags/${ref_name}), tag the release commit again with git tag -a ${ref_name} -m \"Nkap ${version}\", and push it again."
+  fi
+fi
+
 if [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
   changelog="${workspace}/CHANGELOG.md"
   heading="## [${version}]"
@@ -98,7 +130,7 @@ if [ "$failures" -gt 0 ]; then
 fi
 
 if [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-  echo "ok: ${ref_name} matches pom.xml and CHANGELOG.md"
+  echo "ok: ${ref_name} matches pom.xml and CHANGELOG.md; the tag is annotated"
 else
-  echo "ok: ${ref_name} matches pom.xml (a pre-release tag needs no changelog heading)"
+  echo "ok: ${ref_name} matches pom.xml (a pre-release tag needs no changelog heading); the tag is annotated"
 fi

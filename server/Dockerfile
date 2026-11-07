@@ -8,7 +8,7 @@
 # cannot depend on what a floating tag means then.
 
 # ---- build ---------------------------------------------------------------------------
-FROM maven:3.9.9-eclipse-temurin-21 AS build
+FROM maven:3.9-eclipse-temurin-26 AS build
 WORKDIR /src
 COPY . .
 # `mvn package` builds the layered, runnable "-boot" jar (see the repackage execution in

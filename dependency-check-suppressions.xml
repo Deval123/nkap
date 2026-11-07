@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Suppressions for the dependency vulnerability scan (mvn -P security-check verify; issue #280).
+  This file ships with no entries, and nothing goes into it without the maintainer's approval:
+  a scan result is either a fix or a reasoned false positive, and which is a decision, not a
+  default.
+
+  THE RULE, enforced by the file itself and not by anyone remembering it: every <suppress>
+  carries an `until` attribute, a date with a trailing Z, and the suppression lapses on that
+  date. On and after it the plugin no longer applies the suppression (its own schema says so),
+  the finding comes back, and the build fails again on a CVSS of 7 or more. A date written only
+  in a comment or in <notes> would be a promise with nothing behind it: nothing would stop the
+  suppression on that day, and the rule would be a sentence nobody reads then.
+
+  The plugin's schema makes `until` OPTIONAL, so this file cannot make it mandatory: an entry
+  without it never lapses, and nothing rejects it. Keep it on every entry, and review one
+  without it as a defect. The attribute goes on <suppress>, never only in <notes>:
+
+    <suppress until="2027-06-01Z">
+      <notes><![CDATA[
+        The CVE, the jar, the CVSS the scan reported, why this is a false positive or an
+        accepted risk, and the evidence: a link to the record, or the code path that shows the
+        vulnerable code is not reachable from here. Say what makes the date the right one.
+      ]]></notes>
+      <packageUrl regex="true">^pkg:maven/group\.id/artifact-id@.*$</packageUrl>
+      <cve>CVE-0000-00000</cve>
+    </suppress>
+
+  Scope an entry as narrowly as the finding allows: the jar and the CVE, never a whole jar
+  or a whole class of findings.
+-->
+<suppressions xmlns="https://jeremylong.github.io/DependencyCheck/dependency-suppression.1.4.xsd">
+</suppressions>

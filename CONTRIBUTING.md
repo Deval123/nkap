@@ -70,6 +70,21 @@ acceptable.
 - Comments explain *why*, never *what*. The code already says what.
 - Sign your commits off with `git commit -s` (Developer Certificate of Origin).
 
+## The dependency scan
+
+Nkap is self-hosted, so the dependencies it ships are its operators' exposure as much as
+this project's. `.github/workflows/vulnerability-check.yml` scans the tree with OWASP
+dependency-check, every day on `main` and on any pull request that changes a `pom.xml`, and
+fails on a CVSS of 7 or more; a pull request that touches no POM passes in seconds. Run it
+yourself with `mvn -B -P security-check verify`: the first run downloads the NVD, and
+`NVD_API_KEY` in the environment makes that much faster.
+
+A finding is fixed, or suppressed in `dependency-check-suppressions.xml` with the maintainer's
+approval. Every suppression carries an `until` date as an attribute on `<suppress>`, so it
+lapses on that date and the build fails again; the file's header says why a date in a comment
+would not do. The scan is not yet a required check: it reports, and blocks no merge, until its
+first findings are triaged.
+
 ## Amending an ADR
 
 An ADR records a decision and the reasoning that led to it — not a claim that stays true

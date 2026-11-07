@@ -40,6 +40,7 @@
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <junit.version>5.10.2</junit.version>
     <spring-boot.version>3.5.16</spring-boot.version>
+    <dependency-check.version>12.2.2</dependency-check.version>
   </properties>
 
   <dependencyManagement>
@@ -104,4 +105,63 @@
       </plugins>
     </pluginManagement>
   </build>
+
+  <profiles>
+    <!--
+      A scan of the dependency tree this project ships, for known vulnerabilities (issue #280).
+      Off by default: `mvn clean verify` does not run it and does not download its data. Run it
+      with `mvn -B -P security-check verify`; .github/workflows/vulnerability-check.yml does,
+      daily and on pull requests that change a POM. The first run downloads the NVD data (about
+      200 MB) and takes minutes; later runs reuse it.
+
+      What it fails on: any dependency with a CVSS score of 7 or more. Test-scope dependencies
+      are not scanned (the plugin's default), because they are not what an operator runs.
+
+      What it reports: target/dependency-check-report.html, at the root, one report for the
+      whole reactor (the `aggregate` goal).
+    -->
+    <profile>
+      <id>security-check</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.owasp</groupId>
+            <artifactId>dependency-check-maven</artifactId>
+            <version>${dependency-check.version}</version>
+            <executions>
+              <execution>
+                <goals>
+                  <goal>aggregate</goal>
+                </goals>
+                <phase>verify</phase>
+              </execution>
+            </executions>
+            <configuration>
+              <failBuildOnCVSS>7</failBuildOnCVSS>
+              <!--
+                The NVD's API key, read from the environment. CI sets it from the repository
+                secret NVD_API_KEY. Unset, as on most machines, the scan falls back to the
+                unauthenticated download, which works and is a good deal slower and more
+                likely to be rate-limited.
+              -->
+              <nvdApiKey>${env.NVD_API_KEY}</nvdApiKey>
+              <!--
+                Sonatype's OSS Index needs an account this project does not have, and without
+                one it logs errors on every run. The NVD stays the source of vulnerabilities.
+              -->
+              <ossindexAnalyzerEnabled>false</ossindexAnalyzerEnabled>
+              <!--
+                Anchored at the directory Maven was started in, which is the root: with
+                `aggregate` a path relative to each module would not find the one file.
+                Every suppression in it must carry an `until` date; the header says why.
+              -->
+              <suppressionFiles>
+                <suppressionFile>${session.executionRootDirectory}/dependency-check-suppressions.xml</suppressionFile>
+              </suppressionFiles>
+            </configuration>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+  </profiles>
 </project>

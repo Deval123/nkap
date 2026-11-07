@@ -82,8 +82,10 @@ yourself with `mvn -B -P security-check verify`: the first run downloads the NVD
 A finding is fixed, or suppressed in `dependency-check-suppressions.xml` with the maintainer's
 approval. Every suppression carries an `until` date as an attribute on `<suppress>`, so it
 lapses on that date and the build fails again, and a check refuses an entry without one; the
-file's header says why a date in a comment would not do. The scan is not yet a required check: it reports, and blocks no merge, until its
-first findings are triaged.
+file's header says why a date in a comment would not do. The scan is not a required check, and will not become one: it asks the NVD, so it can turn red
+without a line of the pull request changing. It reports and blocks no merge. The rule is written
+once, at the head of `.github/workflows/build.yml`: a required check must answer from the branch
+alone.
 
 The dependency scan fails on what the NVD has analysed. dependency-check matches a jar to a
 CVE by CPE, so a CVE whose NVD record has no CPE data yet (status "Awaiting Analysis" or
@@ -102,7 +104,7 @@ merges it stays red until the next release ships. It runs on a schedule and on d
 never on a pull request, so a pull request that bumps a base image gets no verdict from it;
 that is deliberate. It is red only for HIGH or CRITICAL findings that have a fix available;
 findings with none are in the report and in the job summary, which prints both counts, so
-green does not mean clean. It is not a required check and it blocks no merge. The `docker`
+green does not mean clean. It is not a required check and it blocks no merge, for the same reason. The `docker`
 entry of `.github/dependabot.yml` raises a newer 21.0.x release of the runtime base image,
 monthly, and nothing else: a move to another Java major or to the next LTS, and anything
 about the build-stage image, are decisions made by hand, and the file says why. The verdict

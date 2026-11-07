@@ -17,9 +17,10 @@ name: image-scan
 #     page: a pull request that bumps a base image gets no verdict from this before it merges.
 #     Its verdict comes from the first run after the next release. Scanning an image built from
 #     the branch would close that, at the price of an image build per pull request; not now.
-#   - It is not a required check, here or in the repository settings. It reports on something
-#     outside this repository's control (a CVE published tonight against Alpine), and a red day
-#     must not be able to block an unrelated merge.
+#   - It is not a required check, here or in the repository settings, and will not become one. It
+#     reports on something outside this repository's control (a CVE published tonight against
+#     Alpine), and a red day must not be able to block an unrelated merge. That is the rule written
+#     once at the head of build.yml: a required check must answer from the branch alone.
 #   - It is red whenever an image has a HIGH or CRITICAL finding that has a fix and that
 #     trivy-ignore.yaml does not accept, and after a
 #     base-image bump merges it stays red until the next release ships, because the published

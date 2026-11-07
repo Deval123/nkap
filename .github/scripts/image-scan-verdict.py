@@ -18,13 +18,17 @@
 # skipped its summary when the variable was missing could pass without reporting anything.
 #
 # Exit status: 0 when no image has a HIGH or CRITICAL finding with a fix available; 1 when one
-# has, and also when there is no answer for an image (a report that is missing, names another
-# image, shows no operating system or no Java archive). The two kinds of 1 are told apart by what
-# is printed: a `::error::` line saying there was no answer, as opposed to the one saying a
-# finding has a fix. A finding is fixable when the report gives it a non-empty FixedVersion.
+# has, and also when there is no answer for an image (a report that is missing, cannot be read
+# as JSON, names another image, or shows no operating system or no Java archive). The two kinds
+# of 1 are told apart by what is printed: a `::error::` line naming the image and why there was
+# no answer, as opposed to the one saying a finding has a fix. A finding is fixable when the
+# report gives it a non-empty FixedVersion.
 #
-# This file is the body that was in the workflow's heredoc, moved without a change to what it
-# does.
+# This was the body of the workflow's heredoc, moved without a change in behaviour. Two things
+# were then changed on purpose, and each has a case in the test: the "green does not mean clean"
+# line is written only when something unfixable is in the images, and a report that cannot be
+# read as JSON is reported as no answer for its image instead of ending the run in a traceback.
+
 import collections
 import json
 import os
@@ -41,8 +45,18 @@ for image in images:
     if not os.path.exists(path):
         problems.append(ref + ": no report was written")
         continue
-    with open(path, encoding="utf-8") as handle:
-        report = json.load(handle)
+    # A report that cannot be read is no answer, like a report that is missing: it is reported
+    # as such per image, not left to end the whole run in a traceback that says nothing about
+    # which image or why.
+    try:
+        with open(path, encoding="utf-8") as handle:
+            report = json.load(handle)
+    except (json.JSONDecodeError, UnicodeDecodeError) as error:
+        problems.append(ref + ": the report cannot be read as JSON (" + str(error) + ")")
+        continue
+    if not isinstance(report, dict):
+        problems.append(ref + ": the report is JSON but not a report object (it is a " + type(report).__name__ + ")")
+        continue
     if report.get("ArtifactName") != ref:
         problems.append(ref + ": the report is for " + repr(report.get("ArtifactName")))
         continue
@@ -89,8 +103,14 @@ for image in images:
 with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as out:
     out.write("## Published images, tag `" + tag + "`\n\n" + "\n".join(summary) + "\n")
     if not problems:
-        out.write("\nThe job is red only for **fixable** HIGH or CRITICAL findings. **Green does not mean clean:** "
-                  "the unfixable column is what is still in the image, and the uploaded report lists every one.\n")
+        if unfixable_total:
+            # The caution is written only where it applies. A run with nothing unfixable in it has
+            # no use for a warning about unfixable findings, and a caution that is repeated where
+            # it does not apply is one people learn to skip.
+            out.write("\nThe job is red only for **fixable** HIGH or CRITICAL findings. **Green does not mean clean:** "
+                      "the unfixable column is what is still in the image, and the uploaded report lists every one.\n")
+        elif not red:
+            out.write("\nThere are no HIGH or CRITICAL findings in any image.\n")
     for problem in problems:
         out.write("\n**No answer:** " + problem + "\n")
 for problem in problems:

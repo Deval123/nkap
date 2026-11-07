@@ -9,6 +9,21 @@ on:
 permissions:
   contents: read
 
+# WHICH JOBS MAY BE REQUIRED CHECKS. This is the rule, written once; the other files that mention it
+# point here. A required check must be able to answer from the branch alone: given the files of the
+# pull request it gives the same verdict every time, so it can turn red only because a line of the
+# pull request made it so. `dco`, `suppression-expiry` and `trivy-ignore-expiry` are the plain case:
+# each reads a file in the repository and nothing else. A check that asks something outside the
+# branch cannot be required, because it can turn red without a line changing and would then block an
+# unrelated merge: `vulnerability-check.yml` queries the NVD (a CVE published tonight) and
+# `image-scan.yml` reads images published on GHCR (a base image that aged). They are not required
+# and will not become so, and that is a property of what they read, not a stage they have not
+# reached. A build still needs the network to fetch what the POMs pin, and an outage can fail it;
+# that is a failure to answer, not a different verdict about the branch, and it is the line this
+# rule draws. Which jobs are required is a repository setting, not something a diff shows;
+# docs/rules-and-their-instruments.md records what it was read as, and when, and why each check is
+# or is not required.
+
 jobs:
   build:
     runs-on: ubuntu-latest

@@ -3,9 +3,10 @@ name: release
 # Separate from build.yml for the reason build.yml's own comment gives about its `demo`
 # job: a publish failure should name itself, not get lost in an unrelated job's log.
 #
-# Triggers on an annotated `v*` tag, and nowhere else -- `latest` must follow releases, never
+# Triggers on a pushed `v*` tag, and nowhere else -- `latest` must follow releases, never
 # `main`, or it is a development build wearing the name people reach for by default on a
-# payments gateway. "A release" is narrower than "a tag push": `latest` follows a real,
+# payments gateway. The trigger itself cannot tell an annotated tag from a lightweight one;
+# `check-tag` below is what makes "annotated" true rather than hoped for (issue #277). "A release" is narrower than "a tag push": `latest` follows a real,
 # non-pre-release version only (`v1.0.0`, never `v1.0.0-rc1`) -- see
 # .github/scripts/compute-release-tags.sh for the exact rule and why it moved out of this
 # file (issue #103, found by this workflow's own first rehearsal). `workflow_dispatch`
@@ -34,12 +35,14 @@ env:
   SIMULATOR_MPESA_IMAGE: ghcr.io/deval123/nkap-simulator-mpesa
 
 jobs:
-  # Refuses a tag whose commit does not carry the same POM version and changelog heading, in
-  # seconds and before the reactor build: 2.1.0 and 2.2.0 were both tagged at a commit that was
+  # Refuses a lightweight tag, and a tag whose commit does not carry the same POM version and
+  # changelog heading, in seconds and before the reactor build: 2.1.0 and 2.2.0 were both tagged at a commit that was
   # not the release commit, and 2.2.0 published 2.2.0 and latest from a tree reading
   # 2.2.0-SNAPSHOT (issue #270). Tag pushes only: a workflow_dispatch run has no tag, so this
   # job is skipped there, which is why `test` below does not wait on it with a plain `needs`.
-  # The rule, and why a pre-release tag needs no changelog heading, are in the script.
+  # The rule, and why a pre-release tag needs no changelog heading, are in the script, and so
+  # is how it reads a tag's type: actions/checkout leaves the tag pointing at the commit, so
+  # the script fetches the tag's own ref again before asking.
   check-tag:
     if: github.event_name == 'push'
     runs-on: ubuntu-latest

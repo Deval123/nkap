@@ -96,7 +96,10 @@ findings with none are in the report and in the job summary, which prints both c
 green does not mean clean. It is not a required check and it blocks no merge. The `docker`
 entry of `.github/dependabot.yml` raises a newer 21.0.x release of the runtime base image,
 monthly, and nothing else: a move to another Java major or to the next LTS, and anything
-about the build-stage image, are decisions made by hand, and the file says why.
+about the build-stage image, are decisions made by hand, and the file says why. The verdict
+that decides whether the job is red is `.github/scripts/image-scan-verdict.py`, and
+`.github/scripts/image-scan-verdict.test.sh` asserts it against real Trivy reports; the
+`image-scan-verdict` job in `build.yml` runs that test.
 
 ## Amending an ADR
 

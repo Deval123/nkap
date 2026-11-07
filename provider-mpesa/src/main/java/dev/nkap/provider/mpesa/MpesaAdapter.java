@@ -217,7 +217,7 @@ public final class MpesaAdapter implements ProviderAdapter {
             return new SubmitResult.NotAttempted("payment is in " + intent.amount().currency()
                     + " but this M-Pesa profile settles in " + profile.currency());
         }
-        long minorPerMajor = (long) Math.pow(10, intent.amount().currency().minorUnits());
+        long minorPerMajor = minorPerMajor(intent.amount().currency().minorUnits());
         if (intent.amount().amount() % minorPerMajor != 0) {
             return new SubmitResult.NotAttempted("M-Pesa STK Push amounts have only been observed as whole "
                     + intent.amount().currency() + "; " + intent.amount() + " is not attempted");
@@ -438,6 +438,27 @@ public final class MpesaAdapter implements ProviderAdapter {
 
     private static boolean isIntegerText(JsonNode node) {
         return node.isTextual() && node.asText().strip().matches("-?\\d{1,9}");
+    }
+
+    /**
+     * How many minor units make one major unit, for a currency with {@code minorUnits} decimal
+     * places. A table, not arithmetic on floating point: this sits in the path that turns a
+     * ledger amount into the whole number sent to Safaricom, and money is never a {@code double}
+     * (docs/conventions.md, rule 4).
+     *
+     * <p>Zero to four is every minor-unit count ISO 4217 assigns. A count outside it is a
+     * currency nobody has checked this against, so it fails loudly rather than guess.
+     */
+    static long minorPerMajor(int minorUnits) {
+        return switch (minorUnits) {
+            case 0 -> 1L;
+            case 1 -> 10L;
+            case 2 -> 100L;
+            case 3 -> 1_000L;
+            case 4 -> 10_000L;
+            default -> throw new IllegalArgumentException(
+                    "no minor-per-major factor for " + minorUnits + " minor units; ISO 4217 has 0 to 4");
+        };
     }
 
     private String timestamp() {

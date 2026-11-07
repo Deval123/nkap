@@ -74,13 +74,13 @@ class SuspenseBalanceMetrics {
         };
     }
 
-    private static double suspenseBalance(Ledger ledger, ProviderId provider, Currency currency) {
+    private static double suspenseBalance(Ledger ledger, ProviderId provider, Currency currency) { // allow-floating-point: Micrometer's gauge takes a double; reporting only, the ledger stays in minor units
         try {
             return ledger.balance(AccountId.suspense(provider.toString(), currency), currency).amount();
         } catch (RuntimeException computeFailed) {
             log.error("could not compute the suspense balance for {}/{}; exporting NaN, not zero",
                     provider, currency, computeFailed);
-            return Double.NaN;
+            return Double.NaN; // allow-floating-point: NaN is how a gauge says "unknown", which zero would not
         }
     }
 }

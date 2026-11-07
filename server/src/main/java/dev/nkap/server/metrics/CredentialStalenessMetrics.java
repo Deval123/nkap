@@ -40,7 +40,7 @@ class CredentialStalenessMetrics {
     static MeterBinder gauges(CredentialStaleness staleness) {
         return registry -> {
             for (ProviderId installation : staleness.installations()) {
-                Gauge.builder(GAUGE_NAME, () -> staleness.staleFor(installation).toMillis() / 1000.0)
+                Gauge.builder(GAUGE_NAME, () -> staleness.staleFor(installation).toMillis() / 1000.0) // allow-floating-point: seconds for a Micrometer gauge, which takes a double; not money
                         .description("Seconds since this installation's credential files were first found unreadable"
                                 + " or invalid, while payments keep using the last valid credentials. Healthy at zero.")
                         .baseUnit("seconds")

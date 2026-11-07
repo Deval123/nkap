@@ -79,8 +79,21 @@ nothing checks.
 4. **Money is an integer count of minor units.** No `double`, no `float`, one currency per
    ledger entry, and no currency conversion outside a position account. XAF and XOF have
    zero minor units — code that assumes two decimals everywhere is wrong.
-   *Checked in part:* `Money` and the amount columns are tested, and so is every currency's
-   minor units. Nothing scans new code for a `double` or a `float`.
+   *Checked in part, and each part to a different depth:*
+   - **No `double`, no `float`: checked.** `.github/scripts/check-no-floating-point-money.sh`
+     refuses a floating-point type, literal or `Math` call in any module's main sources unless
+     the line carries `// allow-floating-point: <reason>`. It reads text, not types, so a double
+     that is never named (`var x = f()`) is not seen, and it does not read test sources. Its job,
+     `no-floating-point-money`, is not yet a required check.
+   - **One currency per ledger entry: checked.** `LedgerEntry` refuses an entry that mixes
+     currencies, `Money` refuses to add two currencies, and the schema carries the currency on
+     the entry, with none on a posting.
+   - **No currency conversion outside a position account: nothing enforces this.** There is no
+     position account in the code; the phrase appears in two error messages and two comments. Refusing a mixed
+     entry stops an implicit conversion, not code that multiplies an amount by a rate and builds
+     a new `Money`.
+
+   Every currency's minor units, and the amount columns' type, are tested.
 
 ## Module boundaries
 

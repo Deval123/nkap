@@ -17,7 +17,7 @@ RUN --mount=type=cache,target=/root/.m2 \
  && java -Djarmode=tools -jar app.jar extract --layers --destination extracted
 
 # ---- run ----------------------------------------------------------------------------
-FROM eclipse-temurin:21.0.13_9-jre-alpine
+FROM eclipse-temurin:24.0.2_12-jre-alpine
 
 # Set by the release workflow (--build-arg), empty on a local `docker build`. See
 # server/Dockerfile's own comment and .github/workflows/release.yml.
